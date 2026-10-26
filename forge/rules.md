@@ -98,3 +98,11 @@ forge-work/scope.json  {"own_domains": ["example.com"]}  (rule 3)
 
 `forge-work/` holds plans and reports. It may quote the original app, so it
 never ships: keep it out of the container image (`.dockerignore`).
+
+## Running the scripts
+
+Skills name scripts by their path from the skill's own folder, always in the
+form `../forge-secure/scope.py`. Claude Code tells you each skill's base
+directory; turn the path into an absolute one from there. Run every script
+from the root of the user's project, so `.` and `forge-work/` mean the
+project, not the skill pack.
