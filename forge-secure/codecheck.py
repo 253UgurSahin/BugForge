@@ -103,7 +103,8 @@ PY_RULES = [
     rule("py-verify-false", "high", r"\bverify\s*=\s*False\b", "Certificate check turned off", MITM,
          "remove that option; for your own certificate authority pass verify='/path/to/ca.pem'"),
     rule("py-debug", "medium", r"^\s*DEBUG\s*=\s*True\b", "Debug mode on",
-         "error pages show settings and code", "read it from the environment; off in production"),
+         "error pages show your settings and code to anyone",
+         "read it from the environment and keep it off in production"),
     rule("py-allowed-hosts", "medium", r"\bALLOWED_HOSTS\s*\+?=.{0,200}?[\"']\*[\"']",
          "Any host name accepted", "attackers can make password-reset emails link to their site",
          "list your own domain names, such as ['example.com']"),
@@ -119,7 +120,7 @@ JS_RULES = [
          "Raw HTML put into the page", XSS, "clean it with DOMPurify.sanitize()", unless="(?i)sanitize"),
     rule("js-shell", "high", JS_EXEC + JS_BUILT, "Shell command built from a string", SHELL,
          "use execFile() or spawn() with a list of arguments, not exec", multiline=True),
-    rule("js-sql", "critical", JS_SQL + JS_BUILT, "Database query built from a template or +", SQLI,
+    rule("js-sql", "critical", JS_SQL + JS_BUILT, "Database query built by pasting in values", SQLI,
          "use placeholders, such as db.query('... WHERE id = $1', [id])", multiline=True),
     rule("js-tls-off", "high", JS_TLS_OFF, "Certificate check turned off", MITM,
          "remove it; to trust your own certificates use the ca option or NODE_EXTRA_CA_CERTS"),
@@ -228,7 +229,7 @@ def main(argv=None):
     parser.add_argument("path", help="file or folder to check")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     parser.add_argument("--fail-on", choices=SEVERITIES, default="high",
-                        help="exit 1 when a finding is this severe or worse (default: high)")
+                        help="exit 1 when a finding is this bad or worse (default: high)")
     args = parser.parse_args(argv)
     try:
         findings, checked = scan_path(args.path)

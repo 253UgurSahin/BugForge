@@ -508,7 +508,8 @@ class CliTests(unittest.TestCase):
         self.assertIn("more:  https://github.com/advisories/GHSA-xvch-5gv4-984h", out)
         self.assertIn('fix:   update react-scripts to 5.0.1 in package.json', out)
         self.assertIn("Not checked (the result below does not cover these):", out)
-        self.assertIn("pip-audit is not installed (pipx install pip-audit), then rerun", out)
+        self.assertIn('pip-audit is not installed: install it with "pipx install pip-audit",'
+                      ' then run deps.py again', out)
         self.assertIn('pnpm-lock.yaml: pnpm is not run here: run "pnpm audit" in that folder', out)
         self.assertTrue(out.rstrip().endswith(
             "Dependency files checked: 2. Findings: 7 (1 critical, 3 high, 1 medium, 2 low)."))
@@ -580,8 +581,9 @@ class CliTests(unittest.TestCase):
         write(self.dir, "blog/composer.lock")
         self.answers.update(npm=None, composer=None)
         reasons = [item["reason"] for item in json.loads(run(self.dir, "--json")[1])["not_checked"]]
-        self.assertEqual(reasons, ["composer is not installed (getcomposer.org), then rerun",
-                                   "npm is not installed (Node.js), then rerun"])
+        self.assertEqual(reasons, [
+            "composer is not installed: install Composer (getcomposer.org), then run deps.py again",
+            "npm is not installed: install Node.js (nodejs.org), then run deps.py again"])
 
     def test_timeout_is_a_note(self):
         write(self.dir, "shop/package-lock.json")

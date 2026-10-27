@@ -75,7 +75,7 @@ SERVICES = [
             "data goes to Google in the US; Tag Manager can load more tags this scan cannot see"),
     Service("Plausible", "cookieless analytics", ["plausible.io", "plausible-tracker",
             "next-plausible"], "no cookie banner needed; self-host it to keep the data"),
-    Service("Matomo", "analytics", ["matomo", "piwik"], "self-hosted and cookieless: no consent"),
+    Service("Matomo", "analytics", ["matomo", "piwik"], "unless self-hosted without cookies"),
     Service("Mixpanel", "analytics", ["mixpanel", "mxpnl.com"]),
     Service("Segment", "analytics", ["segment.com", "segment.io", "@segment/"]),
     Service("PostHog", "analytics", ["posthog"], "pick the EU cloud; mask form fields"),
@@ -103,7 +103,7 @@ SERVICES = [
     Service("Resend", "email", ["resend.com", "resend/resend-", "resend.emails", "resend==",
             "require('resend')", "from 'resend'", "'resend': '^"]),
     Service("Mailchimp", "email", ["mailchimp", "list-manage.com", "chimpstatic.com"]),
-    Service("Sentry", "error tracking", ["sentry"], "turn off sending user details and IPs"),
+    Service("Sentry", "error tracking", ["sentry"]),
     Service("Bugsnag", "error tracking", ["bugsnag"]),
     Service("LogRocket", "error tracking", ["logrocket"], "it records sessions: mask form fields"),
     Service("Intercom", "chat", ["intercom.io", "intercomcdn.com", "@intercom/", "intercom('",
@@ -217,8 +217,9 @@ def format_human(report):
     if findings:
         names = ", ".join(finding["service"] for finding in findings)
         counts = ", ".join("%d %s" % (summary[s], s) for s in SEVERITIES if summary[s])
+        noun = "finding" if len(findings) == 1 else "findings"
         lines += ["Name these in your privacy policy (AVG/GDPR), with the data they get: "
-                  + names + ".", "", "%d finding(s): %s." % (len(findings), counts)]
+                  + names + ".", "", "%d %s: %s." % (len(findings), noun, counts)]
     else:
         lines.append("No findings: no known third-party services in the code.")
     missed = ", ".join(summary["not_checked"]) or "nothing"  # anything here: exit code 2
@@ -232,7 +233,7 @@ def main(argv=None):
     parser.add_argument("path", help="file or folder to check")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     parser.add_argument("--fail-on", choices=SEVERITIES, default="high",
-                        help="exit 1 when a finding is this severe or worse (default: high)")
+                        help="exit 1 when a finding is this bad or worse (default: high)")
     args = parser.parse_args(argv)
     if not (os.path.isfile(args.path) or os.path.isdir(args.path)):
         print("error: %s does not exist, or is not a file or folder" % args.path, file=sys.stderr)

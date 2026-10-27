@@ -38,7 +38,8 @@ import sys
 DEFAULT_SCOPE = os.path.join("forge-work", "scope.json")
 PASSIVE_HINT = "Passive checks only (load a page, read headers): no scans, fuzzing or load tests."
 NOT_LISTED = "not in the scope file, and not localhost, a private address or a container name"
-ADD_TO_SCOPE = 'if %s is yours, confirm it, then add it to the scope file: {"own_domains": ["%s"]}'
+ADD_TO_SCOPE = ('if you own or control %s and allow active tests on it, add it to the scope file: '
+                '{"own_domains": ["%s"]}')
 
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*://", re.I)  # http://, https://, postgres://
 PORT = re.compile(r"^:[0-9]{1,5}$")  # :8080

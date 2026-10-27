@@ -33,7 +33,8 @@ SKIP_FOLDERS = set(".git node_modules vendor venv .venv __pycache__ dist build .
 NPM = ["npm", "audit", "--json", "--registry=https://registry.npmjs.org/"]
 COMPOSER = ["composer", "audit", "--format=json", "--locked", "--no-plugins", "--no-scripts"]
 PIP_AUDIT = ["pip-audit", "--no-deps", "--disable-pip", "-f", "json", "-r"]  # + the file
-INSTALL = {"npm": "Node.js", "composer": "getcomposer.org", "pip-audit": "pipx install pip-audit"}
+INSTALL = {"npm": "install Node.js (nodejs.org)", "composer": "install Composer (getcomposer.org)",
+           "pip-audit": 'install it with "pipx install pip-audit"'}
 NOTES = {"yarn.lock": 'Yarn is not run here: run "yarn npm audit" (or "yarn audit") in that folder',
          "pnpm-lock.yaml": 'pnpm is not run here: run "pnpm audit" in that folder'}
 EXPORT = {"poetry.lock": "poetry export -f requirements.txt -o requirements.txt",
@@ -134,7 +135,7 @@ def plan_checks(folder, names):
     jobs += [{"file": name, "note": NOTES[name]} for name in names if name in NOTES]
     python = [name for name in EXPORT if name in names]
     if python and not requirements:
-        note = 'pip-audit needs a requirements.txt: run "%s" in that folder, then rerun'
+        note = 'pip-audit needs a requirements.txt: run "%s" in that folder, then run deps.py again'
         jobs.append({"file": python[0], "note": note % EXPORT[python[0]]})
     return jobs
 
@@ -163,7 +164,8 @@ def run_check(job, folder):
     try:
         output = run_tool(job["cmd"], folder, job["copy"])
         if output is None:
-            return False, [], ["%s is not installed (%s), then rerun" % (tool, INSTALL[tool])]
+            reason = "%s is not installed: %s, then run deps.py again" % (tool, INSTALL[tool])
+            return False, [], [reason]
         findings, skipped = job["parse"](output[0])
         return True, findings, skipped
     except subprocess.TimeoutExpired:
@@ -238,11 +240,10 @@ def main(argv=None):
     summary = {sev: sum(f["severity"] == sev for f in findings) for sev in SEVERITIES}
     summary.update(total=len(findings), checked=len(checked), not_checked=len(not_checked),
                    fail_on=args.fail_on, strict=args.strict, failed=failed)
-    if args.json:
-        print(json.dumps({"findings": findings, "checked": checked, "not_checked": not_checked,
-                          "summary": summary}, indent=2))
-    else:
-        print(format_human(findings, not_checked, summary))
+    report = {"findings": findings, "checked": checked, "not_checked": not_checked,
+              "summary": summary}
+    print(json.dumps(report, indent=2) if args.json
+          else format_human(findings, not_checked, summary))
     return 1 if failed else 0
 
 if __name__ == "__main__":

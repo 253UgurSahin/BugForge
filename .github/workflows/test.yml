@@ -1,0 +1,28 @@
+name: tests
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15  # a hung test stops here instead of after six hours
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.13"]
+    steps:
+      # Get the code. The tests need no git token, so none is left on disk.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # Install the Python version from the matrix (the oldest and newest we support).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # Run every test: each script's tests plus the repo conventions in tests/test_repo.py.
+      - run: python -m unittest discover -s tests -v
+      # Dogfood: the repo itself must pass its own secret scan.
+      - run: python forge-secure/secretscan.py .

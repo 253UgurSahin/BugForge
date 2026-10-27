@@ -353,7 +353,7 @@ class OutputTests(TempFolderTest):
     def test_passive_domain_says_how_to_add_it(self):
         code, out, err = run("mysite.nl", "--scope", self.scope)
         self.assertEqual(code, 1)
-        self.assertIn("fix: if mysite.nl is yours, confirm it, then add it to the scope file", out)
+        self.assertIn("fix: if you own or control mysite.nl and allow active tests on it, add it to the scope file", out)
         self.assertIn('{"own_domains": ["mysite.nl"]}', out)
         for target in ["8.8.8.8", "169.254.169.254", "evilexample.com", "1db", "com", "127.0.0.1.nip.io"]:
             self.assertNotIn("fix:", run(target, "--scope", self.scope)[1], target)

@@ -428,7 +428,7 @@ class OutputTests(TempFolder):
         self.assertLess(out.index("MEDIUM"), out.index("LOW"))
         self.assertIn("Name these in your privacy policy (AVG/GDPR), with the data they get: "
                       + GA + ", Stripe.", out)
-        self.assertIn("2 finding(s): 1 medium, 1 low.", out)
+        self.assertIn("2 findings: 1 medium, 1 low.", out)
         self.assertIn("Files checked: 2. Could not check: nothing.", out)
         self.assertIn("network tab", out)
 

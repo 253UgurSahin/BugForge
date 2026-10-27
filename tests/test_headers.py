@@ -674,9 +674,7 @@ class ConventionTests(unittest.TestCase):
 
     def test_script_header_and_size(self):
         self.assertTrue(self.source.startswith("#!/usr/bin/env python3\n"))
-        # The spec caps scripts at 250 lines. The review fixes do not fit in 250 readable lines;
-        # the lead decides between raising the cap for this script and dropping fixes.
-        self.assertLessEqual(len(self.source.splitlines()), 350)
+        self.assertLessEqual(len(self.source.splitlines()), 300)  # the spec's hard limit
         for word in ["Usage", "Exit codes", "forge:allow"]:
             self.assertIn(word, mod.__doc__)
         self.assertEqual(mod.USER_AGENT, "forge-headers (passive check)")
