@@ -1,0 +1,14 @@
+# Static site or single-page app: one service, nginx with the built files.
+# Start: docker compose up -d --build --wait, then open http://localhost:8080. RUN.md has the rest.
+
+services:
+  web:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"  # this machine only; a reverse proxy with HTTPS goes in front (RUN.md)
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped

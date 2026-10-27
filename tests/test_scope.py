@@ -388,7 +388,7 @@ class OutputTests(TempFolderTest):
         with open(SCRIPT, encoding="utf-8") as handle:
             source = handle.read()
         self.assertTrue(source.startswith("#!/usr/bin/env python3\n"))
-        self.assertLessEqual(len(source.splitlines()), 250)
+        self.assertLessEqual(len(source.splitlines()), 300)  # the spec's hard limit
         self.assertLessEqual(max(len(line) for line in source.splitlines()), 100)
         for words in ("Usage", "Exit codes", "own_domains"):
             self.assertIn(words, mod.__doc__)

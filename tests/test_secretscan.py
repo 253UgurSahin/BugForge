@@ -424,7 +424,7 @@ class ConventionTests(unittest.TestCase):
         with open(mod.__file__) as handle:
             source = handle.read()
         self.assertTrue(source.startswith("#!/usr/bin/env python3\n"))
-        self.assertLessEqual(len(source.splitlines()), 250)
+        self.assertLessEqual(len(source.splitlines()), 300)  # the spec's hard limit
         for word in ["Usage", "Exit codes", "forge:allow"]:
             self.assertIn(word, mod.__doc__)
 

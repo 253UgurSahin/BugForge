@@ -1,0 +1,73 @@
+# Django: app (gunicorn + WhiteNoise) -> db (PostgreSQL).
+# Start: docker compose up -d --build --wait, then open http://localhost:8080. RUN.md has the rest.
+# Settings and secrets come from .env (copy .env.example). Nothing secret is written in this file.
+
+services:
+  app:
+    build: .
+    env_file: .env
+    ports:
+      - "127.0.0.1:8080:8000"  # this machine only; a reverse proxy with HTTPS goes in front (RUN.md)
+    volumes:
+      - media:/app/media  # uploads; serve them through a view that checks who may see them
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # Uses the host name localhost, so keep localhost in DJANGO_ALLOWED_HOSTS.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s  # migrations run before gunicorn starts
+    restart: unless-stopped
+
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql  # PostgreSQL 18 and newer; 17 and older use /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    # No ports: only the app reaches the database, by its name "db".
+
+  # MariaDB instead of PostgreSQL: use this db service instead of the one above, set
+  # DB_ENGINE=django.db.backends.mysql and DB_PORT=3306 in .env, and uncomment the MariaDB
+  # lines in the Dockerfile.
+  # db:
+  #   image: mariadb:11.8
+  #   environment:
+  #     MARIADB_DATABASE: ${DB_NAME}
+  #     MARIADB_USER: ${DB_USER}
+  #     MARIADB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+  #     MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+  #   volumes:
+  #     - db-data:/var/lib/mysql
+  #   healthcheck:
+  #     test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 30s
+  #   restart: unless-stopped
+
+  # Development only: catches every email; inbox at http://localhost:8025.
+  # Starts only with COMPOSE_PROFILES=dev in .env (see .env.example).
+  mailpit:
+    image: axllent/mailpit:v1.32
+    profiles: ["dev"]
+    ports:
+      - "127.0.0.1:8025:8025"
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  media:

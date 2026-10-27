@@ -1,0 +1,25 @@
+# Kept out of the image: secrets, git history, forge's notes, local installs and test output.
+.env
+.env.*
+!.env.example
+.git
+.github
+forge-work/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+staticfiles/
+media/
+db.sqlite3
+.pytest_cache/
+.coverage
+htmlcov/
+coverage/
+test-results/
+playwright-report/
+e2e/node_modules/
+.idea/
+.vscode/
+.DS_Store

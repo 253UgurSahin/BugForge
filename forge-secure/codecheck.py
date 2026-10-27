@@ -4,12 +4,15 @@
 Flags patterns that often lead to security holes and says what, where, why and how to fix.
 This is a first pass, not a full scanner: it misses some problems and can flag safe code. For
 a deeper scan, run semgrep if it is installed. Lines containing forge:allow are not checked.
-Skips node_modules, vendor, build and cache folders and symlinks; big or binary files get a warning.
+Skips node_modules, vendor, build and cache folders and symlinks. Big or binary files are
+listed as skipped. Files or folders that cannot be read are listed too, and make the scan
+INCOMPLETE: exit 2, never a pass.
 
 Usage: python3 codecheck.py PATH [--json] [--fail-on critical|high|medium|low], for example
     python3 codecheck.py . --fail-on medium     (also fail on medium findings)
 Exit codes: 0 nothing at or above --fail-on (default: high); 1 at least one finding at or
-above it; 2 the path does not exist, cannot be read, or is a file this script cannot check.
+above it; 2 the path does not exist, is a file this script cannot check, or something under
+it could not be read (an incomplete scan).
 """
 
 import argparse
@@ -161,47 +164,55 @@ def language_of(path):
     return LANGUAGES.get(os.path.splitext(path)[1].lower())
 
 
-def files_under(folder):
-    """Yield (full path, path shown in the report) for each file of a known type under folder."""
-    os.listdir(folder)  # raises OSError when the folder itself cannot be read
-    for parent, dirs, files in os.walk(folder, onerror=lambda e: warn(e.filename, e.strerror)):
+def files_under(folder, unreadable):
+    """Yield (full path, path shown in the report) for each file of a known type under folder.
+    A folder that cannot be opened (the folder itself too) goes on the unreadable list."""
+    def cannot_open(error):
+        """os.walk calls this for a folder it cannot list."""
+        unreadable.append((shown_path(error.filename or folder, folder), error.strerror or "error"))
+    for parent, dirs, files in os.walk(folder, onerror=cannot_open):
         here = os.path.basename(os.path.abspath(parent))  # to spot storage/framework
         dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and here + "/" + d not in SKIP_DIRS)
         for name in sorted(files):  # os.walk skips symlinked folders; we skip symlinked files
             full = os.path.join(parent, name)
             if language_of(name) and os.path.isfile(full) and not os.path.islink(full):
-                yield full, os.path.relpath(full, folder).replace(os.sep, "/")
+                yield full, shown_path(full, folder)
+
+
+def shown_path(full, folder):
+    """The path as the report shows it: relative to the scanned folder, always printable."""
+    shown = os.path.relpath(full, folder).replace(os.sep, "/")
+    if shown == ".":
+        shown = folder
+    return os.fsencode(shown).decode("utf-8", errors="backslashreplace")
 
 
 def scan_path(path):
-    """Return (findings, files checked) for a file or folder. Raises ValueError or OSError."""
+    """Return (findings, stats) for a file or folder. stats: files_checked, files_skipped
+    (binary or over 1 MB) and unreadable, each a list of (path, reason). Raises ValueError."""
     is_file = os.path.isfile(path)
     if not is_file and not os.path.isdir(path):
         raise ValueError("%s does not exist, or is not a file or folder" % path)
     if is_file and not language_of(path):
         raise ValueError("%s is not a PHP, Python or JS/TS file" % path)
-    findings, checked = [], 0
-    for full, shown in [(path, path)] if is_file else files_under(path):
-        shown = os.fsencode(shown).decode("utf-8", errors="backslashreplace")  # always printable
+    findings, checked, skipped, unreadable = [], 0, [], []
+    shown_file = os.fsencode(path).decode("utf-8", errors="backslashreplace")
+    for full, shown in [(path, shown_file)] if is_file else files_under(path, unreadable):
         try:
             with open(full, "rb") as handle:
                 data = handle.read(MAX_BYTES + 1)
         except OSError as error:
-            warn(shown, error.strerror)
+            unreadable.append((shown, error.strerror or "error"))
             continue
         if len(data) > MAX_BYTES or b"\0" in data[:8192]:
-            warn(shown, "binary file, or over 1 MB")
+            skipped.append(shown)
             continue
         findings += scan_text(data.decode("utf-8", errors="replace"), language_of(full), shown)
         checked += 1
-    if is_file and not checked:
-        raise ValueError("could not check %s (see the warning above)" % path)
-    return findings, checked
-
-
-def warn(name, reason):
-    """Tell the user that a file or folder was not checked, and why."""
-    print("warning: not checked: %s (%s)" % (name, reason), file=sys.stderr)
+    if is_file and skipped:
+        raise ValueError("%s is a binary file or over 1 MB, so it cannot be checked" % path)
+    return findings, {"files_checked": checked, "files_skipped": skipped,
+                      "unreadable": sorted(unreadable)}
 
 
 def format_human(findings, summary):
@@ -217,10 +228,16 @@ def format_human(findings, summary):
     if not checked:
         result = "Nothing was checked: no PHP, Python or JS/TS file was found and read."
     elif not total:
-        result = "No findings."
+        result = "No findings in the files that were read." if summary["unreadable"] else "No findings."
     else:
         result = "%d %s: %s." % (total, "finding" if total == 1 else "findings", counts)
-    return "\n".join(lines + [result, "Files checked: %d (PHP, Python, JS/TS)." % checked, FOOTER])
+    lines += [result, "Files checked: %d (PHP, Python, JS/TS)." % checked]
+    if summary["files_skipped"]:
+        lines.append("Skipped (binary or over 1 MB): " + ", ".join(summary["files_skipped"]))
+    if summary["unreadable"]:
+        lines.append("INCOMPLETE, so not a pass. Could not read: " + ", ".join(
+            "%s (%s)" % pair for pair in summary["unreadable"]))
+    return "\n".join(lines + [FOOTER])
 
 
 def main(argv=None):
@@ -232,15 +249,20 @@ def main(argv=None):
                         help="exit 1 when a finding is this bad or worse (default: high)")
     args = parser.parse_args(argv)
     try:
-        findings, checked = scan_path(args.path)
-    except (OSError, ValueError) as error:
+        findings, stats = scan_path(args.path)
+    except ValueError as error:
         print("error: %s" % error, file=sys.stderr)
         return 2
     findings.sort(key=lambda f: (SEVERITIES.index(f["severity"]), f["file"], f["line"]))
     summary = {s: sum(f["severity"] == s for f in findings) for s in SEVERITIES}
-    summary.update(total=len(findings), files_checked=checked)
-    report = {"findings": findings, "summary": summary, "note": FOOTER}
-    print(json.dumps(report, indent=2) if args.json else format_human(findings, summary))
+    summary.update(stats, total=len(findings), incomplete=bool(stats["unreadable"]))
+    if args.json:
+        shown = dict(summary, unreadable=[{"path": p, "reason": r} for p, r in stats["unreadable"]])
+        print(json.dumps({"findings": findings, "summary": shown, "note": FOOTER}, indent=2))
+    else:
+        print(format_human(findings, summary))
+    if stats["unreadable"]:
+        return 2  # some code was never read, so the result cannot be trusted
     limit = SEVERITIES.index(args.fail_on)
     return 1 if any(SEVERITIES.index(f["severity"]) <= limit for f in findings) else 0
 

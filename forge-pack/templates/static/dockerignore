@@ -1,0 +1,20 @@
+# Kept out of the image: secrets, git history, forge's notes, local installs and test output.
+.env
+.env.*
+!.env.example
+# Public build settings (VITE_ values) only. Never a secret in this file.
+!.env.production
+.git
+.github
+forge-work/
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+e2e/node_modules/
+*.tsbuildinfo
+npm-debug.log*
+.idea/
+.vscode/
+.DS_Store

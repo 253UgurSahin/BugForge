@@ -1,0 +1,32 @@
+# Kept out of the image: secrets, git history, forge's notes, local installs and test output.
+.env
+.env.*
+!.env.example
+.git
+.github
+forge-work/
+node_modules/
+vendor/
+public/build/
+public/hot
+public/storage
+# Laravel's local files: Composer logins for private packages, OAuth keys, the cached config (it
+# holds every .env value), local uploads, sessions and logs. The .gitignore files in these folders
+# stay, so the folders exist in the image.
+auth.json
+storage/*.key
+storage/app/**
+storage/framework/**
+storage/logs/**
+bootstrap/cache/**
+!storage/**/.gitignore
+!bootstrap/cache/.gitignore
+coverage/
+test-results/
+playwright-report/
+e2e/node_modules/
+.phpunit.cache/
+.phpunit.result.cache
+.idea/
+.vscode/
+.DS_Store

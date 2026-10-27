@@ -1,0 +1,122 @@
+{
+  "title": {
+    "severity": "low",
+    "title": "Title missing or not 10-60 characters",
+    "why": "search results and browser tabs show the title and cut long ones off",
+    "fix": "give the page a <title> of 10 to 60 characters that says what it is"
+  },
+  "description": {
+    "severity": "low",
+    "title": "Meta description missing or not 50-160 characters",
+    "why": "search engines then show a random bit of the page, or cut it off",
+    "fix": "add <meta name='description' content='...'> of 50 to 160 characters"
+  },
+  "one_h1": {
+    "severity": "low",
+    "title": "Not exactly one h1 heading",
+    "why": "screen readers and search engines look for one main heading",
+    "fix": "give the page one <h1> that says what it is about; make other main headings <h2>"
+  },
+  "no_lang": {
+    "severity": "medium",
+    "title": "No language on the <html> tag",
+    "why": "screen readers may read the page in the wrong language",
+    "fix": "add it, for example <html lang='nl'> or <html lang='en'>"
+  },
+  "no_viewport": {
+    "severity": "medium",
+    "title": "No viewport meta tag",
+    "why": "phones show the desktop layout zoomed out, with tiny text",
+    "fix": "add <meta name='viewport' content='width=device-width, initial-scale=1'>"
+  },
+  "noindex": {
+    "severity": "medium",
+    "title": "Search engines are told not to list this page (noindex)",
+    "why": "it will not show up in search: right for private pages, wrong for public ones",
+    "fix": "remove noindex if people should find this page"
+  },
+  "share_tags": {
+    "severity": "low",
+    "title": "Search and sharing tags missing",
+    "why": "copies of the page (?utm=...) compete in search and shared links look bare",
+    "fix": "add <link rel='canonical'>, og:title and og:image (your own image)"
+  },
+  "pwa": {
+    "severity": "low",
+    "title": "Installable-app (PWA) tags missing",
+    "why": "without a linked manifest, phones cannot install the site as an app; without theme-color and an apple-touch-icon it looks plain on the home screen",
+    "fix": "only if it should be an installable app: link a web app manifest (name, icons of 192 and 512 px), add theme-color and an apple-touch-icon (see the PWA section of forge-plan/profiles.md)"
+  },
+  "img_alt": {
+    "severity": "medium",
+    "title": "Images without alt text",
+    "why": "screen readers read out the file name or skip the image",
+    "fix": "add alt='what the image shows', or alt='' when it is only decoration"
+  },
+  "no_label": {
+    "severity": "medium",
+    "title": "Form fields without a label",
+    "why": "screen reader users do not know what to fill in; a placeholder is not a label",
+    "fix": "add a <label for='the-field-id'> or an aria-label to each field"
+  },
+  "no_name": {
+    "severity": "medium",
+    "title": "Links or buttons without text",
+    "why": "screen readers only say 'link' or 'button'",
+    "fix": "add text, or an aria-label when it shows only an icon (alt on an image button, value on an input button)"
+  },
+  "heading_skip": {
+    "severity": "low",
+    "title": "Heading levels skip a step",
+    "why": "screen reader users jump by headings and lose the outline",
+    "fix": "go one level at a time (h1, h2, h3) and set the size with CSS"
+  },
+  "tabindex": {
+    "severity": "low",
+    "title": "Positive tabindex",
+    "why": "the Tab key jumps around out of page order",
+    "fix": "use tabindex='0' or none"
+  },
+  "heavy": {
+    "severity": "low",
+    "title": "Heavy page",
+    "why": "every kilobyte and file is another wait before the page works, worst on phones",
+    "fix": "bundle scripts and styles, move inline data and SVGs into files, paginate long lists"
+  },
+  "blocking": {
+    "severity": "medium",
+    "title": "Scripts in <head> hold up the page",
+    "why": "the browser shows nothing until each one has downloaded and run",
+    "fix": "add defer (or async when no other script needs it), or use type='module'"
+  },
+  "no_size": {
+    "severity": "low",
+    "title": "Images without width and height",
+    "why": "the page jumps while they load",
+    "fix": "add width and height"
+  },
+  "no_lazy": {
+    "severity": "low",
+    "title": "Many images, none lazy-loaded",
+    "why": "every image downloads at once, even far down the page",
+    "fix": "add loading='lazy' to images below the first screen"
+  },
+  "other_hosts": {
+    "severity": "low",
+    "title": "Scripts from other hosts",
+    "why": "each one slows the page; a host run by another company also sees your visitors and can change the page",
+    "fix": "self-host or drop what you can; name the outside companies left in the privacy policy"
+  },
+  "mixed_blocked": {
+    "severity": "high",
+    "title": "Scripts, styles, frames, embeds or forms use http:// on an https page",
+    "why": "browsers block them, so parts of the page break; a form would send its data unencrypted",
+    "fix": "use https:// addresses; an http:// <base href> makes every relative address http:// too"
+  },
+  "mixed_media": {
+    "severity": "medium",
+    "title": "Images, media or fonts use http:// on an https page",
+    "why": "browsers upgrade or block them and may mark the page as not secure",
+    "fix": "use https:// addresses for every image, video, font and CSS url()"
+  }
+}

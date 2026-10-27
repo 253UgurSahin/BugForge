@@ -1,0 +1,86 @@
+# Laravel: web (nginx) -> app (PHP-FPM) -> db (MariaDB), plus a queue worker.
+# Start: docker compose up -d --build --wait, then open http://localhost:8080. RUN.md has the rest.
+# Settings and secrets come from .env (copy .env.example). Nothing secret is written in this file.
+
+services:
+  web:
+    build:
+      context: .
+      target: web
+    ports:
+      - "127.0.0.1:8080:8080"  # this machine only; a reverse proxy with HTTPS goes in front (RUN.md)
+    volumes:
+      - storage:/var/www/html/storage:ro  # public uploads, through the public/storage link
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      target: app
+    env_file: .env
+    volumes:
+      - storage:/var/www/html/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s  # migrations run before PHP-FPM starts
+    restart: unless-stopped
+
+  # Runs queued jobs, such as emails sent with ShouldQueue. Same image as app.
+  # A scheduler works the same way: command: php artisan schedule:work
+  worker:
+    build:
+      context: .
+      target: app
+    command: php artisan queue:work --tries=3 --max-time=3600
+    env_file: .env
+    volumes:
+      - storage:/var/www/html/storage
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mariadb:11.8
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE}
+      MARIADB_USER: ${DB_USERNAME}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    # No ports: only the app reaches the database, by its name "db".
+
+  # Development only: catches every email; inbox at http://localhost:8025.
+  # Starts only with COMPOSE_PROFILES=dev in .env (see .env.example).
+  mailpit:
+    image: axllent/mailpit:v1.32
+    profiles: ["dev"]
+    ports:
+      - "127.0.0.1:8025:8025"
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  storage:

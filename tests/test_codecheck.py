@@ -312,16 +312,20 @@ class FolderTests(unittest.TestCase):
         result = run_script(".", "--json", cwd=storage)
         self.assertEqual([f["where"] for f in json.loads(result.stdout)["findings"]], ["app/a.php:1"])
 
-    def test_binary_and_big_files_are_skipped_with_a_warning(self):
+    def test_binary_and_big_files_are_listed_as_skipped(self):
         make_tree(self.root, {
             "image.js": b"\x89PNG\0\0" + b"eval(x)\n",
             "big.py": "x = 1\n" * 200000 + "eval(x)\n",
             "ok.py": "eval(x)\n",
         })
         code, out, err = run_main(self.root, "--json")
-        self.assertEqual([f["where"] for f in json.loads(out)["findings"]], ["ok.py:1"])
-        self.assertIn("not checked: big.py (binary file, or over 1 MB)", err)
-        self.assertIn("not checked: image.js", err)
+        data = json.loads(out)
+        self.assertEqual([f["where"] for f in data["findings"]], ["ok.py:1"])
+        self.assertEqual(data["summary"]["files_skipped"], ["big.py", "image.js"])
+        self.assertEqual((code, data["summary"]["unreadable"], data["summary"]["incomplete"]), (1, [], False))
+        code, out, err = run_main(self.root)
+        self.assertIn("Skipped (binary or over 1 MB): big.py, image.js", out)
+        self.assertNotIn("INCOMPLETE", out)
 
     def test_symlinks_are_not_followed(self):
         outside = tempfile.TemporaryDirectory()
@@ -339,8 +343,8 @@ class FolderTests(unittest.TestCase):
                               "src/App.vue": "<div v-html=\"html\"></div>\n", "src/Post.svelte": "{@html body}\n"})
         self.assertEqual(self.wheres(self.root), ["src/App.vue:1", "src/Post.svelte:1", "views/post.blade.php:1"])
 
-    def test_unreadable_file_in_folder_is_skipped_with_a_warning(self):
-        make_tree(self.root, {"a.py": "eval(x)\n", "b.py": "eval(y)\n"})
+    def test_unreadable_file_in_folder_makes_the_scan_incomplete(self):
+        make_tree(self.root, {"a.py": "eval(x)\n", "b.py": "print(y)\n"})
         real_open = open
 
         def flaky_open(path, *args, **kwargs):
@@ -350,10 +354,15 @@ class FolderTests(unittest.TestCase):
 
         with mock.patch.object(codecheck, "open", flaky_open, create=True):
             code, out, err = run_main(self.root, "--json")
-        self.assertEqual([f["where"] for f in json.loads(out)["findings"]], ["b.py:1"])
-        self.assertIn("not checked: a.py (Permission denied)", err)
+            human = run_main(self.root, "--fail-on", "critical")
+        data = json.loads(out)
+        self.assertEqual((code, data["findings"]), (2, []), "an incomplete scan never looks clean")
+        self.assertEqual(data["summary"]["unreadable"], [{"path": "a.py", "reason": "Permission denied"}])
+        self.assertTrue(data["summary"]["incomplete"])
+        self.assertEqual(human[0], 2)
+        self.assertIn("INCOMPLETE, so not a pass. Could not read: a.py (Permission denied)", human[1])
 
-    def test_unreadable_subfolder_gets_a_warning(self):
+    def test_unreadable_subfolder_is_listed_and_exit_2(self):
         make_tree(self.root, {"locked/a.php": "<?php eval($_GET['x']);\n", "open/b.py": "eval(x)\n"})
         locked, real_scandir = os.path.join(self.root, "locked"), os.scandir
 
@@ -364,15 +373,27 @@ class FolderTests(unittest.TestCase):
 
         with mock.patch("os.scandir", scandir):
             code, out, err = run_main(self.root, "--json")
-        self.assertEqual([f["where"] for f in json.loads(out)["findings"]], ["open/b.py:1"])
-        self.assertIn("not checked: " + locked + " (Permission denied)", err)
+            human = run_main(self.root)[1]
+        data = json.loads(out)
+        self.assertEqual(code, 2)
+        self.assertEqual([f["where"] for f in data["findings"]], ["open/b.py:1"])
+        self.assertEqual(data["summary"]["unreadable"], [{"path": "locked", "reason": "Permission denied"}])
+        self.assertIn("Could not read: locked (Permission denied)", human)
 
     def test_unreadable_root_folder_is_exit_2(self):
         make_tree(self.root, {"a.php": "<?php eval($_GET['x']);\n"})
-        with mock.patch("os.listdir", side_effect=PermissionError(13, "Permission denied", self.root)):
+        real_scandir = os.scandir
+
+        def scandir(path="."):
+            if os.path.abspath(path) == os.path.abspath(self.root):
+                raise PermissionError(13, "Permission denied", path)
+            return real_scandir(path)
+
+        with mock.patch("os.scandir", scandir):
             code, out, err = run_main(self.root)
-        self.assertEqual((code, out), (2, ""))
-        self.assertIn("Permission denied", err)
+        self.assertEqual(code, 2)
+        self.assertIn("Nothing was checked", out)
+        self.assertIn("INCOMPLETE, so not a pass. Could not read: %s (Permission denied)" % self.root, out)
 
     @unittest.skipUnless(hasattr(os, "geteuid") and os.geteuid() != 0, "needs a non-root user for chmod")
     def test_unreadable_folder_for_real(self):
@@ -381,11 +402,11 @@ class FolderTests(unittest.TestCase):
         os.chmod(locked, 0)
         try:
             self.assertEqual(run_main(locked)[0], 2)
-            code, _, err = run_main(self.root)
+            code, out, _ = run_main(self.root)
         finally:
             os.chmod(locked, 0o755)
-        self.assertEqual(code, 1)
-        self.assertIn("not checked: " + locked, err)
+        self.assertEqual(code, 2)
+        self.assertIn("Could not read: locked (Permission denied)", out)
 
     def test_file_name_that_is_not_utf8_does_not_crash(self):
         try:
@@ -478,10 +499,10 @@ class MainTests(unittest.TestCase):
 
     def test_unreadable_file_is_exit_2(self):
         with mock.patch.object(codecheck, "open", side_effect=PermissionError(13, "Permission denied"), create=True):
-            code, _, err = run_main(self.path("clean.py"))
+            code, out, _ = run_main(self.path("clean.py"))
         self.assertEqual(code, 2)
-        self.assertIn("not checked: %s (Permission denied)" % self.path("clean.py"), err)
-        self.assertIn("could not check", err)
+        self.assertIn("INCOMPLETE, so not a pass. Could not read: %s (Permission denied)" % self.path("clean.py"), out)
+        self.assertNotIn("No findings", out)
 
     def test_named_file_that_cannot_be_checked_is_exit_2(self):
         make_tree(self.root, {"readme.txt": "eval(x)\n", "big.py": "x = 1\n" * 200000 + "eval(x)\n",
@@ -520,7 +541,7 @@ class ConventionTests(unittest.TestCase):
     def test_docstring_and_length(self):
         for words in ("Usage", "Exit codes", "forge:allow", "semgrep if it is installed", "first pass"):
             self.assertIn(words, codecheck.__doc__)
-        self.assertLessEqual(len(self.source.splitlines()), 250)
+        self.assertLessEqual(len(self.source.splitlines()), 300)  # the spec's hard limit
         self.assertTrue(self.source.startswith("#!/usr/bin/env python3\n"))
         imports = sorted(line for line in self.source.splitlines() if line.startswith(("import ", "from ")))
         self.assertEqual(imports, ["import argparse", "import json", "import os", "import re", "import sys"])

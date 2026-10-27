@@ -504,7 +504,7 @@ class ConventionTests(unittest.TestCase):
         with open(mod.__file__, encoding="utf-8") as handle:
             source = handle.read()
         self.assertTrue(source.startswith("#!/usr/bin/env python3\n"))
-        self.assertLessEqual(source.count("\n"), 250)
+        self.assertLessEqual(source.count("\n"), 300)  # the spec's hard limit
         self.assertIn("Usage", mod.__doc__)
         self.assertIn("Exit codes", mod.__doc__)
         self.assertIn("forge:allow", mod.__doc__)
