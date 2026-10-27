@@ -18,6 +18,7 @@ Exit codes: 0 = nothing at or above --fail-on (default: high); 1 = a finding at 
 import argparse
 import http.client
 import json
+import os
 import re
 import socket
 import ssl
@@ -85,10 +86,9 @@ def show(text, limit=80):  # text from a server made safe to print: no control c
 
 def safe_url(url):
     """url fit to print (None stays None): a user:password, ;jsessionid=, ?query or #part becomes ****."""
-    if url is None:
-        return None
-    url = re.sub(r"//[^/?#]*@", "//****@", url, count=1)
-    return show(re.sub(r"([;?#]).*", r"\1****", url, count=1, flags=re.S))
+    if url is not None:
+        url = re.sub(r"//[^/?#]*@", "//****@", url, count=1)
+        return show(re.sub(r"([;?#]).*", r"\1****", url, count=1, flags=re.S))
 
 def url_problem(url):
     """Say in plain words why url cannot be checked, or return None for a plain http(s) address."""
@@ -275,8 +275,7 @@ def main(argv=None):
             status, headers, url = load_saved(args.file, start)
             intro = "Checked saved headers from %s (%s)." % (show(args.file), safe_url(url) or "https assumed")
         else:
-            url = start
-            status, headers = fetch(url)
+            url, (status, headers) = start, fetch(start)
             intro = "Checked %s (HTTP %s) with one passive GET." % (safe_url(url), status)
     except (OSError, http.client.HTTPException, ValueError) as error:
         source = show(args.file) if args.file else safe_url(start)
@@ -290,8 +289,11 @@ def main(argv=None):
     summary = {sev: sum(f["severity"] == sev for f in findings) for sev in SEVERITIES}
     summary.update(total=len(findings), url=safe_url(url), status=status, redirect_to=safe_url(target),
                    fail_on=args.fail_on, failed=failed)
-    print(json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
-          else format_human(findings, summary, intro))
+    try:
+        print(json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
+              else format_human(findings, summary, intro), flush=True)
+    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 1 if failed else 0
 
 if __name__ == "__main__":

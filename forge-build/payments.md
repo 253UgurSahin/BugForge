@@ -54,12 +54,15 @@ card data, the price from your own database) are in SKILL.md and `../forge/rules
      `customer_email` the guest's email
    - `success_url` the status page by token (`/pay/<token>`), built from the app's own address (laravel
      `APP_URL`, next `BETTER_AUTH_URL`, django `request.build_absolute_uri()`), and `cancel_url` the same way
-   - holding a slot or stock: `expires_at` 30 minutes from now (Stripe allows 30 minutes to 24 hours; the
-     default of 24 hours holds the slot for a day), and `excluded_payment_method_types` with methods that settle
-     days later such as `sepa_debit`: a completed session cannot expire, so the slot would wait for the bank
-4. Redirect to the session's `url` with HTTP 303. The status page needs no login: it finds the row by its token
-   and shows only its status ("paid", "waiting for your bank", "expired: book again") and what was bought. A link
-   a guest gets never carries a sequential ID; logged-in pages stay owner-checked.
+   - holding a slot or stock: `expires_at` 31 minutes from now (Stripe's minimum is 30 minutes after it creates
+     the session, a moment after you read the clock, so leave a margin; the default of 24 hours holds the slot for
+     a day), and `excluded_payment_method_types` with methods that settle days later such as `sepa_debit`: a
+     completed session cannot expire, so the slot would wait for the bank
+4. It stores the session's `id` on the row (`checkout_session_id`; the status page and the expire call need it)
+   and redirects to the session's `url` with HTTP 303. A Content-Security-Policy with `form-action` must also allow
+   `https://checkout.stripe.com`, or the browser blocks that redirect. The status page needs no login: it finds the
+   row by its token and shows only its status ("paid", "waiting for your bank", "expired: book again") and what was
+   bought. A link a guest gets never carries a sequential ID; logged-in pages stay owner-checked.
 
 The calls: laravel `$stripe->checkout->sessions->create($params, ['idempotency_key' => $key])`, django
 `client.v1.checkout.sessions.create(params=params, options={"idempotency_key": key})`, next
@@ -82,6 +85,12 @@ A row changed: queue the confirmation email. No row changed: read the row.
   again with a conditional update from that status; the no-overlap rule refuses when someone else has it.
   Refused: refund in full (section 6), set the row to `refunded` and email the payer.
 - The amount differs (promo codes or Stripe Tax turned on later): log it and tell the user; never mark it paid.
+
+**Back before the webhook.** The payer often reaches the status page before Stripe's event does (on your machine:
+before `stripe listen` runs). When the row is still `pending` and has a `checkout_session_id`, the status page calls
+the same `fulfil(session_id)`, at most once per 10 seconds per row (a cache lock) and rate-limited per IP. It
+retrieves the session, so it is as safe as the webhook, and the payer sees "paid" at once. The webhook stays the
+source of truth for payers who never come back. Keep `fulfil` in its own class or module, so both can call it.
 
 Free a slot **only on Stripe's word**: the expired or failed event, or after you ended the open session yourself
 with the expire call (`checkout.sessions.expire`), for example when the payer clicks cancel. Freed earlier, the
@@ -159,13 +168,22 @@ $key])`; django `client.v1.refunds.create(params={...}, options={"idempotency_ke
   `webhooks.generateTestHeaderString`; PHP and Python `t=<time>,v1=<HMAC-SHA256 of "<time>.<body>">`) and mock the
   API calls. Cover: a bad signature gives 400; `completed` fulfils when `paid`, not when `unpaid`;
   `async_payment_succeeded` fulfils; the same event twice sends one email; `expired` frees the slot; a late payment
-  for a taken slot is refunded; cancelling twice refunds once; a token link shows only its own booking.
+  for a taken slot is refunded; cancelling twice refunds once; a token link shows only its own booking; coming
+  back to the status page before the webhook shows "paid".
+- **Without keys** (forge-test's end-to-end tests on the compose stack, CI, or before the user has a Stripe
+  account): put the four calls (create a session, retrieve, expire, refund) behind one small interface with a
+  Stripe and a fake implementation, and bind the fake in unit tests. `STRIPE_FAKE=true` in the development `.env`
+  binds it in the running app too: its sessions point to a page `/dev/checkout/<session>` with **Authorize** and
+  **Fail** buttons that call the same `fulfil` and `release` as the webhook. Register that page only in
+  development (laravel `APP_ENV` `local` or `testing`, django `DEBUG`; next's image always runs as production, so
+  there the flag alone), make the app refuse to start with the flag and a live key (`sk_live_`), and test that the
+  page answers 404 without the flag.
 
 ## 9. Code sketches: the webhook side of a booking deposit
 
-Short sketches, not complete apps; names follow plan.md, the checkout side is section 4. `latePayment` and
-`late_payment` are the `expired` or `failed` branch of section 4. The static profile has no server, so no secret
-key and no webhook: it uses Payment Links made in the Dashboard (test mode) and fulfils by hand.
+Short sketches, not complete apps; names follow plan.md. The checkout side is section 4 (next: sketched below).
+`latePayment` and `late_payment` are the `expired` or `failed` branch of section 4. The static profile has no
+server, so no secret key and no webhook: it uses Payment Links made in the Dashboard (test mode) and fulfils by hand.
 
 ### Laravel (stripe/stripe-php, MariaDB)
 
@@ -267,7 +285,39 @@ def fulfil(session_id):
 ### Next.js (stripe-node, App Router, PostgreSQL)
 
 ```ts
-// app/stripe/webhook/route.ts. lib/stripe.ts (server-only) makes the client lazily, so `next build` needs no key.
+// lib/stripe.ts: one client, made on first use, so `next build` needs no key.
+import "server-only";
+import Stripe from "stripe";
+
+let client: Stripe | undefined;
+export const stripe = () => (client ??= new Stripe(process.env.STRIPE_SECRET_KEY as string));
+```
+
+```ts
+// app/book/actions.ts: the checkout side (section 4), a Server Action the booking form posts to.
+"use server";
+
+export async function book(form: FormData) {
+  const booking = await createPendingBooking(form);  // validated; the price from the database; holds the slot
+  const back = `${process.env.BETTER_AUTH_URL}/pay/${booking.token}`;
+  const session = await stripe().checkout.sessions.create({
+    mode: "payment",
+    line_items: [{ quantity: 1, price_data: { currency: "eur", unit_amount: booking.amountCents,
+      product_data: { name: booking.serviceName } } }],
+    client_reference_id: String(booking.id),
+    customer_email: booking.email,
+    success_url: back,
+    cancel_url: back,
+    expires_at: Math.floor(Date.now() / 1000) + 31 * 60,  // Stripe's minimum is 30 minutes
+    excluded_payment_method_types: ["sepa_debit"],         // a completed session cannot expire
+  }, { idempotencyKey: `checkout-booking-${booking.id}` });
+  await db.update(bookings).set({ checkoutSessionId: session.id }).where(eq(bookings.id, booking.id));
+  redirect(session.url as string);                         // next/navigation: a 303 from a Server Action
+}
+```
+
+```ts
+// app/stripe/webhook/route.ts
 export async function POST(req: Request) {
   let event: Stripe.Event;
   try {
@@ -313,7 +363,8 @@ The last check reached docs.stripe.com only through web search, plus the SDK cha
 - iDEAL, Wero: https://docs.stripe.com/payments/ideal, https://support.stripe.com/questions/ideal-to-wero-migration
 - Payment methods: https://docs.stripe.com/payments/payment-methods/dynamic-payment-methods,
   https://docs.stripe.com/changelog/endive, the CHANGELOG.md of stripe-php, stripe-python and stripe-node
-- Fulfilment, expiry: https://docs.stripe.com/checkout/fulfillment, https://docs.stripe.com/payments/checkout/managing-limited-inventory
+- Fulfilment, expiry: https://docs.stripe.com/checkout/fulfillment,
+  https://docs.stripe.com/payments/checkout/managing-limited-inventory, https://docs.stripe.com/api/checkout/sessions/create
 - Webhooks, idempotency: https://docs.stripe.com/webhooks/signature, https://docs.stripe.com/api/idempotent_requests
 - Refunds: https://docs.stripe.com/refunds, https://docs.stripe.com/changelog/acacia/2024-10-28/refund-webhook-update
 - Subscriptions: https://docs.stripe.com/billing/subscriptions/ideal,
@@ -322,3 +373,5 @@ The last check reached docs.stripe.com only through web search, plus the SDK cha
   https://docs.stripe.com/testing, https://docs.stripe.com/connect
 - Laravel Cashier and CSRF: https://laravel.com/docs/13.x/billing, https://laravel.com/docs/13.x/csrf,
   https://github.com/laravel/cashier-stripe/blob/16.x/composer.json
+- Redirects: https://nextjs.org/docs/app/api-reference/functions/redirect,
+  https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/form-action

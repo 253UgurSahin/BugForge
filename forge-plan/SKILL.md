@@ -71,7 +71,8 @@ and every flow (F01, ...: the screens in order, happy-path clicks, edge cases), 
 
 Turn recon's data model (idea mode: the data the screens show) into tables. For every table:
 
-- an owner column (`user_id` or `team_id`) on everything a user owns
+- an owner column (`user_id` or `team_id`) on everything a user owns. No accounts: the owner holds a
+  random token, stored only as a hash (`edit_token_hash`) and compared in constant time
 - a decided on-delete rule on every foreign key: cascade, restrict or set null
 - an index on every foreign key and every column you filter or sort on
 - money as integer cents plus a `currency` column (`EUR`), never floats; times in UTC
@@ -91,9 +92,11 @@ whether it is limited to the caller's own rows.
 
 ## Step 6: auth, payments, emails, jobs
 
-- **Auth and roles**: the profile's auth. The roles, and the one function that answers "may this
-  user do this to this record?". Account deletion and data export are part of the plan.
+- **Auth and roles**: the profile's auth. Ask who may create an account: anyone, or only staff (then
+  no public sign-up). The roles, and the one function that answers "may this user do this to this
+  record?". Account deletion and data export are part of the plan. Log each answer.
 - **Payments**: ask these, and log each answer in the decisions log:
+  0. Does the app take money at all? No: write None under Payments and skip 1 to 4.
   1. Who receives the money: the user's own business, or other businesses (salons, sellers,
      landlords) through the app? Other businesses: stop and tell the user. That needs Stripe
      Connect (an account per business, onboarding, Connect webhooks), which forge does not cover,
@@ -123,10 +126,11 @@ Fill in every line of that section in the template, or "n/a" with the reason. Ea
 
 1. **Vertical slice**: the core loop end to end, plain styling. It proves the stack, the database
    and the compose setup.
-2. **Must-haves**: the features.csv rows with priority must and no C-ID, by area.
-3. **Should-haves**, the same way.
+2. **Must-haves**: the features.csv rows with priority must, by area. A must C-ID row goes here, next
+   to the feature it changes: the diff gate does not score C-ID rows (original `no`).
+3. **Should-haves**: priority should and no C-ID, by area.
 4. **Could-haves**, the same way.
-5. **Fixes from compare**: the C-ID rows, by priority.
+5. **Fixes from compare**: the other C-ID rows, should before could.
 
 Each row goes in exactly one milestone. Each milestone names its screens (S-IDs), tables and routes.
 Rows with `clone` = skip go under "Not building" with the reason.

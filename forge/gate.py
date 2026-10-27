@@ -5,6 +5,7 @@ forge-work/state.json records the mode and each phase that is done (with the use
 the time) or skipped (with the reason). A phase is done only when its exit checks pass (phasecheck.py,
 next to this script), the user's words are given and every earlier phase (MODES) is done or skipped.
 Only this script writes state.json: a temporary file first, then a rename. Run it from the project root.
+init also writes forge-work/.gitignore (`*`), so git never picks up the notes and screenshots in there.
 
 Usage:
     python3 gate.py init --mode idea --about 'a booking app for my salon'   (clone, idea or improve)
@@ -173,6 +174,8 @@ def cmd_init(root, args):
         return refuse("%s exists already. Resume with: gate.py status. Start over only when the user asks for "
                       "it: gate.py init --mode %s --force (forgets every approval)." % (STATE, args.mode))
     os.makedirs(os.path.join(root, "forge-work"), exist_ok=True)
+    with open(os.path.join(root, "forge-work", ".gitignore"), "w", encoding="utf-8") as handle:
+        handle.write("# forge notes, reports and screenshots: git ignores this whole folder, from the start\n*\n")
     state = {"version": VERSION, "mode": args.mode, "phases": {}, "started": now()}
     if shows(args.about or ""):  # what the user asked for, in their words, so a later session knows it too
         state["about"] = args.about.strip()

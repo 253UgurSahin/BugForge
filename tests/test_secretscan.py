@@ -33,6 +33,13 @@ SLACK = "xox" + "b-" + "123456789012-" + "AbCdEfGhIjKlMnOp"
 GOOGLE = "AIza" + "Sy" + "A1b2C3d4E5" * 3 + "xyz"
 PASS_VALUE = "Tr0ub4dor" + "-and-3"
 DB_URL = "postgres://admin:" + "Pr0dDbPassw0rd" + "@db.internal:5432/app"
+SENDGRID = "SG." + "u8jzPde0IgxLd6GncfBAep" + "." + "fJBd0Kh8oOOL8dKLzdocJ2isAjIhKtJ0RlgLKOmxgJT"
+MAILGUN = "key-" + "f33feff9243a8f506b40928b5b7a767c"
+WHSEC = "whsec_" + "1LlqsajAIxNKu8iS2G8NPRVdD53X83RZ"
+SLACK_HOOK = "https://hooks.slack.com/" + "services/T9ZZZZG4Z/BDMEN2KHV/MdgaKjIg8xNbe3nNyjOq9wMx"
+ANTHROPIC = "sk-" + "ant-api03-" + "eWJKY40uvSwMFLZDe1f8rESQedUStPKR0CsTy4Qwb8Dw"
+OPENAI = "sk-" + "proj-" + "eKdNnFRIBXuDL7DxtpYlSXpfKtHF4vUCsMehGAkWvj7FAc9Q"
+PHP_CLASS = "\\\\".join(["Illuminate", "Auth", "Passwords", "PasswordResetServiceProvider"])  # as PHP writes it
 HARD = "Password or secret written in the code"
 CONN = "Password inside a connection string"
 
@@ -89,6 +96,15 @@ class RuleTests(unittest.TestCase):
             ("define( 'DB_PASSWORD', '" + PASS_VALUE + "' );", HARD, "medium"),
             ('define("SECURE_AUTH_KEY", "' + "Gh7#kP2q" + 'L9wZt5Vm");', HARD, "medium"),
         ]
+        cases += [  # dogfood: a SendGrid key in an app went unreported (improve run)
+            ('SENDGRID_API_KEY = (settings.SENDGRID_API_KEY or "' + SENDGRID + '")', "SendGrid API key", "critical"),
+            ('auth=("api", "' + MAILGUN + '")', "Mailgun API key", "critical"),
+            ('stripe.Webhook.construct_event(payload, sig, "' + WHSEC + '")', "Stripe webhook secret", "high"),
+            ('requests.post("' + SLACK_HOOK + '", json=msg)', "Slack webhook", "high"),
+            ('headers = {"x-api-key": "' + ANTHROPIC + '"}', "Anthropic API key", "high"),
+            ('OpenAI(api_key=os.getenv("K") or "' + OPENAI + '")', "OpenAI API key", "high"),
+            ("OPENAI_API_KEY=" + "sk-" + "A1b2C3d4E5" * 5, "OpenAI API key", "high"),
+        ]
         for prefix in ["gho_", "ghs_", "ghu_"]:
             cases.append(("t = " + prefix + GITHUB_BODY, "GitHub token", "critical"))
         for letter in "aprs":
@@ -97,6 +113,12 @@ class RuleTests(unittest.TestCase):
             with self.subTest(line=line):
                 findings = mod.scan_text(line, "app.php")
                 self.assertEqual([(f["title"], f["severity"]) for f in findings], [(title, severity)])
+
+    def test_key_on_its_own_line_after_or(self):
+        # Regression: the fallback key sat on its own line inside parentheses, so nothing fired.
+        text = "SENDGRID_API_KEY = (\n    settings.SENDGRID_API_KEY\n    or \"" + SENDGRID + "\"\n)\n"
+        findings = mod.scan_text(text, "events/notifications.py")
+        self.assertEqual([(f["title"], f["line"], f["match"]) for f in findings], [("SendGrid API key", 3, "SG.u****")])
 
     def test_secret_is_masked(self):
         finding = mod.scan_text("key = " + STRIPE_LIVE, "a.py")[0]
@@ -145,7 +167,8 @@ class RuleTests(unittest.TestCase):
     def test_long_minified_lines_stay_fast(self):
         # These took minutes with unbounded regex parts (quadratic backtracking).
         for text in ["token" * 40000, "a." * 100000, "x://a:" * 30000, "secret: " * 25000,
-                     "define('" * 20000, "password = '" * 20000]:
+                     "define('" * 20000, "password = '" * 20000, "sk-" * 50000, "sk-a" * 40000,
+                     "SG." * 50000, "whsec_" * 30000, "hooks.slack.com/services/T" * 5000]:
             started = time.time()
             mod.scan_text(text, "bundle.min.js")
             self.assertLess(time.time() - started, 5, text[:20])
@@ -186,10 +209,21 @@ class FalsePositiveTests(unittest.TestCase):
             "git@github.com:owner/repo.git",
             "('GitHub token', 'critical')",
             "tokenizer = 'bert-base'",
+            "'auth.password' => '" + PHP_CLASS + "',",
+            "'password' => '" + "App\\\\Rules\\\\StrongPassword',",
+            "'password' => '" + "\\App\\Rules\\StrongPassword',",
+            "'password' => \\App\\Rules\\StrongPassword::class,",
+            "<a class='sk-" + "product-card-title-large-and-wide-x'>",  # a slug, not an OpenAI key
+            "url = 'https://hooks.slack.com/" + "services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'",
+            "stripe listen  # prints whsec_..., put it in .env",
         ]
         for line in lines:
             with self.subTest(line=line):
                 self.assertEqual(titles(line), [])
+
+    def test_a_password_with_a_backslash_is_still_found(self):
+        self.assertEqual(titles("$password = '" + "Admin\\\\2024xyz';"), [HARD])  # no name after it
+        self.assertEqual(titles("password = '" + "Kq7\\#xP2mWz9'"), [HARD])
 
     def test_fake_keys_are_skipped(self):
         for key in ["sk_" + "live_" + "placeholder123", "sk_" + "live_" + "yourstripekey",
@@ -319,6 +353,17 @@ class WalkTests(TempFolder):
         findings, stats = mod.scan_path(self.dir)
         self.assertEqual([f["file"] for f in findings],
                          [os.path.join(self.dir, "storage", "app", "leak.txt")])
+        self.assertEqual(stats["files_checked"], 1)
+
+    def test_laravel_bootstrap_cache_is_skipped(self):
+        # Regression: artisan's generated services.php maps 'auth.password' to a class: a medium
+        # on every scan of every Laravel project. The folder only holds generated caches.
+        line = "    'auth.password' => '" + PHP_CLASS + "',\n"
+        write(self.dir, "bootstrap/cache/services.php", "<?php return array (\n" + line)
+        write(self.dir, "bootstrap/cache/config.php", "<?php 'password' => '" + PASS_VALUE + "',\n")
+        write(self.dir, "bootstrap/app.php", "<?php $key = '" + STRIPE_LIVE + "';\n")  # not a cache
+        findings, stats = mod.scan_path(self.dir)
+        self.assertEqual([f["file"] for f in findings], [os.path.join(self.dir, "bootstrap", "app.php")])
         self.assertEqual(stats["files_checked"], 1)
 
     def test_binary_and_big_files_are_skipped_and_counted_as_skipped(self):
@@ -462,6 +507,18 @@ class CliTests(TempFolder):
         self.assertTrue(summary["failed"])
         self.assertNotIn(STRIPE_LIVE, out)
         self.assertNotIn(PASS_VALUE, out)
+
+    def test_output_into_a_closed_pipe_ends_quietly(self):
+        # Regression: `secretscan.py . | head -3` printed a BrokenPipeError traceback.
+        write(self.dir, "many.py", "".join("password = '" + "Tr0ub4dor%d'\n" % n for n in range(3000)))
+        done = subprocess.Popen([sys.executable, mod.__file__, self.dir], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        done.stdout.close()  # the reader is gone before anything is printed
+        error = done.stderr.read().decode()
+        done.stderr.close()
+        self.assertEqual(done.wait(timeout=60), 0)
+        self.assertNotIn("Traceback", error)
+        self.assertNotIn("BrokenPipe", error)
 
     def test_fail_on(self):
         medium = write(self.dir, "m.py", "password = '" + PASS_VALUE + "'\n")

@@ -240,7 +240,10 @@ def main(argv=None):
     verdict = "ALLOWED" if result["allowed"] else "PASSIVE ONLY"
     result.update(target=safe_target(args.target), verdict=verdict, scope_file=scope_file,
                   scope_file_found=found, own_domains=own_domains)
-    print(json.dumps(result, indent=2) if args.json else format_human(result))
+    try:
+        print(json.dumps(result, indent=2) if args.json else format_human(result), flush=True)
+    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 0 if result["allowed"] else 1
 
 

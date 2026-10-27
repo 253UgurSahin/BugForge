@@ -50,7 +50,8 @@ Also for this skill:
 | improve | the user's own repo or folder | audit, inspect*, improve, test, secure |
 
 Each phase is the skill with its name: recon is /forge-recon, pack is /forge-pack. secure is
-never skipped.
+never skipped. Improve mode has no compare or pack phase: when the user wants them, run
+/forge-compare before improve (its fix plan joins the picks) or /forge-pack after secure.
 
 ## The gate
 
@@ -63,7 +64,8 @@ Run it with `python3` from the project root (rules.md, "Running the scripts"):
   step with the exact commands, full paths included.
 - `python3 ../forge/gate.py check <phase>`: the phase's exit checks (it runs
   `../forge/phasecheck.py`). Exit 1 lists what is missing. A template that still has its `{{...}}`
-  placeholders fails, and so does a `security.md` older than the last go.
+  placeholders fails, and so does a `security.md` older than the last go. build needs each
+  must-have in features.csv `yes`, or `partial` or `skip` with a note; test a result in every case.
 - `python3 ../forge/gate.py done <phase> --approved '<the user's exact words>'`: runs the checks
   again, then records the words and the time. Refuses (exit 1) when a check fails, the words are
   missing, or an earlier phase is not done or skipped.
@@ -81,9 +83,9 @@ exit 2 message as it is.
   folder of the user's own app: **improve** (the URL of their own live app too: inspect reads it).
   Unclear, or more than one fits: ask.
 - Clone and idea build a new app: ask where it goes and use a new, empty folder that is not inside
-  another git repo as the project root (`git rev-parse --show-toplevel` there must fail; else
-  forge-build's git commands would work on the outer repo). Improve works in the root of the
-  user's repo, and only one they own or may work on.
+  another git repo as the project root (`git rev-parse --show-toplevel` there must fail, or print
+  this same folder: it is its own repo; else forge-build's git commands would work on the outer
+  repo). Improve works in the root of the user's repo, and only one they own or may work on.
 - Tell the user in two lines what comes: the phases, a checkpoint after each, nothing deployed.
 
 ## Step 2: start
@@ -91,9 +93,9 @@ exit 2 message as it is.
 1. In the project root: `python3 ../forge/gate.py init --mode <mode> --about '<the URL, idea or
    repo, as the user said it>'`. Exit 1: a forge state is there already, so resume (below).
    `--force` starts over and forgets every approval (not the work): only when the user asks.
-2. `forge-work/` holds notes and reports, never shipped: keep it out of git and out of images.
-   Clone and idea: forge-build lists it in `.gitignore`. Improve: add `forge-work/` to the file
-   that `git rev-parse --git-path info/exclude` names (it stays on this machine).
+2. `forge-work/` holds notes, reports and screenshots of other apps, never shipped. `init` writes
+   `forge-work/.gitignore` (`*`), so git ignores the folder from the start, in every mode, before
+   any `git add`. Never delete it. forge-pack's `.dockerignore` keeps it out of images.
 3. Scope: when the user says a domain is theirs (their live app, a staging site), ask the question
    in rules.md section 3. Only after a clear yes, write `forge-work/scope.json`
    (`{"own_domains": ["example.com"]}`) and confirm with `python3 ../forge-secure/scope.py <domain>`.

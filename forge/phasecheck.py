@@ -28,6 +28,11 @@ import sys
 TIMEOUT = 600  # seconds per script: a secret scan of a big project takes a while
 PACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")  # the forge skill pack
 FEATURES_HEADER = ["feature", "area", "priority", "original", "clone", "notes"]
+VALUES = (("priority", 2, ("must", "should", "could")), ("original", 3, ("yes", "no", "")),
+          ("clone", 4, ("yes", "partial", "no", "skip", "")))  # as parity.py reads them: empty is yes, no
+COMPOSE = ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
+PLAN_SECTIONS = ("Entities and schema", "Routes and API", "Build order", "Decisions log")  # of forge-plan/plan.md
+COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.S)
 UNSEEN = re.compile(r"<!--.*?(?:-->|\Z)|^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1|\Z)", re.S | re.M)  # comments, code
 TODO = re.compile(r"\{\{[^\s{}][^{}\n]{0,80}\}\}")  # a template's {{...}}; Blade and Jinja write {{ x }}
 CHOICE = re.compile(r"<[^<>\n]*\|[^<>\n]*>")  # a template's <a|b>, as in forge-design/components.md
@@ -54,21 +59,105 @@ def check_file(root, *names):
     return bool(text.strip()), "%s %s" % (found[0], "exists" if text.strip() else "is empty")
 
 
+def cut(lines):
+    """At most 12 lines: the start says what is wrong; the rest is one command away."""
+    return lines if len(lines) <= 12 else lines[:11] + ["... %d more lines: run it to see them" % (len(lines) - 11)]
+
+
 def csv_rows(text):
-    return [[cell.strip() for cell in row] for row in csv.reader(text.splitlines(True))]
+    reader = csv.reader(text.splitlines(True))
+    return [(reader.line_num, [cell.strip() for cell in row]) for row in reader]  # (line number, cells)
 
 
-def check_features(root, name):
-    """The contract header and at least one must-have row, and not only rows of the template's example."""
-    rows, example = csv_rows(read_text(root, name)), os.path.join(PACK, "forge-recon", "features.csv")
-    if not rows or [cell.lower() for cell in rows[0]] != FEATURES_HEADER:
-        return False, "the first line of %s is not exactly %s" % (name, ",".join(FEATURES_HEADER))
-    body = [row for row in rows[1:] if any(row)]
-    examples = csv_rows(read_text(example)) if os.path.isfile(example) else []
-    if body and all(row in examples for row in body):
+def feature_rows(root, name):
+    """The rows below the contract header as (line, cells), or else a failed check's answer: a row that is
+    not 6 cells, a value not in VALUES, an empty feature name or a skip without a reason."""
+    rows, problems = csv_rows(read_text(root, name)), []
+    if not rows or [cell.lower() for cell in rows[0][1]] != FEATURES_HEADER:
+        return None, (False, "the first line of %s is not exactly %s" % (name, ",".join(FEATURES_HEADER)))
+    body = [(line, row) for line, row in rows[1:] if any(row)]
+    for line, row in body:
+        if len(row) != 6:
+            problems.append("line %d has %d cells, not 6: put text with a comma in double quotes" % (line, len(row)))
+            continue
+        problems += ["line %d: %s '%s' is not one of %s" % (line, label, row[at], ", ".join(filter(None, allowed)))
+                     for label, at, allowed in VALUES if row[at].lower() not in allowed]
+        if not row[0]:
+            problems.append("line %d: the feature name is empty" % line)
+        if row[4].lower() == "skip" and not row[5]:
+            problems.append("line %d: %s is skipped without a reason in notes" % (line, row[0]))
+    if problems:
+        return None, (False, "%s breaks the contract in %d place(s)" % (name, len(problems)), cut(problems))
+    return body, None
+
+
+def check_features(root, name, theirs=False):
+    """Every row in the contract, not only rows of the template's example, and a must-have that is not
+    skipped. THEIRS (recon): one the original has (original yes), so parity.py has something to score."""
+    body, failed = feature_rows(root, name)
+    if failed:
+        return failed
+    example = os.path.join(PACK, "forge-recon", "features.csv")
+    examples = [row for _, row in csv_rows(read_text(example))] if os.path.isfile(example) else []
+    if body and all(row in examples for _, row in body):
         return False, "%s has only example rows of ../forge-recon/features.csv, not this app's features" % name
-    musts = sum(1 for row in body if len(row) > 2 and row[2].lower() == "must")
-    return musts > 0, "%s has the contract header and %d row(s) with priority must" % (name, musts)
+    musts = sum(1 for _, row in body if row[2].lower() == "must" and row[4].lower() != "skip"
+                and not (theirs and row[3].lower() == "no"))
+    return musts > 0, "%s has the contract header and %d row(s) with priority must, not skipped%s" % (
+        name, musts, ", that the original has" if theirs else "")
+
+
+def check_built(root, name):
+    """Each must-have is built (clone yes), or partial or skip with a note on what is missing or why, and
+    at least one is built. Idea mode has no diff phase: nothing after this checks the clone column."""
+    body, failed = feature_rows(root, name)
+    if failed:
+        return failed
+    musts = [(line, row, row[4].lower()) for line, row in body if row[2].lower() == "must"]
+    built = sum(1 for _, _, clone in musts if clone == "yes")
+    left = ["line %d: %s, clone %s" % (line, row[0], "partial, no note" if clone == "partial" else clone or "empty")
+            for line, row, clone in musts if clone in ("no", "") or (clone == "partial" and not row[5])]
+    if left or not built:
+        return False, "%s: %d of %d must-have(s) built. Each needs clone yes, or partial or skip with a note on " \
+                      "what is missing or why" % (name, built, len(musts)), cut(left)
+    return True, "%s: %d of %d must-have(s) built, the rest partial or skipped with a note" % (name, built, len(musts))
+
+
+def check_sections(root, name, *titles):
+    """Each of TITLES starts a `## ` heading in NAME with text under it. Code blocks count as text (a
+    schema is often only SQL), comments do not."""
+    parts = re.split(r"(?m)^ {0,3}#{1,2}[ \t]+(.*)$", COMMENT.sub("", read_text(root, name)))
+    sections = [(head.strip().lower(), body.strip()) for head, body in zip(parts[1::2], parts[2::2])]
+    empty = [title for title in titles if not any(head.startswith(title.lower()) and body for head, body in sections)]
+    if empty:
+        return False, "%s needs text under ## %s, as in ../forge-plan/plan.md" % (name, ", ## ".join(empty))
+    return True, "%s has text under ## %s" % (name, ", ## ".join(titles))
+
+
+def cases(text):
+    """The rows of the first table in TEXT with the columns case and result, as dicts (its line 2 is ---)."""
+    for table in re.findall(r"(?m)(?:^[ \t]*\|.*\n?)+", text):
+        rows = [[cell.strip() for cell in re.split(r"(?<!\\)\|", line.strip().strip("|"))]
+                for line in table.splitlines()]
+        header = [cell.lower() for cell in rows[0]]
+        if {"case", "result"} <= set(header):
+            return [dict(zip(header, row + [""] * len(header))) for row in rows[2:] if any(row)]
+    return []
+
+
+def check_cases(root, name):
+    """The test plan's Cases table holds this app's cases, not only the example rows of the template, and
+    every row has a result: the plan was made and run."""
+    rows, example = cases(UNSEEN.sub("", read_text(root, name))), os.path.join(PACK, "forge-test", "test-plan.md")
+    examples = cases(read_text(example)) if os.path.isfile(example) else []
+    if not rows:
+        return False, "%s has no Cases table with rows: | case | ... | result |" % name
+    if all(row in examples for row in rows):
+        return False, "%s has only the example rows of ../forge-test/test-plan.md, not this app's cases" % name
+    left = [row.get("case") or "(no case ID)" for row in rows if not row.get("result")]
+    if left:
+        return False, "%s has %d case row(s) without a result: %s" % (name, len(left), ", ".join(left)[:120])
+    return True, "%s has %d case row(s), each with a result" % (name, len(rows))
 
 
 def check_line(root, name, label, *allowed):
@@ -108,9 +197,7 @@ def check_run(root, script, *args):
                else "it printed nothing, so it checked nothing" if done.returncode == 0
                else {1: "it found problems", 2: "it could not check"}.get(done.returncode, "it stopped"))
     lines = [line.rstrip()[:200] for line in (done.stderr + done.stdout).splitlines() if line.strip()]
-    if len(lines) > 12:  # the start says what is wrong; the rest is one command away
-        lines = lines[:11] + ["... %d more lines: run it to see them" % (len(lines) - 11)]
-    return False, "%s exits %d: %s" % (shown, done.returncode, meaning), lines
+    return False, "%s exits %d: %s" % (shown, done.returncode, meaning), cut(lines)
 
 
 def check_fresh(root, name, since):
@@ -123,24 +210,26 @@ def check_fresh(root, name, since):
 
 # The exit checks of each phase: (check function, its arguments...), run in the project root.
 CHECKS = {
-    "recon": [(check_file, "forge-work/recon.md", TODO), (check_features, "forge-work/features.csv")],
+    "recon": [(check_file, "forge-work/recon.md", TODO), (check_features, "forge-work/features.csv", True)],
     "compare": [(check_file, "forge-work/compare.md")],
     "plan": [(check_file, "forge-work/plan.md", TODO), (check_features, "forge-work/features.csv"),
              (check_line, "forge-work/plan.md", "Profile", "laravel", "django", "next", "static"),
-             (check_line, "forge-work/plan.md", "PWA", "yes", "no")],
+             (check_line, "forge-work/plan.md", "PWA", "yes", "no"),
+             (check_sections, "forge-work/plan.md") + PLAN_SECTIONS],
     "design": [(check_json, "forge-work/design/tokens.json"),
                (check_run, "forge-design/contrast.py", "forge-work/design/tokens.json"),
                (check_file, "forge-work/design/components.md", CHOICE)],
-    "build": [(check_file, "forge-work/build-log.md")],
-    "test": [(check_file, "forge-work/test-plan.md", TODO), (check_run, "forge-test/bugs.py", "forge-work/bugs.md")],
+    "build": [(check_file, "forge-work/build-log.md"), (check_built, "forge-work/features.csv"),
+              (check_file,) + COMPOSE],  # forge-build starts the app in its compose stack
+    "test": [(check_file, "forge-work/test-plan.md", TODO), (check_cases, "forge-work/test-plan.md"),
+             (check_run, "forge-test/bugs.py", "forge-work/bugs.md")],
     "diff": [(check_run, "forge-diff/parity.py", "forge-work/features.csv")],
     "brand": [(check_json, "forge-work/brand.json", "name", "avoid"),
               (check_run, "forge-brand/sweep.py", ".", "--config", "forge-work/brand.json")],
     "launch": [(check_file, "forge-work/launch.md", TODO)],
     "secure": [(check_line, "forge-work/security.md", "Verdict", "PASS"),
                (check_run, "forge-secure/secretscan.py", ".")],
-    "pack": [(check_file, "Dockerfile"),
-             (check_file, "compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"),
+    "pack": [(check_file, "Dockerfile"), (check_file,) + COMPOSE,
              (check_file, ".env.example"), (check_file, ".dockerignore"), (check_run, "forge-pack/packcheck.py", "."),
              (check_run, "forge-secure/secretscan.py", ".")],  # pack writes files after secure
     "audit": [(check_file, "forge-work/audit.md")],

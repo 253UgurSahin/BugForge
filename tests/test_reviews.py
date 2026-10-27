@@ -193,7 +193,7 @@ class Rules(unittest.TestCase):
         result = analyse(kept)
         self.assertEqual(result["sources"], ["trustpilot.com"])
         self.assertTrue(theme(result, "pricing")["thin"])
-        self.assertEqual([r["source"] for r in kept], ["trustpilot", "trustpilot", "trustpilot.com"])
+        self.assertEqual([r["source"] for r in kept], ["Trustpilot", "trustpilot", "trustpilot.com"])
         self.assertEqual(reviews.site("https://www.trustpilot.co.uk/r/1"), "trustpilot.co.uk")
         self.assertEqual(reviews.site("https://user@apps.apple.com/r/1"), "apple.com")
 
@@ -214,6 +214,28 @@ class Rules(unittest.TestCase):
         result = analyse([review("Booked twice.", 2.0, "https://g2.com/r/1"),
                           review("Booked twice again.", 3.0, "https://g2.com/r/2")])
         self.assertEqual([q["url"] for q in result["unthemed_negative"]], ["https://g2.com/r/1"])
+
+    def test_reviews_without_stars_that_match_nothing_go_to_read_by_hand(self):
+        # dogfood: forum and Reddit posts have no stars, and the unthemed ones vanished from the report
+        result = analyse([review("Is the time zone automatically adjusted?", None, "https://forum.example/t/1"),
+                          review("Free, with a single ad on the page.", None, "https://tidbits.com/a/2"),
+                          review("I wish it had a dark mode.", None, "https://reddit.com/r/3"),
+                          review("Far too expensive.", None, "https://reddit.com/r/4"),
+                          review("Booked twice for one slot.", 1.0, "https://g2.com/r/5")])
+        self.assertEqual([q["url"] for q in result["unthemed_negative"]],  # a wish or a theme: not here
+                         ["https://g2.com/r/5", "https://forum.example/t/1", "https://tidbits.com/a/2"])
+        text = reviews.render(result)
+        self.assertIn("3 reviews matched no theme (up to 15 shown): 2 stars or less, or no stars and no wish.",
+                      text)
+        self.assertIn('> "Is the time zone automatically adjusted?" (reddit, no stars) '
+                      'https://forum.example/t/1', text)
+
+    def test_read_by_hand_shows_15_and_says_how_many(self):
+        rows = [review("Question %d about the grid." % n, None, "https://forum.example/t/%d" % n)
+                for n in range(20)]
+        text = reviews.render(analyse(rows))
+        self.assertIn("20 reviews matched no theme (up to 15 shown)", text)
+        self.assertEqual(text.count("https://forum.example/t/"), 15)
 
     def test_praise_counts_toward_no_theme(self):
         result = analyse([review("Support was quick and friendly, they fixed it in an hour.", 5.0),
@@ -284,6 +306,16 @@ class Input(Folder):
     def test_empty_source_becomes_the_site(self):
         kept, _ = reviews.load_reviews(self.csv_file([("", "https://www.Trustpilot.com/r/1", "", "", "ok")]))
         self.assertEqual(kept[0]["source"], "trustpilot.com")
+
+    def test_source_labels_are_kept_as_written(self):
+        # dogfood: "App Store" came out as "app-store", "savvycal.com (guide)" as "savvycal.com-(guide)"
+        kept, _ = reviews.load_reviews(self.csv_file([
+            ("App Store", "https://apps.apple.com/r/1", "", "1", "Far too expensive."),
+            ("savvycal.com   (guide)", "https://savvycal.com/a", "", "", "Booked twice for one slot.")]))
+        self.assertEqual([r["source"] for r in kept], ["App Store", "savvycal.com (guide)"])
+        text = reviews.render(analyse(kept))
+        self.assertIn('(App Store, 1 star) https://apps.apple.com/r/1', text)
+        self.assertIn('(savvycal.com (guide), no stars) https://savvycal.com/a', text)
 
     def test_shifted_columns_are_dropped_with_their_line(self):
         path = self.csv_file([("app-store", "https://apps.apple.com/r/1", "2026-08-01", "1", "Too slow.")])

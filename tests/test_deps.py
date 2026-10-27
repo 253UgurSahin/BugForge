@@ -53,6 +53,26 @@ NPM_REPORT = json.dumps({
     },
 })
 
+# Dogfood (idea-next-pwa): npm's semver-major "fix" for esbuild was drizzle-kit 0.18.1, two years
+# older than the 0.31.11 in use, and drizzle-kit is a dev tool only.
+DRIZZLE_REPORT = json.dumps({"vulnerabilities": {
+    "esbuild": {"name": "esbuild", "severity": "moderate", "isDirect": False,
+                "via": [{"title": "esbuild lets any website read the dev server", "severity": "moderate",
+                         "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99"}],
+                "nodes": ["node_modules/esbuild", "node_modules/@esbuild-kit/core-utils/node_modules/esbuild"],
+                "fixAvailable": {"name": "drizzle-kit", "version": "0.18.1", "isSemVerMajor": True}},
+    "next": {"name": "next", "severity": "high", "isDirect": True, "nodes": ["node_modules/next"],
+             "via": [{"title": "Next.js cache poisoning", "severity": "high", "url": "https://x.test/1"}],
+             "fixAvailable": {"name": "next", "version": "16.0.1", "isSemVerMajor": True}},
+}})
+DRIZZLE_LOCK = {"lockfileVersion": 3, "packages": {
+    "": {"dependencies": {"next": "^15.5.0"}, "devDependencies": {"drizzle-kit": "^0.31.11"}},
+    "node_modules/drizzle-kit": {"version": "0.31.11", "dev": True},
+    "node_modules/esbuild": {"version": "0.25.4", "dev": True},
+    "node_modules/@esbuild-kit/core-utils/node_modules/esbuild": {"version": "0.18.20", "dev": True},
+    "node_modules/next": {"version": "15.5.0"},
+}}
+
 COMPOSER_REPORT = json.dumps({
     "advisories": {
         "guzzlehttp/psr7": [
@@ -169,6 +189,30 @@ class ParseNpmTests(unittest.TestCase):
         self.assertIn("new major version", nth)
         self.assertNotIn("--force", nth)
         self.assertIn("no fixed version of left-pad", self.found["left-pad"]["fix"])
+
+    def test_a_major_fix_that_is_a_downgrade_says_so(self):
+        found = by_package(mod.parse_npm(DRIZZLE_REPORT, DRIZZLE_LOCK))
+        fix = found["esbuild"]["fix"]
+        self.assertIn("older version of drizzle-kit (0.18.1, you have 0.31.11)", fix)
+        self.assertIn('do not run "npm audit fix --force"', fix)
+        self.assertNotIn("update drizzle-kit", fix)
+        self.assertIn("update next to 16.0.1 in package.json", found["next"]["fix"])  # a real upgrade
+
+    def test_a_package_only_dev_tools_use_says_so(self):
+        found = by_package(mod.parse_npm(DRIZZLE_REPORT, DRIZZLE_LOCK))
+        self.assertTrue(found["esbuild"]["why"].endswith("so it does not run in the production app"))
+        self.assertNotIn("dev tools", found["next"]["why"])
+        self.assertEqual(found["esbuild"]["severity"], "medium")  # the note never lowers a severity
+
+    def test_without_a_lockfile_the_advice_is_the_plain_one(self):
+        for lock in [None, {}, [], {"packages": "odd"}]:
+            found = by_package(mod.parse_npm(DRIZZLE_REPORT, lock))
+            self.assertIn("update drizzle-kit to 0.18.1", found["esbuild"]["fix"])
+            self.assertNotIn("dev tools", found["esbuild"]["why"])
+
+    def test_version_key(self):
+        self.assertLess(mod.version_key("0.18.1"), mod.version_key("0.31.11"))
+        self.assertLess(mod.version_key("1.9.0"), mod.version_key("1.10.0"))
 
     def test_holes_line_shows_three_and_json_keeps_all(self):
         via = [{"title": "Problem %d." % n, "url": "https://x.test/%d" % n} for n in range(5)]
@@ -438,6 +482,28 @@ class SandboxTests(unittest.TestCase):
         [item] = json.loads(out)["not_checked"]
         self.assertEqual(item["reason"], "pip-audit could not check it (ERROR: requirement flask "
                                          "is not pinned: flask>=2)")
+
+    def test_npm_advice_reads_the_project_lockfile(self):
+        write(self.project, "package.json", '{"name": "shop"}')
+        write(self.project, "package-lock.json", json.dumps(DRIZZLE_LOCK))
+        os.environ["FORGE_FAKE_OUT"] = DRIZZLE_REPORT
+        code, out = run(self.project)
+        self.assertIn("older version of drizzle-kit (0.18.1, you have 0.31.11)", out)
+        write(self.project, "package-lock.json", "{not json")  # unreadable: the plain advice
+        self.assertIn("update drizzle-kit to 0.18.1", run(self.project)[1])
+
+    def test_output_into_a_closed_pipe_ends_quietly(self):
+        # Regression (dogfood): the scripts printed a BrokenPipeError traceback into `| head`.
+        write(self.project, "package.json", '{"name": "shop"}')
+        write(self.project, "package-lock.json", json.dumps(DRIZZLE_LOCK))
+        os.environ["FORGE_FAKE_OUT"] = DRIZZLE_REPORT
+        done = subprocess.Popen([sys.executable, mod.__file__, self.project], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        done.stdout.close()  # the reader is gone before anything is printed
+        error = done.stderr.read().decode()
+        done.stderr.close()
+        self.assertEqual(done.wait(timeout=60), 1)
+        self.assertNotIn("Traceback", error)
 
     def test_lockfile_without_package_json_is_not_checked(self):
         write(self.project, "package-lock.json", '{"lockfileVersion": 3}')

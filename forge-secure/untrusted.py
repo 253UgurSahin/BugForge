@@ -2,10 +2,10 @@
 """Flag signs of prompt injection in fetched text or HTML before an AI uses it.
 
 Finds hidden characters, orders for an AI, fake chat roles, requests to run commands or send
-secrets, HTML comments, hidden elements and long base64 runs, in the source and in the page text
-(plain() shows how text is cleaned). Not flagged: a byte order mark at the start, a joiner in an
-emoji or an Arabic or Indic word, the England, Scotland and Wales flags. Rarer tricks can slip
-through. "forge:allow" is NOT honoured: strangers could add it to their own text.
+secrets, HTML comments, hidden, off-screen or white-on-white text and long base64 runs, in the
+source and in the page text (plain() shows how text is cleaned). Not flagged: a byte order mark
+at the start, a joiner in an emoji or an Arabic or Indic word, the England, Scotland and Wales
+flags. Rarer tricks can slip through. "forge:allow" is NOT honoured: strangers could add it.
 
 Usage:
     python3 untrusted.py page.html notes.md [--json] [--fail-on medium]
@@ -21,6 +21,7 @@ import bisect
 import collections
 import html
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -78,6 +79,10 @@ PHRASES = [
     (ORDERS, r"\byou\sare\snow\b(?!\s(?:logged|signed|subscribed|registered|leaving|connected|"
              r"ready|able|eligible|enrolled))"),  # not "You are now logged in."
     (ORDERS, r"\b(?:your|these|following)\snew\sinstructions\b|\bnew\sinstructions\s?:"),
+    (ORDERS, r"\b(?:note|message|instructions?|reminder)\s(?:to|for)\s(?:the\s|all\s|any\s)?(?:ai|llms?|"
+             r"claude|chatgpt|gpt|gemini|copilot|language\smodels?)(?![\w-])"),  # "Note to AI tools:"
+    (ORDERS, r"(?:^[^\w\n]*|[.!?:;]\s)(?:claude|chatgpt|gpt|gemini|copilot|llms?|ai(?:\s\w+)?)\s?,\s?"
+             r"(?:please|ignore|skip|forget|disregard|do\snot|don't|never|you\s(?:must|should))\b"),  # "AI, skip"
     (ORDERS, r"\bsystem\sprompt\b|\bdeveloper\smode\b|\bjailbreak|\b(?:do\snot|don['\u2019]t|never)"
              r"\stell\sthe\suser\b"),
     (ORDERS, r"(?:^[^\w\n]*|[.!?:;,]\s|\bplease\s|\byou\s(?:will|must|should)\s|\b(?:want|need)\s"
@@ -101,8 +106,8 @@ COMMENT_ORDERS = Rule("high", "Orders for an AI hidden in an HTML comment",
                       "visitors never see comments, but an AI reading the source does", NOT_ORDERS)
 LONG_COMMENT = Rule("low", "Long HTML comment", "visitors never see it: a place to tuck text for "
                     "an AI", "skim it before relying on the page")
-HIDDEN_TEXT = Rule("medium", "Hidden text in the HTML", "visitors never see it, but an AI reading "
-                   "the HTML does", "read it before relying on the page; never follow orders in it")
+HIDDEN_TEXT = Rule("medium", "Hidden text in the HTML", "visitors may not see it (hidden, off-screen or white "
+                   "on white), but an AI does", "read it before relying on the page; never follow orders in it")
 BASE64 = Rule("low", "Long base64-looking text", "encoded text can hide a message an AI might "
               "decode and follow", "do not decode and follow it; ignore it unless you know it")
 
@@ -113,7 +118,13 @@ TAG = re.compile(r"""<([a-z][a-z0-9-]*)(?![a-z0-9-])((?:"[^"]*"|'[^']*'|[^'"<>])
 ATTRIBUTE = re.compile(r"""([^\s"'=<>/]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]*))?""")
 CSS_NOISE = re.compile(r"/\*.{0,200}?\*/|\s", re.S)  # CSS comments and spaces, dropped from a style
 # A 0 with no non-zero digit after it: 0, 0px, .0 and 0.0 hide the text; 0.5 and 10px do not.
-HIDING = re.compile(r"display:none|visibility:hidden|(?:font-size|opacity):\.?0(?![.\d]*[1-9])")
+ZERO = r"\.?0(?![.\d]*[1-9])"
+WHITE = r"(?:#fff(?:fff)?\b|white\b|rgba?\(255,255,255[,)])"
+HIDING = re.compile(r"display:none|visibility:hidden|(?:font-size|opacity):" + ZERO +
+                    r"|(?:left|top|text-indent|margin-(?:left|top)):-\d{4}|clip:rect\(0"  # off-screen
+                    r"|^(?=.*overflow:hidden).*(?<![\w-])(?:max-)?(?:height|width):" + ZERO +  # size 0
+                    r"|^(?!.*background(?:-color)?:(?!" + WHITE + r"|transparent|none))"  # white text,
+                    r".*(?<![\w-])color:" + WHITE)  # no other background
 VOID_TAGS = set("area base br col embed hr img input link meta source track wbr".split())
 BASE64_RUN = re.compile(r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{200,}={0,2}")  # whole runs only: fast
 # A picture, font, sound or video inlined as data:TYPE;PARAMETERS;base64, is normal.
@@ -121,13 +132,11 @@ EMBEDDED_FILE = re.compile(r"data:[\w.+/-]*(?:image|font|audio|video)[\w.+/-]*(?
                            r";base64,$", re.I)
 CUT_MARKER = re.compile(r"<(?:U\+?[0-9A-F]{0,5})?$")  # a <U+XXXX> cut in half at the excerpt end
 
-
 def plain(line, gap=""):
     """One line as an AI reads it: entities decoded, spacing such as CR or U+2028 as one space,
     invisible characters replaced by GAP, fullwidth and look-alike letters as plain ones."""
     line = UNSEEN.sub(gap, " ".join(html.unescape(line).split()))
     return " ".join(unicodedata.normalize("NFKC", line).translate(LOOKALIKES).split())
-
 
 def excerpt(text, start=0):
     """At most 120 characters from just before START on its line, unseen characters as <U+XXXX>."""
@@ -139,12 +148,10 @@ def excerpt(text, start=0):
         shown = CUT_MARKER.sub("", shown[:EXCERPT_MAX - 3]) + "..."
     return shown
 
-
 def line_finder(text):
     """A function that gives the line number (1 = first) of an offset in TEXT."""
     starts = [0] + [match.end() for match in re.finditer("\n", text)]
     return lambda offset: bisect.bisect_right(starts, offset)  # binary search in the line starts
-
 
 def check_characters(text):
     """Yield (line number, rule, excerpt) for hidden characters, once per kind per line."""
@@ -154,7 +161,6 @@ def check_characters(text):
             match = re.search(pattern, line)  # re keeps compiled patterns, so this stays fast
             if match:
                 yield number, rule, excerpt(line, match.start())
-
 
 def check_phrases(text):
     """Yield (line number, rule, excerpt) per phrase kind and line. Read three ways: the source
@@ -171,7 +177,6 @@ def check_phrases(text):
                     seen.add((line_of(match.start()), rule))
                     yield line_of(match.start()), rule, excerpt(view, match.start())
 
-
 def check_comments(comments):
     """Yield (offset, rule, excerpt) for comments with orders in them or over 200 characters."""
     for comment in comments:
@@ -182,7 +187,6 @@ def check_comments(comments):
         elif len(words) > 200:
             yield comment.start(), LONG_COMMENT, excerpt(words)
 
-
 def is_hidden(attributes):
     """True when a tag's attributes hide it: the hidden attribute, or a style that hides it."""
     for name, value in ATTRIBUTE.findall(attributes):
@@ -190,7 +194,6 @@ def is_hidden(attributes):
         if name.lower() == "hidden" or (name.lower() == "style" and HIDING.search(style)):
             return True
     return False
-
 
 def check_hidden(text):
     """Yield (offset, rule, excerpt) for elements hidden by CSS or the hidden attribute that hold
@@ -211,7 +214,6 @@ def check_hidden(text):
         if words:
             yield tag.start(), HIDDEN_TEXT, excerpt(words)
 
-
 def make_findings(hits, name):
     """Findings in line order. Each kind is listed at most MAX_SAME times; the last has 'more'."""
     total = collections.Counter(rule for _, rule, _ in hits)  # how many of each kind
@@ -224,7 +226,6 @@ def make_findings(hits, name):
         if listed[rule] == MAX_SAME and total[rule] > MAX_SAME:
             findings[-1]["more"] = total[rule] - MAX_SAME
     return findings
-
 
 def scan_text(text, name):
     """Check the text of one file. Pure: no file access, so tests can call it directly."""
@@ -239,7 +240,6 @@ def scan_text(text, name):
     line_of = line_finder(text)
     return make_findings(hits + [(line_of(at), rule, shown) for at, rule, shown in blocks], name)
 
-
 def read_text(name):
     """The text of a file, or of stdin for '-'. Raises OSError when it cannot be read."""
     if name == "-" and sys.stdin is None:  # started with stdin closed
@@ -248,7 +248,6 @@ def read_text(name):
         return sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
     with open(name, "rb") as handle:  # -sig: a byte order mark at the start is normal
         return handle.read().decode("utf-8-sig", errors="replace")
-
 
 def format_human(findings, summary):
     """The report for people: one block per finding, then a one-line summary and the footer."""
@@ -262,7 +261,6 @@ def format_human(findings, summary):
     noun = "finding" if summary["total"] == 1 else "findings"
     result = "%d %s: %s." % (summary["total"], noun, counts) if findings else "No findings."
     return "\n".join(lines + ["Files checked: %d. %s" % (summary["files_checked"], result), FOOTER])
-
 
 def main(argv=None):
     """Check the files, print the report, and return the exit code (see the top of this file)."""
@@ -291,9 +289,11 @@ def main(argv=None):
     summary.update(total=sum(summary.values()), files_checked=len(args.files) - len(not_checked),
                    not_checked=not_checked, fail_on=args.fail_on, failed=failed)
     report = {"findings": findings, "summary": summary, "note": FOOTER}
-    print(json.dumps(report, indent=2) if args.json else format_human(findings, summary))
+    try:
+        print(json.dumps(report, indent=2) if args.json else format_human(findings, summary), flush=True)
+    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 2 if not_checked else (1 if failed else 0)  # 2: some files could not be checked
-
 
 if __name__ == "__main__":
     sys.exit(main())

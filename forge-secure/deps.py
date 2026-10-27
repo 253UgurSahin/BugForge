@@ -44,6 +44,14 @@ WHY = 'this app uses a version of "%s" with publicly known security holes; attac
 UPGRADE = "upgrade %s to its latest version in the requirements file (fixes came out in %s)"
 NO_LOCK = "A package.json or composer.json alone cannot be checked: create its lockfile first."
 NO_FIX = "no fixed version of %s yet: read the advisory for a workaround, or replace it"
+MAJOR = "update %s to %s in package.json; it is a new major version, so test the app well afterwards"
+OLDER = ('npm\'s only fix is an older version of %s (%s, you have %s): do not run "npm audit fix'
+         ' --force"; wait for a new release, or replace it')
+DEV_ONLY = "; only dev tools use it, so it does not run in the production app"
+
+def version_key(version):
+    """'1.10.2' as [1, 10, 2], so versions sort as numbers."""
+    return [int(number) for number in re.findall(r"\d+", str(version))]
 
 def make_finding(kind, package, holes, fix, version=None):
     """One finding per package, as bad as its worst hole. HOLES: (severity, text, link) each."""
@@ -58,8 +66,11 @@ def make_finding(kind, package, holes, fix, version=None):
             "holes": "; ".join(texts[:3]), "more": links[0] if links else "",  # JSON has all
             "package": package, "version": version, "advisories": texts, "links": links}
 
-def parse_npm(text):
-    """Pure: `npm audit --json` text in, (findings, skipped) out."""
+def parse_npm(text, lock=None):
+    """Pure: `npm audit --json` text (and the parsed package-lock.json) in, (findings, skipped) out.
+    The lockfile tells the installed version and whether only dev tools use a package."""
+    packages = lock.get("packages") if isinstance(lock, dict) else None
+    packages = packages if isinstance(packages, dict) else {}
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("no vulnerability list")
@@ -76,9 +87,15 @@ def parse_npm(text):
         fix = vuln.get("fixAvailable")  # true, false, or {name, version, isSemVerMajor}
         advice = 'run "npm audit fix" in that folder and test the app' if fix else NO_FIX % package
         if isinstance(fix, dict) and fix.get("isSemVerMajor"):  # "npm audit fix" leaves these
-            advice = ("update %s to %s in package.json; it is a new major version, so test the"
-                      " app well afterwards" % (fix.get("name"), fix.get("version")))
-        findings.append(make_finding("npm", package, holes, advice))
+            name, new = fix.get("name"), fix.get("version")
+            have = (packages.get("node_modules/%s" % name) or {}).get("version")
+            older = have and new and version_key(new) < version_key(have)  # npm can offer a downgrade
+            advice = OLDER % (name, new, have) if older else MAJOR % (name, new)
+        finding = make_finding("npm", package, holes, advice)
+        nodes = [packages.get(node) or {} for node in vuln.get("nodes") or []]
+        if nodes and all(node.get("dev") for node in nodes):  # every copy is for dev tools only
+            finding["why"] += DEV_ONLY
+        findings.append(finding)
     return findings, []
 
 def parse_composer(text):
@@ -112,7 +129,7 @@ def parse_pip_audit(text):
         holes = [("high", "%s: %s" % (v["id"], v.get("description") or "no description"),
                   "https://osv.dev/vulnerability/" + v["id"]) for v in vulns]
         versions = {version for v in vulns for version in v.get("fix_versions") or []}
-        versions = sorted(versions, key=lambda ver: [int(n) for n in re.findall(r"\d+", ver)])
+        versions = sorted(versions, key=version_key)
         fix = UPGRADE % (name, ", ".join(versions)) if versions else NO_FIX % name
         findings.append(make_finding("pip", name, holes, fix, dep.get("version")))
     return findings, skipped
@@ -123,7 +140,7 @@ def plan_checks(folder, names):
     npm_lock = "npm-shrinkwrap.json" if "npm-shrinkwrap.json" in names else "package-lock.json"
     if npm_lock in names:  # npm uses the shrinkwrap first. A missing package.json is reported.
         jobs.append({"file": npm_lock, "cmd": NPM, "parse": parse_npm,
-                     "copy": [npm_lock, "package.json"]})
+                     "copy": [npm_lock, "package.json"], "lock": npm_lock})
     if "composer.lock" in names:
         jobs.append({"file": "composer.lock", "cmd": COMPOSER, "parse": parse_composer,
                      "copy": ["composer.lock"]})
@@ -156,6 +173,14 @@ def run_tool(cmd, folder, copy):
                               encoding="utf-8", errors="replace")
     return done.stdout, done.stderr  # the exit code is ignored: npm exits 1 on findings
 
+def read_lock(path):
+    """The parsed lockfile, or {} when it cannot be read: then the advice is just less precise."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {}
+
 def run_check(job, folder):
     """Do one job. Returns (checked, findings, reasons); a reason is something not checked."""
     if "note" in job:
@@ -166,7 +191,8 @@ def run_check(job, folder):
         if output is None:
             reason = "%s is not installed: %s, then run deps.py again" % (tool, INSTALL[tool])
             return False, [], [reason]
-        findings, skipped = job["parse"](output[0])
+        lock = [read_lock(os.path.join(folder, job["lock"]))] if "lock" in job else []
+        findings, skipped = job["parse"](output[0], *lock)  # npm: also its lockfile
         return True, findings, skipped
     except subprocess.TimeoutExpired:
         reason = "it took over %d seconds: try again later" % TIMEOUT
@@ -242,8 +268,11 @@ def main(argv=None):
                    fail_on=args.fail_on, strict=args.strict, failed=failed)
     report = {"findings": findings, "checked": checked, "not_checked": not_checked,
               "summary": summary}
-    print(json.dumps(report, indent=2) if args.json
-          else format_human(findings, not_checked, summary))
+    try:
+        print(json.dumps(report, indent=2) if args.json
+              else format_human(findings, not_checked, summary), flush=True)
+    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 1 if failed else 0
 
 if __name__ == "__main__":

@@ -87,6 +87,12 @@ SDK_LINES = [
     ("Resend", "resend==2.0.0"),
     ("Resend", "resend.Emails.send(params)"),
     ("Mailgun", '"mailgun-js": "^0.22.0",'),
+    ("SendGrid", "sendgrid==6.11.0"),
+    ("SendGrid", "from sendgrid import SendGridAPIClient"),
+    ("SendGrid", '"sendgrid/sendgrid": "^8.1",'),
+    ("SendGrid", "SENDGRID_API_KEY=SG.xxx"),
+    ("SendGrid", 'SENDGRID_ENDPOINT = "https://api.sendgrid.com/v3/mail/send"'),
+    ("SendGrid", 'EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"'),
     ("Stripe", "gem 'stripe'"),
     ("Stripe", "stripe==7.0.0"),
     ("Stripe", "import stripe"),
@@ -131,6 +137,7 @@ NOT_SERVICES = [
     "'resend' => ['key' => env('RESEND_KEY')],",
     "'endpoint' => env('MAILGUN_ENDPOINT', 'api.mailgun.net'),",
     "'mailers' => ['smtp', 'ses', 'postmark', 'resend', 'mailgun', 'log'],",
+    'Rule("critical", "SendGrid API key", pattern, MAIL, fix)',  # forge's own secret scanner
 ]
 
 
@@ -227,8 +234,17 @@ class ConsentTests(unittest.TestCase):
                 self.assertEqual((finding["severity"], finding["needs_consent"]), ("medium", True))
                 self.assertIn("needs consent", finding["title"])
 
+    def test_fonts_and_files_from_a_cdn_are_medium_without_consent(self):
+        # Dogfood: fonts were low here, high in the audit table and banned in forge-design. Every
+        # page view sends the visitor's IP before any yes: medium, fixed by self-hosting.
+        for name, finding in self.findings_for("Google Fonts", "Adobe Fonts", "jsDelivr", "unpkg").items():
+            with self.subTest(service=name):
+                self.assertEqual((finding["severity"], finding["needs_consent"]), ("medium", False))
+                self.assertTrue(finding["title"].endswith(": self-host it"), finding["title"])
+                self.assertIn("before any consent", finding["why"])
+
     def test_other_services_are_low(self):
-        names = ["Plausible", "Google Fonts", "Google Maps", "Stripe", "Mollie", "SendGrid", "Sentry", "jsDelivr"]
+        names = ["Plausible", "Google Maps", "Stripe", "Mollie", "SendGrid", "Sentry"]
         for name, finding in self.findings_for(*names).items():
             with self.subTest(service=name):
                 self.assertEqual((finding["severity"], finding["needs_consent"]), ("low", False))
@@ -254,7 +270,7 @@ class ConsentTests(unittest.TestCase):
     def test_medium_first_then_table_order(self):
         places = {name: ["x.html:1"] for name in ["cdnjs", "YouTube", "Stripe", "Hotjar"]}
         report = mod.make_report(places, 1, [], "high")
-        self.assertEqual([f["service"] for f in report["findings"]], ["Hotjar", "YouTube", "Stripe", "cdnjs"])
+        self.assertEqual([f["service"] for f in report["findings"]], ["Hotjar", "YouTube", "cdnjs", "Stripe"])
 
 
 class WalkTests(TempFolder):
@@ -448,7 +464,7 @@ class OutputTests(TempFolder):
                         "needs_consent", "files"]:
                 self.assertIn(key, finding)
         summary = report["summary"]
-        self.assertEqual((summary["medium"], summary["low"], summary["total"]), (1, 1, 2))
+        self.assertEqual((summary["medium"], summary["low"], summary["total"]), (2, 0, 2))  # cdnjs: medium
         self.assertEqual((summary["critical"], summary["high"], summary["needs_consent"]), (0, 0, 1))
         self.assertEqual((summary["files_checked"], summary["fail_on"], summary["failed"]), (1, "high", False))
         self.assertEqual(summary["not_checked"], [])
@@ -478,12 +494,23 @@ class ExitCodeTests(TempFolder):
         self.assertTrue(self.scan("--fail-on", "low")[1]["summary"]["failed"])
 
     def test_fail_on_with_only_low(self):
-        write(self.dir, "index.html", SNIPPETS["unpkg"])  # low
+        write(self.dir, "index.html", SNIPPETS["Stripe"])  # low
         self.assertEqual(run(self.dir, "--fail-on", "medium")[0], 0)
         self.assertEqual(run(self.dir, "--fail-on", "low")[0], 1)
 
     def test_missing_path_is_exit_2(self):
         self.assertEqual(run(os.path.join(self.dir, "nope"))[0], 2)
+
+    def test_output_into_a_closed_pipe_ends_quietly(self):
+        # Regression (dogfood): `trackers.py . | head` printed a BrokenPipeError traceback.
+        write(self.dir, "index.html", "\n".join(SNIPPETS.values()))
+        done = subprocess.Popen([sys.executable, mod.__file__, self.dir], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        done.stdout.close()  # the reader is gone before anything is printed
+        error = done.stderr.read().decode()
+        done.stderr.close()
+        self.assertEqual(done.wait(timeout=60), 0)
+        self.assertNotIn("Traceback", error)
 
     def test_bad_arguments_are_exit_2(self):
         for args in [[], [self.dir, "--fail-on", "urgent"]]:

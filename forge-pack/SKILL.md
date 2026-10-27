@@ -36,8 +36,9 @@ one folder per profile. Each was built and run with a real app (laravel with a p
 the `docker-php-ext-install` step: watch that step in its first build). They have: base images
 pinned to major.minor, multi-stage builds, a non-root user in every image that runs, healthchecks,
 `restart: unless-stopped`, the database on a named volume with no published port, secrets only
-from `.env` through `env_file`, the app on `127.0.0.1:8080` only, migrations on every start, and
-mailpit for development mail (only with `COMPOSE_PROFILES=dev` in `.env`).
+from `.env` through `env_file`, the app on `127.0.0.1` only (port `APP_PORT` in `.env`, default
+8080), migrations on every start, mailpit for development mail (only with `COMPOSE_PROFILES=dev`
+in `.env`), and a RUN.md for that profile.
 
 | profile | services | health URL |
 | --- | --- | --- |
@@ -58,11 +59,10 @@ mailpit for development mail (only with `COMPOSE_PROFILES=dev` in `.env`).
 
    | template | becomes |
    | --- | --- |
-   | `Dockerfile`, `docker-compose.yml` | the same names |
+   | `Dockerfile`, `docker-compose.yml`, `RUN.md` | the same names |
    | `dockerignore` | `.dockerignore` |
    | `env.example` | `.env.example` |
    | `nginx.conf` (laravel and static) | `nginx.conf` |
-   | `templates/RUN.md` | `RUN.md` |
 
    forge-build copied these at the start of the build. When a file exists, compare it with the
    template: keep the project's deliberate changes, add what the template has and the file lacks.
@@ -72,7 +72,8 @@ mailpit for development mail (only with `COMPOSE_PROFILES=dev` in `.env`).
    - `composer.lock` and `package-lock.json` (or `requirements.txt` with pinned versions) are
      committed: the images install from them.
    - Every environment variable the app reads is in `.env.example` with a fake value, and every
-     name in `.env.example` is one the app reads. Secrets never go in the Dockerfile or the compose file.
+     name in `.env.example` is one the app or `docker-compose.yml` reads (`APP_PORT`). No payments
+     in plan.md: delete the Stripe lines. Secrets never go in the Dockerfile or the compose file.
    - laravel: `DB_CONNECTION=mariadb`; behind a proxy the app trusts it (`trustProxies` in
      `bootstrap/app.php`); the CSP in `nginx.conf` allows what the app loads, nothing more.
    - django: the `config.wsgi` module in the Dockerfile is the project's; settings.py reads the
@@ -101,7 +102,11 @@ mailpit for development mail (only with `COMPOSE_PROFILES=dev` in `.env`).
      `nginx.conf` already serve `/sw.js` without caching.
    - Background jobs from plan.md: a service with the same build, a `command:`, `env_file: .env`
      and `restart: unless-stopped`, like the laravel `worker`.
-   - RUN.md: fill in `{{App name}}` and delete the lines for the other profiles.
+   - RUN.md: fill in every `{{...}}`: the app's name; `{{app}}`, a short lowercase name for its
+     backup folder; `{{First account}}`, how the first admin or owner account is made (django:
+     `docker compose exec app python manage.py createsuperuser`); `{{Stripe webhook events}}`, the
+     webhook URL path and the events the app handles. Delete what the app does not have (no
+     payments: the Stripe line). A service you added goes in its logs and restore lines.
 4. **Check the files.** `python3 ../forge-pack/packcheck.py .` must exit 0 (nothing high or
    critical); it runs `../forge-pack/composecheck.py` for the compose file. Fix medium and low
    findings too, or tell the user why one stays. A finding the user decides to keep gets
@@ -118,7 +123,7 @@ mailpit for development mail (only with `COMPOSE_PROFILES=dev` in `.env`).
    open(".env", "w").write(re.sub("(?m)^APP_KEY=$", lambda m: key, text))'
    docker compose up -d --build --wait
    docker compose ps
-   curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:8080/up   # the profile's health URL
+   curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:8080/up   # the profile's health URL, on APP_PORT
    ```
 
    Every service `healthy` (the laravel worker: `running`) and the health URL gives 200. Then:
@@ -128,9 +133,9 @@ mailpit for development mail (only with `COMPOSE_PROFILES=dev` in `.env`).
      of your own container). laravel and static get them from `nginx.conf`; django and next set
      them in the app (Django: the CSP middleware with `SECURE_CSP`; Next.js: `headers()` in
      next.config). Fix medium findings there.
-   - Run the backup command for the profile's database from RUN.md once. A failed dump still
-     writes a small file, so check it: `gunzip -c db-*.sql.gz | grep -c 'CREATE TABLE'` prints
-     more than 0. Then delete the file: it holds the database and never gets committed.
+   - Run the database backup commands from RUN.md once. A failed dump still writes a small file,
+     so check it: `gunzip -c ~/backups/<app>/db-*.sql.gz | grep -c 'CREATE TABLE'` prints more
+     than 0. Then delete the file. Backups go outside the project, never into git or an image.
    - `docker compose down` when done. It keeps the data; `down -v` would delete it.
 
    A failure here is a bug to fix in the app or the files. Never make the setup weaker to get it

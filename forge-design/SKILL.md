@@ -110,8 +110,12 @@ manifest's `theme_color` and `background_color` and the `theme-color` meta tag t
     imported in the main JS or CSS file). laravel may instead keep the skeleton's `fonts` option of
     laravel-vite-plugin with your font in it (`bunny("Inter", ...)` gives `"Inter"`): it downloads
     the files at build time and serves them from the app.
-  - next: `next/font` (google or local) with `variable: "--font-inter"`; put that class on `<html>`
-    so `:root` sees it; `font.sans` is then `var(--font-inter), system-ui, sans-serif`.
+  - next: Fontsource too (`npm install @fontsource-variable/inter`), loaded in `app/layout.tsx` with
+    `localFont({ src: "../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
+    variable: "--font-inter", weight: "100 900" })` from `next/font/local` (one more `../` under
+    `src/app/`); put that class on `<html>` so `:root` sees it; `font.sans` is then
+    `var(--font-inter), system-ui, sans-serif`. `next/font/google` fetches the font during
+    `next build`, which fails offline or behind a proxy: only when the build machine reaches Google.
   - django: the .woff2 files from the font's official release in `static/fonts/`, with `@font-face`
     rules (`font-display: swap`) whose `font-family` is exactly the first name in `font.sans`.
 - **Icons**: one set for the whole app, with its licence: Lucide (ISC), Heroicons (MIT) or Tabler
@@ -144,7 +148,7 @@ forge-build builds them first, on a development-only `/design` page with every s
 
 `forge-work/design/tokens.json`, on which contrast.py exits 0, and `forge-work/design/components.md`
 from the template with every `<...>` filled in, for example `Profile: next. Tailwind: 4. Font: Inter
-(SIL OFL, next/font). Icons: Lucide (ISC), as a package.` In clone mode, its `## Original brand
+(SIL OFL, Fontsource with next/font/local). Icons: Lucide (ISC), as a package.` In clone mode, its `## Original brand
 colours` lists the original's colours for forge-brand's sweep; nothing ever uses them.
 
 ## Next

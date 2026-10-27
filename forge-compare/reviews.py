@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Rank what users of competing apps hate and ask for, from real reviews you collected.
 
-Sorts the rows of forge-work/reviews.csv (source,url,date,rating,text) into the themes in
-themes.json next to this script and writes a plain report. It never writes or rewords a review:
-each quote is a piece of a row you supplied, with its link. load_reviews and analyse say how.
+Sorts the reviews in forge-work/reviews.csv into the themes of the themes.json next to this script
+and writes a plain report. It never writes or rewords a review: each quote is part of a row, linked.
 
 Usage:
     python3 reviews.py forge-work/reviews.csv --out forge-work/feedback.md
@@ -137,7 +136,7 @@ def load_reviews(path):
             notes.append("line %d: same text as line %d, counted once" % (line, seen[key]))
         else:
             seen[key] = line
-            label = re.sub(r"[\s_]+", "-", row.get("source", "").lower())
+            label = " ".join(row.get("source", "").split())  # as written; sites are counted by link
             kept.append({"source": label or site(url), "url": url, "text": text,
                          "date": parse_date(row.get("date")), "rating": parse_rating(row.get("rating"))})
             if row.get("date") and kept[-1]["date"] is None:
@@ -182,7 +181,7 @@ def summarise(theme, items, total, today, months):
             "quotes": [quote(review, text) for review, text in items[:3]]}
 
 def analyse(reviews, themes, request_patterns, today=None, months=18):
-    """Score each theme (5-star praise counts toward none), collect wishes and unthemed lows."""
+    """Score each theme (5-star praise counts toward none), collect wishes and what no theme matched."""
     today = today or datetime.date.today()
     found, requests, unthemed = {theme["id"]: [] for theme in themes}, [], []
     for review in reviews:
@@ -196,8 +195,9 @@ def analyse(reviews, themes, request_patterns, today=None, months=18):
         wish = next((p for p in request_patterns if p.search(folded)), None)
         if wish is not None:
             requests.append(quote(review, snippet(text, wish)))
-        if not matched and stars is not None and stars <= 2:
+        if not matched and (wish is None if stars is None else stars <= 2):  # no stars: a forum
             unthemed.append(quote(review, snippet(text)))
+    unthemed.sort(key=lambda item: 3 if item["rating"] is None else item["rating"])
     ranked = [summarise(theme, found[theme["id"]], len(reviews), today, months)
               for theme in themes if found[theme["id"]]]
     ranked.sort(key=lambda theme: (-theme["score"], -theme["count"], theme["id"]))
@@ -255,11 +255,11 @@ def render(result):
     if result["requests"]:
         out += ["", "## Asked for in their own words"] + quotes(result["requests"][:25])
     if result["unthemed_negative"]:
-        out += ["", "## Read these by hand", "", "Low ratings that matched no theme: noise, or a "
-                "theme themes.json does not have yet. Often the most useful part."]
+        out += ["", "## Read these by hand", "", "%s matched no theme (up to 15 shown): 2 stars or "
+                "less, or no stars and no wish. Noise, or a theme themes.json does not have yet. Often "
+                "the most useful part." % plural(len(result["unthemed_negative"]), "review")]
         out += quotes(result["unthemed_negative"][:15])
-    if notes:
-        out += ["", "## Notes on reviews.csv", ""] + ["- " + note for note in notes]
+    out += ["", "## Notes on reviews.csv", ""] + ["- " + note for note in notes] if notes else []
     return "\n".join(out) + "\n"
 
 def main(argv=None):

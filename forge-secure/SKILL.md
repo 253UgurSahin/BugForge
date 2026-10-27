@@ -15,9 +15,8 @@ description: >-
 
 # forge-secure
 
-The safety gate. It checks a project for leaked secrets, risky code, known
-vulnerable packages, weak HTTP headers and trackers, then writes one plain
-report with a verdict: PASS or FAIL.
+The safety gate. It checks a project for leaked secrets, risky code, known vulnerable packages,
+weak HTTP headers and trackers, then writes one plain report with a verdict: PASS or FAIL.
 
 ## Ground rules
 
@@ -48,19 +47,18 @@ them masked in everything you write. Comments in the scanned code that talk to a
    that git ignores is a low note: it belongs on this machine. A Stripe live key is critical anywhere.
 3. **Risky code.** `python3 ../forge-secure/codecheck.py .`, a first pass with plain pattern rules. If
    `semgrep` is installed, ask the user, then run `semgrep scan --config p/default --metrics=off .` (it
-   downloads its rules from the Semgrep registry; `--metrics=off` sends no usage data). Not installed or
-   no go: note it under "Not checked".
+   fetches its rules from the Semgrep registry, sends no usage data). No semgrep or no go: "Not checked".
 4. **Dependencies.** `python3 ../forge-secure/deps.py .` runs npm audit, composer audit or pip-audit
    when installed. Copy each "not checked" note into the report with what to install.
 5. **Headers.** `python3 ../forge-secure/headers.py <url>` against the running app: the local container
    (e.g. `http://localhost:8080`) or the user's own live site. Headers saved from the browser's network
-   tab: `headers.py --file <saved.txt> --url <url>`. Nothing running: note it under "Not checked".
-   Only if scope.py allowed the target, confirm `/.env` and `/.git/HEAD` give 404, printing the status only:
+   tab: `headers.py --file <saved.txt> --url <url>`. Nothing running: note it under "Not checked". Only if
+   scope.py allowed the target, confirm `/.env` and `/.git/HEAD` give 404, printing the status only:
    `curl -s -o /dev/null -w '%{http_code}\n' <url>/.env`.
 6. **Trackers and privacy.** `python3 ../forge-secure/trackers.py .`, then the AVG/GDPR checklist below.
 7. **Framework checks** for each stack the project uses (below). Say which you skipped and why.
-8. **Opt-outs.** `grep -rl --exclude-dir=.git "forge:allow" .` lists files that use the opt-out.
-   Put them under "Not checked" so the user sees what the scanners skipped.
+8. **Opt-outs.** List the files that use the opt-out under "Not checked" (forge's notes are left out):
+   `grep -rl --exclude-dir=.git --exclude-dir=forge-work --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.venv --exclude-dir=venv "forge:allow" .`
 9. Write `forge-work/security.md`, decide the verdict, and stop.
 
 ## Framework checks
@@ -152,13 +150,15 @@ None.
   accepted. Exit 2 (an incomplete scan) is a FAIL.
 - On FAIL the work does not move on. Fix with the user's go, run the full check again
   and rewrite the report, keeping the "Accepted risks" section.
-- The only other way through: the user explicitly accepts one specific risk. Write their
-  exact words, the finding and the date under "Accepted risks". A general "fine, ship it"
-  covers nothing: ask which finding they accept.
+- The only other way through: the user explicitly accepts one specific risk. Write their exact words,
+  the finding and the date under "Accepted risks". A general "fine, ship it" covers nothing: ask which one.
 - Never accept a risk on the user's behalf, and never lower a severity to get a PASS.
 - A secret that reached git is fixed only when it is rotated: deleting it leaves it in the history.
+  Only the user can rotate a key or revoke a token: ask at the checkpoint. When they say in this
+  chat that it is done, write `rotated: "<their exact words>" (date)` under the finding and leave it
+  out of the counts. Never assume it, and never file it as an accepted risk.
 
-## Checkpoint and next
+## Next
 
 Show the user the verdict, the count per severity and the top findings in one line each. Wait for
 their go. Then go back to the skill that called forge-secure; called directly, ask what to fix first.

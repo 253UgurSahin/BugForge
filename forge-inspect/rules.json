@@ -103,9 +103,9 @@
   },
   "other_hosts": {
     "severity": "low",
-    "title": "Scripts from other hosts",
-    "why": "each one slows the page; a host run by another company also sees your visitors and can change the page",
-    "fix": "self-host or drop what you can; name the outside companies left in the privacy policy"
+    "title": "Files from other hosts",
+    "why": "every visit sends the visitor's IP address to each of these hosts before any consent (AVG/GDPR: a problem for fonts and analytics, which can be self-hosted or wait for a yes); each host also slows the page, and a script there can change it",
+    "fix": "self-host fonts, scripts and images; load analytics only after a yes in the cookie banner; name the outside companies left in the privacy policy"
   },
   "mixed_blocked": {
     "severity": "high",

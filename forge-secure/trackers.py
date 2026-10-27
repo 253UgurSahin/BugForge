@@ -3,9 +3,10 @@
 
 Finds analytics, ads, fonts, maps, payments, email, error tracking, chat, video and file hosts
 by domain and package name in code and config (CODE_TYPES, .env*, requirements*.txt). Medium:
-it needs the visitor's yes before it loads. Low: the rest. Never high, so use --fail-on medium
-in a check. Skips SKIP_FOLDERS, lockfiles, symlinks, this script and (with a warning) binary
-files and files over 1 MB. A file you name is read whatever its type. Opt out: # forge:allow
+it needs the visitor's yes before it loads, or it gets every visitor's IP address before any yes
+(fonts and files from a CDN: self-host them). Low: the rest. Never high: use --fail-on medium.
+Skips SKIP_FOLDERS, lockfiles, symlinks, this script and (with a warning) binary files and files
+over 1 MB. A file you name is read whatever its type. Opt out: # forge:allow
 
 Usage:
     python3 trackers.py .                     list the services used in this folder
@@ -35,24 +36,31 @@ CODE_TYPES = set(""".html .htm .php .phtml .tpl .twig .erb .haml .slim .ejs .hbs
 LOCKFILES = {"package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml"}  # every sub-dependency
 FOOTER = "This finds services by name. Ones loaded another way are missed: check the network tab."
 
-Category = collections.namedtuple("Category", "consent why fix")  # consent: needs a yes first
+Category = collections.namedtuple("Category", "severity consent why fix")  # consent: needs a yes
 IP_SENT = "each page view sends the visitor's IP address to the provider"
+BEFORE_YES = IP_SENT + ", before any consent"
 ASK_FIRST = "load it only after a yes in the cookie banner, and name it in your privacy policy"
 SIGN_DPA = "name it in your privacy policy and sign its data processing agreement (DPA)"
-SELF_HOST = "self-host the files, so no visitor data goes to the provider"
+SELF_HOST = "self-host the files (it takes minutes), so no visitor data goes to the provider"
 NO_PII = "switch off sending personal data, then " + SIGN_DPA
-CATEGORIES = {
-    "analytics": Category(True, "it tracks visitors and often sets cookies", ASK_FIRST),
-    "cookieless analytics": Category(False, "visit data goes to the provider", SIGN_DPA),
-    "ads": Category(True, "the ad network learns who visited, for its own ads too", ASK_FIRST),
-    "fonts": Category(False, IP_SENT, SELF_HOST),
-    "maps": Category(False, IP_SENT, "show an image of the map; load the live map after a click"),
-    "payments": Category(False, "names, emails and payment details go to the provider", SIGN_DPA),
-    "email": Category(False, "email addresses and messages go to the provider", SIGN_DPA),
-    "error tracking": Category(False, "reports can hold emails, IPs and typed text", NO_PII),
-    "chat": Category(True, "the widget sets cookies on every page, even if unused", ASK_FIRST),
-    "video": Category(True, "it sets cookies as the page loads", "load the player after a click"),
-    "file host": Category(False, IP_SENT + "; a file changed there runs on your site", SELF_HOST),
+CATEGORIES = {  # severity, needs a yes before it loads, why, fix
+    "analytics": Category("medium", True, "it tracks visitors and often sets cookies", ASK_FIRST),
+    "cookieless analytics": Category("low", False, "visit data goes to the provider", SIGN_DPA),
+    "ads": Category("medium", True, "the ad network learns who visited, for its own ads too",
+                    ASK_FIRST),
+    "fonts": Category("medium", False, BEFORE_YES, SELF_HOST),
+    "maps": Category("low", False, IP_SENT,
+                     "show an image of the map; load the live map after a click"),
+    "payments": Category("low", False, "names, emails and payment details go to the provider",
+                         SIGN_DPA),
+    "email": Category("low", False, "email addresses and messages go to the provider", SIGN_DPA),
+    "error tracking": Category("low", False, "reports can hold emails, IPs and typed text", NO_PII),
+    "chat": Category("medium", True, "the widget sets cookies on every page, even if unused",
+                     ASK_FIRST),
+    "video": Category("medium", True, "it sets cookies as the page loads",
+                      "load the player after a click"),
+    "file host": Category("medium", False, BEFORE_YES + "; a file changed there runs on your site",
+                          SELF_HOST),
 }
 
 
@@ -95,7 +103,9 @@ SERVICES = [
     Service("Stripe", "payments", ["stripe.com", "stripe/", "stripe\\", "stripe_", "'stripe'",
             "stripe==", "import stripe"]),
     Service("Mollie", "payments", ["mollie.com", "mollie/", "mollie-api", "mollie_"]),
-    Service("SendGrid", "email", ["sendgrid"]),
+    Service("SendGrid", "email", ["sendgrid.com", "sendgrid.net", "@sendgrid/", "sendgrid/sendgrid",
+            "sendgrid==", "sendgrid>=", "import sendgrid", "from sendgrid", "'sendgrid'",
+            "sendgrid_"]),
     Service("Mailgun", "email", ["mailgun.net/v3", "mailgun-mailer", "mailgun/mailgun-php",
             "mailgun.js", "mailgun-js"], "choose its EU region to keep the data in the EU"),
     Service("Postmark", "email", ["postmarkapp.com", "postmark-mailer", "wildbit/postmark",
@@ -187,9 +197,10 @@ def make_report(places, checked, not_checked, fail_on):
             category = CATEGORIES[service.category]
             more = " and %d more" % (len(files) - 3) if len(files) > 3 else ""
             where = ", ".join(files[:3]) + more  # the first three files, then "and N more"
-            consent = ": needs consent before it loads" if category.consent else ""
-            findings.append({"severity": "medium" if category.consent else "low",
-                             "title": "%s (%s)%s" % (service.name, service.category, consent),
+            label = (": needs consent before it loads" if category.consent
+                     else ": self-host it" if category.severity == "medium" else "")
+            findings.append({"severity": category.severity,
+                             "title": "%s (%s)%s" % (service.name, service.category, label),
                              "where": where, "why": category.why, "fix": category.fix,
                              "note": service.note, "service": service.name, "files": files,
                              "category": service.category, "needs_consent": category.consent})
@@ -197,7 +208,8 @@ def make_report(places, checked, not_checked, fail_on):
     counts = collections.Counter(finding["severity"] for finding in findings)
     summary = {severity: counts[severity] for severity in SEVERITIES}
     too_bad = any(SEVERITIES.index(f["severity"]) <= SEVERITIES.index(fail_on) for f in findings)
-    summary.update(total=len(findings), needs_consent=summary["medium"], files_checked=checked,
+    summary.update(total=len(findings), files_checked=checked,
+                   needs_consent=sum(finding["needs_consent"] for finding in findings),
                    not_checked=not_checked, fail_on=fail_on, failed=too_bad or bool(not_checked))
     return {"findings": findings, "summary": summary}
 
@@ -240,7 +252,10 @@ def main(argv=None):
         return 2
     places, checked, not_checked = scan_path(args.path)
     report = make_report(places, checked, not_checked, args.fail_on)
-    print(json.dumps(report, indent=2) if args.json else format_human(report))
+    try:
+        print(json.dumps(report, indent=2) if args.json else format_human(report), flush=True)
+    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     if not_checked:
         return 2  # part of the project was not checked, so the list may be incomplete
     return 1 if report["summary"]["failed"] else 0

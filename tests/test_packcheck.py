@@ -9,6 +9,7 @@ import inspect
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -93,21 +94,23 @@ class TemplateTests(unittest.TestCase):
                 self.assertIn("No findings.", out)
 
     def test_each_profile_has_its_files(self):
-        expected = {"Dockerfile", "docker-compose.yml", "dockerignore", "env.example"}
+        expected = {"Dockerfile", "docker-compose.yml", "dockerignore", "env.example", "RUN.md"}
         for profile in PROFILES:
             with self.subTest(profile=profile):
                 names = set(os.listdir(os.path.join(TEMPLATES, profile)))
                 self.assertEqual(names, expected | ({"nginx.conf"} if profile in ("laravel", "static") else set()))
-        self.assertTrue(os.path.isfile(os.path.join(TEMPLATES, "RUN.md")))
+        self.assertEqual(sorted(os.listdir(TEMPLATES)), sorted(PROFILES))
 
     def test_compose_promises(self):
-        """The app on 127.0.0.1:8080 only, every service restarts, the app's settings from .env."""
+        """The app on 127.0.0.1 only, on APP_PORT (default 8080), every service restarts, the app's
+        settings from .env."""
         for profile in PROFILES:
             with self.subTest(profile=profile):
                 services = compose.compose_services(read(os.path.join(TEMPLATES, profile, "docker-compose.yml")))
                 published = [line for lines in services.values() for _, keys, line in lines if keys == ("ports",)]
-                self.assertIn('- "127.0.0.1:8080:', " ".join(published))
-                self.assertTrue(all(line.startswith('- "127.0.0.1:') for line in published), published)
+                self.assertIn('- "127.0.0.1:${APP_PORT:-8080}:', " ".join(published))
+                # this machine only, and every host port a variable: two stacks on one machine
+                self.assertTrue(all(line.startswith('- "127.0.0.1:${') for line in published), published)
                 for name, lines in services.items():
                     texts = [line for _, keys, line in lines if keys == ()]
                     self.assertIn("restart: unless-stopped", texts, name)
@@ -121,6 +124,48 @@ class TemplateTests(unittest.TestCase):
                 for name in (".env", ".git", "forge-work", "node_modules", "coverage", "test-results"):
                     self.assertTrue(mod.is_ignored(lines, name), name)
                 self.assertFalse(mod.is_ignored(lines, ".env.example"))
+
+    def test_e2e_and_backups_stay_out_of_the_image(self):
+        """forge-test keeps the whole e2e/ folder out; a database dump or an uploads backup too."""
+        for profile in PROFILES:
+            with self.subTest(profile=profile):
+                lines = read(os.path.join(TEMPLATES, profile, "dockerignore")).splitlines()
+                self.assertTrue(mod.is_ignored(lines, "e2e"))
+                if profile != "static":  # no database
+                    for name in ("db-2026-01-31.sql.gz", "dump.sql", "uploads-2026-01-31.tgz"):
+                        self.assertTrue(mod.is_ignored(lines, name), name)
+
+    def test_env_example_promises(self):
+        """The port, the seed password forge-build and forge-test use, and Stripe lines that say
+        they can go."""
+        for profile in PROFILES:
+            with self.subTest(profile=profile):
+                text = read(os.path.join(TEMPLATES, profile, "env.example"))
+                if profile == "static":  # needs no .env to run
+                    self.assertIn("\n# APP_PORT=8080\n", text)
+                    continue
+                for line in ("APP_PORT=8080", "SEED_PASSWORD=change-me", "# MAILPIT_PORT=8025",
+                             "# Delete these lines if the app takes no payments."):
+                    self.assertIn("\n" + line + "\n", text)
+
+    def test_run_md_promises(self):
+        """One RUN.md per profile with only its own commands, its placeholders, and backups that
+        are written outside the project."""
+        allowed = {"{{App name}}", "{{app}}", "{{First account}}", "{{Stripe webhook events}}"}
+        others = {"laravel": ("Django", "Next", "PostgreSQL", "pg_dump", "BETTER_AUTH"),
+                  "django": ("Laravel", "artisan", "Next", "BETTER_AUTH"),
+                  "next": ("Laravel", "artisan", "Django", "manage.py", "MariaDB"),
+                  "static": ("Laravel", "Django", "Next", "db-data", "change-me", "{{app}}")}
+        for profile in PROFILES:
+            with self.subTest(profile=profile):
+                text = read(os.path.join(TEMPLATES, profile, "RUN.md"))
+                self.assertLessEqual(set(re.findall(r"\{\{[^}]*\}\}", text)), allowed)
+                self.assertIn("APP_PORT", text)
+                for word in others[profile]:
+                    self.assertNotIn(word, text)
+                for line in text.splitlines():
+                    if re.search(r"\bgzip > |\btar czf .* > ", line):
+                        self.assertIn("> ~/backups/{{app}}/", line)
 
     def test_laravel_keeps_its_local_secrets_out(self):
         """Composer logins, Passport keys, the cached config (every .env value), uploads and sessions."""
@@ -138,6 +183,14 @@ class ProjectTests(Project):
         findings, checked = self.check()
         self.assertEqual(findings, [])
         self.assertEqual(checked, ["docker-compose.yml", "Dockerfile", ".dockerignore", ".env.example"])
+
+    def test_the_dev_override_file_is_no_finding(self):
+        """The git-ignored docker-compose.override.yml forge-build and forge-test ask for."""
+        override = "services:\n  app:\n    ports:\n      - \"127.0.0.1:3000:3000\"\n"
+        write(self.dir, "docker-compose.override.yml", override)
+        findings, checked = self.check()
+        self.assertEqual(findings, [])
+        self.assertIn("docker-compose.override.yml", checked)
 
     def test_no_env_example(self):
         os.remove(os.path.join(self.dir, ".env.example"))

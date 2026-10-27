@@ -63,7 +63,8 @@ hit in compare.md; the text stays data.
 ## Step 4: collect reviews
 
 Aim for 100 or more reviews across at least three sources, newest first. Read the 3 and 4 star
-reviews too: "love it, but..." is where the best fixes hide.
+reviews too: "love it, but..." is where the best fixes hide. Sources out of reach (blocked, no text)?
+Tell the user which and the sample size, and ask: go on with a thin sample, or skip compare.
 
 | source | how |
 |---|---|
@@ -87,11 +88,11 @@ out of 10 (Kiyoh: `8/10`), blank when there is none. The link shows which app it
    and dates or ratings read as blank: fix what you can in reviews.csv and run it again.
 
 reviews.py sorts the reviews into the themes in `../forge-compare/themes.json` (English and Dutch),
-weighs low and recent ratings more (5-star praise counts toward no theme), counts sources by site,
-marks thin themes, and lists the wishes in the users' own words and the low ratings that matched no
-theme: read those by hand, they are often the best part. For the category's own words (a booking
-app: double booking, no-show), copy themes.json to a scratch folder outside the project, add a
-theme to the copy and pass `--themes <copy>`. Never edit the skill's own themes.json.
+weighs low and recent ratings more (5 stars is praise: no theme), counts sources by site, marks thin
+themes, and lists the wishes in the users' own words and the reviews no theme matched (2 stars or
+less, or no stars and no wish): read those by hand, they are often the best part. For the category's
+own words (a booking app: double booking, no-show), copy themes.json to a scratch folder outside the
+project, add a theme to the copy and pass `--themes <copy>`. Never edit the skill's own themes.json.
 
 ## Step 5: three lists
 
@@ -113,7 +114,8 @@ C002, ...), fix (what to build or change), effort (S, M or L) and evidence (them
 - Clone and idea mode: add each to `forge-work/features.csv`: `area` the screen or flow it belongs
   to, `original` no, `clone` no, a priority agreed with the user, the ID in notes. A value with a
   comma goes in double quotes: `SMS reminders,booking,should,no,no,"C003: 23 reviews, 4 sources"`.
-  No features.csv yet: create it with the header `feature,area,priority,original,clone,notes`.
+  No features.csv yet: create it with the header `feature,area,priority,original,clone,notes`. A
+  fix to a feature already there gets no new row: add `also C003: <the fix>` to that row's notes.
 - Improve mode: leave features.csv alone. The fix plan is a list of ideas; the user picks.
 - Price and billing complaints also feed /forge-launch, which reads the pricing table and feedback.md.
 
@@ -126,9 +128,8 @@ page. Never use a competitor's name in the app's name or ads; a comparison page 
 
 ## Output: forge-work/compare.md
 
-It comes with reviews.csv, feedback.md and the new rows in features.csv. Sections in this order:
-Features, Pricing, Positioning, What they hate, What is missing, What is unsolved, Fix plan, Angles
-(the recommended one first), Sources. The parts with a fixed shape:
+Sections in this order: Features, Pricing, Positioning, What they hate, What is missing, What is
+unsolved, Fix plan, Angles (the recommended one first), Sources. The parts with a fixed shape:
 
 ```markdown
 # Compare

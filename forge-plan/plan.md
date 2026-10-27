@@ -11,7 +11,7 @@ Date: {{YYYY-MM-DD}}
 ## Why
 
 {{Two or three lines: what the user said, which row of "How to pick a profile" fits, what was not
-chosen and why. PWA: why or why not.}}
+chosen and why. Why it is or is not a PWA.}}
 
 ## Stack and versions
 
@@ -71,6 +71,7 @@ Rules the database enforces:
 
 ## Auth and roles
 
+- Who may create an account: {{anyone (public sign-up) | only staff (no sign-up page; accounts made by a command)}}
 - Sign up, log in, email verification, password reset: {{how, per the profile}}
 - Roles: {{none | owner, admin, member}}. Access check: {{the one function or policy}}
 - Account deletion and data export: {{how}}
@@ -110,10 +111,10 @@ Rules the database enforces:
 ## Build order
 
 1. Vertical slice: {{the core loop end to end; its screens, tables and routes}}
-2. Must-haves: {{...}}
+2. Must-haves: {{..., with each must C-ID row next to the feature it changes}}
 3. Should-haves: {{...}}
 4. Could-haves: {{...}}
-5. Fixes from compare (C-IDs): {{...}}
+5. Fixes from compare (the other C-IDs): {{...}}
 
 Not building: {{rows with clone=skip, and why}}
 

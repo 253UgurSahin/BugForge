@@ -335,6 +335,16 @@ class OutputTests(TempFolderTest):
         super().setUp()
         self.scope = self.write({"own_domains": ["example.com"]})
 
+    def test_output_into_a_closed_pipe_ends_quietly(self):
+        # Regression (dogfood): `scope.py ... | head` printed a BrokenPipeError traceback.
+        done = subprocess.Popen([sys.executable, SCRIPT, "mysite.nl", "--scope", self.scope],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        done.stdout.close()  # the reader is gone before anything is printed
+        error = done.stderr.read().decode()
+        done.stderr.close()
+        self.assertEqual(done.wait(timeout=60), 1)
+        self.assertNotIn("Traceback", error)
+
     def test_allowed_human_output(self):
         code, out, err = run("http://localhost:8080/", "--scope", self.scope)
         self.assertEqual((code, err), (0, ""))

@@ -1,7 +1,7 @@
 # Design
 
 Profile: <laravel|django|next|static>. Tailwind: <4|3|no>.
-Font: <name> (<licence>, <Fontsource | laravel-vite-plugin fonts | next/font | files in static/fonts/>).
+Font: <name> (<licence>, <Fontsource | Fontsource with next/font/local | laravel-vite-plugin fonts | files in static/fonts/>).
 Icons: <Lucide (ISC) | Heroicons (MIT) | Tabler Icons (MIT)>, as <package | SVG files in the repo>.
 
 ## Theme
@@ -53,8 +53,9 @@ Animations sit inside `@media (prefers-reduced-motion: no-preference)`.
 
 - `font.sans` in tokens.json (so `--font-sans`) holds: <the value forge-design Step 4 gives this profile>
 - Font files and their licence file live in: <path>
-- No font or icon CDN. After scaffolding, this search finds nothing:
-  `grep -rnE "fonts\.(bunny\.net|googleapis\.com|gstatic\.com)|use\.typekit\.net|kit\.fontawesome\.com|api\.iconify\.design" --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.git --exclude-dir=forge-work .`
+- No font or icon CDN. After scaffolding, this search of the sources (binary files, dependencies
+  and build output skipped) finds nothing:
+  `grep -rnIE "fonts\.(bunny\.net|googleapis\.com|gstatic\.com)|use\.typekit\.net|kit\.fontawesome\.com|api\.iconify\.design" --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.git --exclude-dir=forge-work --exclude-dir=.next --exclude-dir=dist --exclude-dir=build --exclude-dir=staticfiles .`
 
 ## Original brand colours
 

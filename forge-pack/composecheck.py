@@ -10,6 +10,10 @@ Usage:
     python3 composecheck.py . --json             machine-readable output
     python3 composecheck.py . --fail-on medium   also fail on medium findings
 
+docker-compose.override.yml and other extra files (compose.prod.yaml) add to the main file
+(docker-compose.yml, compose.yaml): a service the main file has keeps its restart policy, build and
+image from there. Every rule about safety still applies to them.
+
 A line with a forge:allow comment is not reported. Limits: block-style YAML, the way compose files
 are usually written (one-line lists such as ports: ["80:80"] are read too): no extends:, include:
 or anchors. A file without a services: block at the start of a line (JSON, for example), or with a
@@ -32,6 +36,7 @@ import sys
 SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
 MAX_BYTES = 1024 * 1024
 COMPOSE_FILE = re.compile(r"^(?:docker-)?compose(?:\.[\w.-]+)?\.ya?ml$")
+MAIN_FILE = re.compile(r"^(?:docker-)?compose\.ya?ml$")  # the others add to it
 # As in secretscan.py, a name that ENDS in a secret word holds a secret: DB_PASSWORD, SMTP_PASS, NPM_TOKEN,
 # APP_KEY; TOKEN_URL and DB_PASSWORD_FILE do not. packcheck.py has the same rule (a test keeps them equal).
 SECRET_NAME = re.compile(r"(?i)(?:passw(?:or)?d|^pass|[_.-]pass|[_.-]pwd|secret|token"
@@ -142,8 +147,9 @@ def flow_items(text):
     return [item.strip() for item in text.strip()[1:-1].split(",") if item.strip()]
 
 
-def check_service(name, lines, path):
-    """(findings, has a healthcheck that is on, build target or None) for one service."""
+def check_service(name, lines, path, main=()):
+    """(findings, has a healthcheck that is on, build target or None) for one service. MAIN: its
+    lines in the main file when this is an override file, for what it keeps from there."""
     findings, ports = [], []  # ports: [line number, the host IP it is bound to]
     image, target, built, health = None, None, False, False
     for number, keys, line in lines[1:]:
@@ -176,19 +182,23 @@ def check_service(name, lines, path):
             health = False  # disable: true, or test: ["NONE"]
         if keys == ("build",) and line.startswith("target:"):
             target = unquote(line.split(":", 1)[1]).lower()
+    kept = [line for _, keys, line in main[1:] if keys == ()]  # from the main file
+    built = built or any(line.startswith("build:") for line in kept)
     if image and not built and not is_pinned(image[1]):  # with build:, image: names the built image
         findings.append(finding("tag", path, image[0], name, image[1]))
-    if is_database(image[1] if image else "", name):
+    kept_image = next((unquote(line.split(":", 1)[1]) for line in kept if line.startswith("image:")), "")
+    if is_database(image[1] if image else kept_image, name):
         findings += [finding("db_port", path, number, name) for number, bound in ports
                      if not bound.startswith(LOOPBACK)]
-    if not any(re.match(r"restart(?:_policy)?:", line) for _, _, line in lines[1:]):
+    if not any(re.match(r"restart(?:_policy)?:", line) for _, _, line in lines[1:] + list(main[1:])):
         findings.append(finding("no_restart", path, lines[0][0], name))
     return findings, health, target
 
 
-def check_compose(text, path):
-    """(findings, has a healthcheck, build targets) for the text of one compose file. Raises
-    ValueError when it has no services: block that this script can read."""
+def check_compose(text, path, main=None):
+    """(findings, has a healthcheck, build targets) for the text of one compose file. MAIN: the
+    services of the main file when this file adds to it. Raises ValueError when it has no
+    services: block that this script can read."""
     services = compose_services(text)
     if not services:
         raise ValueError("could not read the services in %s: it must be block-style YAML with "
@@ -197,7 +207,7 @@ def check_compose(text, path):
     for service, lines in services.items():
         if re.match(r"[^:]+:\s*\{", lines[0][2]):  # app: {image: x}, a one-line map
             raise ValueError("could not read service %s in %s: write it as block-style YAML" % (service, path))
-        found, has_check, target = check_service(service, lines, path)
+        found, has_check, target = check_service(service, lines, path, (main or {}).get(service, ()))
         findings += [f for f in found if "forge:allow" not in raw[f["line"] - 1]]  # the user's opt-out
         healthcheck = healthcheck or has_check
         targets |= {target} if target else set()
@@ -217,9 +227,13 @@ def read(root, name):
 
 def check_folder(root):
     """(findings sorted most severe first, files checked, has a healthcheck, build targets)."""
-    findings, checked, healthcheck, targets = [], [], False, set()
-    for name in sorted(name for name in os.listdir(root) if COMPOSE_FILE.match(name)):
-        found, has_check, built = check_compose(read(root, name), name)
+    findings, checked, healthcheck, targets, main = [], [], False, set(), {}
+    texts = {name: read(root, name) for name in sorted(os.listdir(root)) if COMPOSE_FILE.match(name)}
+    for name in [name for name in texts if MAIN_FILE.match(name)]:
+        for service, lines in compose_services(texts[name]).items():
+            main.setdefault(service, lines)
+    for name, text in texts.items():
+        found, has_check, built = check_compose(text, name, None if MAIN_FILE.match(name) else main)
         findings += found
         healthcheck = healthcheck or has_check
         targets |= built

@@ -43,14 +43,15 @@ bugs in `forge-work/bugs.md` belong to /forge-test. No effort label: add one, **
 ## Step 2: checkpoint, the user picks
 
 Show the list, most severe first, one line each: `A001 [critical] Any user can open any invoice (S)`.
-Suggest an order: critical and high first, small efforts first. Name the items only the user can do
-(rotate a key, sign a data processing agreement): those go under "For you". Ask which IDs to fix
-("A001, A003, X002"; for "fix everything", list the IDs back and wait for a yes), and whether you may
-run their tests and install the project's dev packages. Wait for the user's go.
+Suggest an order: critical and high first, small efforts first. Offer the effort-S lows as one optional
+batch ("also these 3 one-line fixes?") and say which touch the same code ("A015 and A016 both change
+upcoming(): pick them together"). Items only the user can do (rotate a key, sign a processing agreement)
+go under "For you". Ask which IDs to fix ("A001, A003, X002"; for "fix everything", list them back and
+wait for a yes), and whether you may run their tests and install dev packages. Wait for their go.
 
 An improve.md from an earlier round: rename it to `improve-<its date>.md`, so its "For you" list stays.
 In a new `forge-work/improve.md`, write the user's exact words and copy each picked finding in full
-under "To do" (X items too: /forge-secure rewrites security.md). Move each to Fixed or Skipped when done.
+under "To do" (X items too: /forge-secure rewrites security.md). Move each to Fixed or Skipped.
 
 ## Step 3: a clean branch
 
@@ -70,52 +71,52 @@ Step 4 secret scan; the first commit, on main, is theirs or needs their go. Then
 
 ## Step 4: the starting point
 
-**Tests** run on this machine with the dev packages from the lockfile (`composer install`, `npm ci`,
+**Tests** run on this machine with dev packages from the lockfile (`composer install`, `npm ci`,
 `pip install -r` the dev requirements; never `npm install`). The command is in audit.md, or by profile
 (`python3 ../forge-audit/detect.py .`): laravel `php artisan test`, django `pytest` or `manage.py test`,
-next and static `npx vitest run`. Not in forge-pack's containers: they hold the code from build time, no
-test tools and the stack's database. A container only when it is made for tests (code mounted, its own
-test database). Tests can empty the database they reach, so find it first: `phpunit.xml` (a value
-without `force="true"` loses to a `DB_` variable already set in the shell), pytest-django (its own
-`test_` database), the Vitest setup or `DATABASE_URL`. A real one, the stack's own, or unsure: ask.
+next and static `npx vitest run`. Not in forge-pack's containers (old code, no test tools, the stack's
+database), only in one made for tests. Tests can empty the database they reach, so find it first:
+`phpunit.xml` (a value without `force="true"` loses to a `DB_` variable set in the shell), pytest-django
+(its own `test_` database), the Vitest setup or `DATABASE_URL`. A real one, the stack's, or unsure: ask.
 
 Run the full suite once and write the result in improve.md ("before: 140 passed, 2 failed"). Failing
 tests are not yours unless picked; never delete or skip one. No tests: ask whether to add the profile's
 runner (`../forge-plan/profiles.md`) as a first commit `test: add <runner>`, made as in Step 5.6.
 
-**Secrets.** Run `python3 ../forge-secure/secretscan.py .` and list each finding's title and file in
-improve.md as "Secrets before". Low notes on a git-ignored `.env` are fine. A `.env` reported high (git
-does not ignore it, or tracks it): stop and tell the user. Other old findings: "Found on the way". A
-"Stripe live secret key": nothing may reach Stripe until `.env` has test keys.
+**Secrets.** Run `python3 ../forge-secure/secretscan.py .` and list every finding, medium and low too,
+by title and file in improve.md as "Secrets before". A `.env` reported high (not ignored by git, or
+tracked): stop, tell the user. A "Stripe live secret key": no call to Stripe until `.env` has test keys.
 
 ## Step 5: one finding at a time, in the agreed order
 
 1. **Look** at the finding and the code at `where:`. Already fixed or gone: skip it, say how you
    checked. Payments: follow `../forge-build/payments.md` (signature first, fulfil only when
    `payment_status` is `paid`, the async iDEAL events, idempotency).
-2. **Reproduce** it on the local app, not the live site. Best: a test in the project's runner that
-   fails because of it (a second user opens the first user's invoice). Next: the tool that found it,
-   such as `python3 ../forge-inspect/pagecheck.py http://localhost:8080/`. Next: by hand, with the steps
-   for `verify:` (change the hidden amount field, see a 1-cent Checkout page in Stripe test mode).
-   Cannot reproduce it: do not fix blind; skip it and say what you tried.
+2. **Reproduce** it on the local app, not the live site. Best: a test in the project's runner that fails
+   because of it (a second user opens the first user's invoice). Next: the tool that found it, such as
+   `python3 ../forge-inspect/pagecheck.py http://localhost:8080/`. Next: by hand, with the steps for
+   `verify:` (change the hidden amount field, see a 1-cent Checkout page in Stripe test mode). Cannot
+   reproduce it: do not fix blind; skip it and say what you tried. A secret in the code: the test sets a
+   value with `example` in it (secretscan skips those) in the environment and checks it with
+   `assertTrue(key == "example-key", "not from env")`, never assertEqual: it prints the real key.
 3. **Fix the smallest thing** that makes it pass, in the style of the code around it. No reformatting,
    renaming, unrelated upgrades or tidying; other problems go under "Found on the way". A secret in the
    code: read it from the environment (`env('NAME')`, `os.environ`, `process.env`), add `NAME=` with a
-   fake value to `.env.example`, and put "set NAME in .env, then change the old value" under "For you".
-4. **Stop and ask** when the fix grows past its effort, or needs a new package, a migration that
-   changes or deletes data, or a change users notice beyond the finding: go on with a new estimate,
-   split it, or skip it. A new `.env` setting (a webhook secret): as in 3, with where to get the value;
-   at the checkpoint, say what does not work until it is set.
-5. **Check** on the local app, rebuilt or restarted first (`docker compose up -d --build --wait`, or
-   the dev server), or the tools see the old code. Live-site findings too: the live site changes only
-   after the user ships. The test passes, the suite has no new failures, the tool or steps no longer
-   show it. Cannot get it working: undo only your changes for it (`git restore --staged --worktree
-   <files>`, delete files you created), skip it with the reason, and tell the user.
-6. **Commit.** `python3 ../forge-secure/secretscan.py .`: a finding not in "Secrets before" (low notes on
-   the git-ignored `.env` aside) blocks the commit (fix it as in 3). `git add` the exact files (never `-A` or `.`), read
-   `git diff --cached` and `git status --short`: every staged line belongs to this finding, no new file
-   is left out. Commit `fix(A003): hash passwords with bcrypt instead of MD5` (new features:
-   `feat(C002)`), the why as second paragraph; move the entry to Fixed.
+   fake value to `.env.example`, and put "set NAME, then change the old value" under "For you", saying
+   where: in `.env` when the app or its compose file loads one, else in the server's environment.
+4. **Stop and ask** when the fix grows past its effort, or needs a new package, a migration that changes
+   or deletes data, or a change users notice beyond the finding: go on with a new estimate, split it, or
+   skip it. A new setting (a webhook secret): as in 3, plus where to get it and what fails without it.
+5. **Check** on the local app, live-site findings too, rebuilt or restarted first (`docker compose up -d
+   --build --wait`, or the dev server). The test passes, the suite has no new failures, the tool or
+   steps no longer show it. Cannot get it working: undo only your changes for it
+   (`git restore --staged --worktree <files>`, delete files you created), skip it, tell the user why.
+6. **Commit.** `git add` the exact files (never `-A` or `.`); in `git diff --cached` and `git status
+   --short` every staged line belongs to this finding and no new file is left out. Scan what it adds:
+   `git diff --cached -U0 --no-color --no-ext-diff | grep '^+' > forge-work/added.txt`, then
+   `python3 ../forge-secure/secretscan.py forge-work/added.txt --fail-on low` and delete the file. Any
+   finding, even medium or low (exit 1), blocks the commit: fix it as in 3. Commit `fix(A003): hash
+   passwords with bcrypt instead of MD5` (new features: `feat(C002)`), the why as second paragraph.
 
 ## Step 6: finish
 

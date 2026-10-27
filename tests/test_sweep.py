@@ -275,7 +275,7 @@ class Output(Project):
     def test_human_output_groups_the_places(self):
         code, out, _ = run(self.root, "--avoid", "Calendly")
         self.assertEqual(code, 1)
-        self.assertIn("HIGH      The original's name: Calendly (2 places)", out)
+        self.assertIn("HIGH      A name to avoid: Calendly (2 places)", out)
         self.assertIn("where: " + os.path.join("src", "lib", "copy.ts") + ":1", out)
         self.assertIn("FAIL:", out)
 
@@ -457,6 +457,35 @@ class ReviewSweep(Project):
             self.assertEqual(done.returncode, 1, done.stderr)
             self.assertNotIn(b"Traceback", done.stderr)
             self.assertIn(b"\\u65e5\\u672c-calendly.md", done.stdout)
+
+
+class ReviewDogfood(Project):
+    """Regression tests for what real runs of the pack hit."""
+
+    def test_tool_written_caches_are_not_read(self):
+        cache = '{"program":{"fileNames":["./node_modules/next/dist/vercel/x.d.ts"]}}'  # from tsc --noEmit
+        for rel in ["tsconfig.tsbuildinfo", "packages/web/app.tsbuildinfo", "next-env.d.ts", ".eslintcache",
+                    ".phpunit.result.cache"]:
+            put(self.root, rel, cache + "\n")
+        put(self.root, "src/vercel.tsbuildinfo", "{}\n")  # its name is still checked
+        put(self.root, "src/deploy.ts", "// deploy to Vercel\n")
+        findings = sweep.sweep(self.root, sweep.make_matchers(avoid=["Vercel"]))[0]
+        expected = {("name", os.path.join("src", "deploy.ts")), ("path", os.path.join("src", "vercel.tsbuildinfo"))}
+        self.assertEqual({(f["kind"], f["file"]) for f in findings}, expected)
+
+    def test_the_report_does_not_assume_an_original(self):
+        clean = tempfile.mkdtemp(dir=self.root)  # idea mode: an old working name, no original app
+        put(clean, "index.html", "<title>Kapsalon</title><a href='https://kapsalon.example'>x</a> #006bff\n")
+        code, out, _ = run(clean, "--avoid", "Kapsalon", "--domains", "kapsalon.example", "--colors", "#006bff")
+        self.assertEqual(code, 1)
+        self.assertIn("A name to avoid: Kapsalon", out)
+        self.assertIn("A domain to avoid: kapsalon.example", out)
+        self.assertIn("A brand colour to avoid: #006bff", out)
+        self.assertNotIn("original", out.lower())
+        put(clean, "index.html", "<title>Knipkamer</title>\n")
+        code, out, _ = run(clean, "--avoid", "Kapsalon")
+        self.assertEqual(code, 0)
+        self.assertNotIn("original", out.lower())
 
 
 if __name__ == "__main__":

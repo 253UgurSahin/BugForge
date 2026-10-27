@@ -149,6 +149,10 @@ def explain(error):
     for kind, words in PLAIN_ERRORS:
         if isinstance(reason, kind):
             return words
+    tunnel = re.match(r"Tunnel connection failed: (\d+)", str(reason))  # http.client: the proxy said no
+    if tunnel:
+        return ("a proxy on this network refused that site (HTTP %s from the proxy, not from the site): "
+                "save the page from your browser instead" % tunnel.group(1))
     return show(reason.strerror if isinstance(reason, OSError) and reason.strerror else reason, 200)
 
 

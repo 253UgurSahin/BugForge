@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Check one web page for SEO, accessibility, speed, PWA and mixed-content basics, passively.
+"""Check one web page for SEO, accessibility, speed, other hosts, PWA and mixed-content basics, passively.
 
 A URL is loaded once by getpage.py: one passive GET, no redirect followed. No script runs, so a JavaScript
 app (SPA) is checked as the HTML the server sends. Each finding's words are in rules.json. Tags are named
 by line number with a masked address or plain id, never the page's text. forge:allow does not apply.
 
 Usage:
-    python3 pagecheck.py https://example.com/pricing [--json] [--fail-on medium]
+    python3 pagecheck.py https://example.com/pricing [--json] [--fail-on medium] [--no-pwa]
     python3 pagecheck.py --file saved.html [--url https://example.com/pricing]   (no network)
 
 Exit codes: 0 = nothing at or above --fail-on (default: high); 1 = a finding at or above it; 2 = nothing
@@ -35,13 +35,16 @@ NOSCRIPT = re.compile(r"<noscript\b(?:[^<]|<(?!/?noscript\b))*</noscript\s*>", r
 HOST = re.compile(r"\s*(?:https?:)?//(?:[^/?#@]*@)?(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?=[:/?#]|$)", re.I)
 SCHEME = re.compile(r"\s*[a-z][a-z0-9+.-]*:", re.I)  # https:, data:; a relative address has none
 PLAIN = re.compile(r"[^\s\"'<>`\\]{1,200}$")  # an id or address fit to print: no spaces or quotes
-CSS_HTTP = re.compile(r"""(@import\s+(?:url\(\s*)?|url\(\s*)["']?\s*http://""", re.I)
+CSS_URL = re.compile(r"""(@import\s+(?:url\(\s*)?|url\(\s*)["']?\s*([^\s"')]*)""", re.I)  # (how, address)
 URL_ATTRS = {"script": ["src"], "link": ["href"], "img": ["src", "srcset"], "source": ["src", "srcset"],
              "audio": ["src"], "video": ["src", "poster"], "track": ["src"], "iframe": ["src"],
              "embed": ["src"], "object": ["data"], "form": ["action"], "base": ["href"]}
-BLOCKED = {"script", "iframe", "embed", "object", "track", "form", "base",  # tags and rel words
-           "stylesheet", "preload", "modulepreload", "manifest"}
+BLOCKED = set("script iframe embed object track form base stylesheet preload modulepreload manifest".split())
 LOADED = {"stylesheet", "preload", "modulepreload", "manifest", "icon", "apple-touch-icon"}  # rel words
+FETCHED = LOADED | {"preconnect", "prefetch"}  # rel words that contact a host on every visit
+TRACKS = re.compile(r"(^|\.)(fonts\.googleapis\.com|fonts\.gstatic\.com|typekit\.net|fontawesome\.com|"  # fonts
+                    r"google-analytics\.com|googletagmanager\.com|doubleclick\.net|facebook\.net|hotjar\.com|"
+                    r"clarity\.ms)$")  # analytics and ads
 with open(os.path.join(os.path.dirname(GETPAGE), "rules.json"), encoding="utf-8") as rules_file:
     RULES = json.load(rules_file)  # rule: {"severity", "title", "why", "fix"}
 Tag = collections.namedtuple("Tag", "name attrs line in_head in_label")
@@ -56,10 +59,8 @@ class Page(html.parser.HTMLParser):
         self.rels = collections.defaultdict(list)  # rel word, such as canonical: those <link> tags
         self.named = []  # [tag, text pieces] for each link and button
         self.open = []  # the links and buttons we are inside now
-        self.title = None
-        self.in_head = True
+        self.title, self.in_head, self.labels = None, True, 0  # labels: how many <label> tags we are inside
         self.collect = None  # "title" or "style" while we read the text of one
-        self.labels = 0  # how many <label> tags we are inside
         self.feed(NOSCRIPT.sub(lambda block: "\n" * block.group(0).count("\n"), text))  # <noscript>: skip
         self.close()
     def handle_starttag(self, name, attrs):
@@ -80,8 +81,7 @@ class Page(html.parser.HTMLParser):
         elif name == "style":
             self.collect = "style"
         elif name == "title" and self.in_head and self.title is None:
-            self.collect = "title"
-            self.title = ""
+            self.collect, self.title = "title", ""
         elif name == "input" and attrs.get("type", "").strip().lower() in ("image", "button"):
             self.named.append([self.tags[-1], [attrs.get(key, "") for key in NAMING + ("alt", "value")]])
         elif name == "button" or (name == "a" and "href" in attrs):
@@ -130,16 +130,25 @@ def is_script_file(tag):  # a <script src> that browsers run, not JSON data or a
     return (tag.name == "script" and bool(tag.attrs.get("src", "").strip())
             and tag.attrs.get("type", "").strip().lower() in JS_TYPES)
 
-def other_hosts(page, url):  # hosts of script files that are not the page's own, its www. twin or subdomains
+def addresses(tag, rels=LOADED):  # what a tag loads; a <link> only with one of these rel words
+    loads = tag.name != "link" or set(tag.attrs.get("rel", "").lower().split()) & rels  # not rel="canonical"
+    image_input = tag.name == "input" and tag.attrs.get("type", "").strip().lower() == "image"
+    keys = ["src"] if image_input else URL_ATTRS.get(tag.name, []) if loads else []
+    found = [tag.attrs.get(key, "").strip() for key in keys if key != "srcset"]
+    if "srcset" in keys:  # several: "a.png 1x, b.png 2x"
+        found += [part.split()[0] for part in tag.attrs.get("srcset", "").split(",") if part.strip()]
+    return [address for address in found if address]
+
+def other_hosts(page, url):  # hosts files load from that are not the page's own, its www. twin or subdomains
     own = re.sub(r"^www\.", "", (urllib.parse.urlsplit(url or "").hostname or "").lower())
-    starts = [HOST.match(tag.attrs["src"]) for tag in filter(is_script_file, page.tags)]
-    hosts = {start.group(1).lower() for start in starts if start}  # no match: relative, or not a real host
+    loaded = [tag for tag in page.tags if tag.name not in ("form", "base", "script") or is_script_file(tag)]
+    found = [address for tag in loaded for address in addresses(tag, FETCHED)]
+    found += [address for tag in page.tags for _, address in CSS_URL.findall(tag.attrs.get("style", ""))]
+    hosts = {start.group(1).lower() for start in map(HOST.match, found) if start}  # none: relative, or no real host
     return sorted(host for host in hosts if not (own and (host.strip("[]") == own or host.endswith("." + own))))
 
-def page_rules(page, url, size):
-    """Findings about the page as a whole: head tags, weight, lazy loading, scripts from other hosts."""
-    title = " ".join((page.title or "").split())
-    description = page.meta.get("description", "")
+def page_rules(page, url, size, pwa):  # findings about the page as a whole: head tags, weight, other hosts
+    title, description = " ".join((page.title or "").split()), page.meta.get("description", "")
     h1s = page.by_name["h1"]
     noindex = [tag for tag in page.by_name["meta"] if tag.attrs.get("name", "").lower() in ("robots", "googlebot")
                and {"noindex", "none"} & set(re.split(r"[\s,]+", tag.attrs.get("content", "").lower()))]
@@ -148,9 +157,7 @@ def page_rules(page, url, size):
                 ("og:title", page.meta.get("og:title")), ("og:image", page.meta.get("og:image"))] if not there]
     no_app = [name for name, there in [("manifest link", page.rels["manifest"]),
               ("theme-color", page.meta.get("theme-color")), ("apple-touch-icon", icons)] if not there]
-    scripts = list(filter(is_script_file, page.tags))
-    styles = page.rels["stylesheet"]
-    images = page.by_name["img"]
+    scripts, styles, images = list(filter(is_script_file, page.tags)), page.rels["stylesheet"], page.by_name["img"]
     weight = "HTML: %d KB, script files: %d, stylesheets: %d" % (size // 1024, len(scripts), len(styles))
     lazy = any(tag.attrs.get("loading", "").lower() == "lazy" for tag in images)
     hosts = other_hosts(page, url)
@@ -163,29 +170,22 @@ def page_rules(page, url, size):
         ("no_viewport", not page.meta.get("viewport"), "<head>", None),
         ("noindex", bool(noindex), describe(noindex[0]) if noindex else "", None),
         ("share_tags", bool(no_share), "missing: " + ", ".join(no_share), None),
-        ("pwa", bool(no_app), "missing: " + ", ".join(no_app), None),
+        ("pwa", pwa and bool(no_app), "missing: " + ", ".join(no_app), None),
         ("heavy", size > 500 * 1024 or len(scripts) > 20 or len(styles) > 8, weight, None),
         ("no_lazy", len(images) > 10 and not lazy, "images: %d, none with loading=lazy" % len(images), None),
-        ("other_hosts", bool(hosts), show("hosts: " + ", ".join(hosts), 300), None),
+        ("other_hosts", bool(hosts), show("hosts: " + ", ".join(hosts), 300),
+         "medium" if any(map(TRACKS.search, hosts)) else None),  # fonts and analytics: medium
     ]
     return [hit(rule, where, severity) for rule, broken, where, severity in rows if broken]
 
-def mixed_rule(tag, base_http):
-    """The mixed-content rule a tag breaks: an http:// address, or a relative one under an http <base>."""
-    rel = set(tag.attrs.get("rel", "").lower().split())
-    keys = URL_ATTRS.get(tag.name, [])
-    if tag.name == "input" and tag.attrs.get("type", "").strip().lower() == "image":
-        keys = ["src"]
-    if tag.name == "link" and not rel & LOADED:
-        keys = []  # <link rel="canonical"> and the like load nothing
-    for key in keys:  # a srcset holds several addresses: "small.png 1x, big.png 2x"
-        parts = tag.attrs.get(key, "").split(",") if key == "srcset" else [tag.attrs.get(key, "")]
-        for address in [part.split()[0] for part in parts if part.strip()]:
-            if address.lower().startswith("http://") or (base_http and not SCHEME.match(address)):
-                return "mixed_blocked" if tag.name in BLOCKED or rel & BLOCKED else "mixed_media"
-    css = CSS_HTTP.search(tag.attrs.get("style", ""))  # @import loads a stylesheet; url() an image or font
-    if css:
-        return "mixed_blocked" if css.group(1).startswith("@") else "mixed_media"
+def mixed_rule(tag, base_http):  # the mixed-content rule a tag breaks: http://, or relative under an http <base>
+    blocked = tag.name in BLOCKED or set(tag.attrs.get("rel", "").lower().split()) & BLOCKED
+    for address in addresses(tag):
+        if address.lower().startswith("http://") or (base_http and not SCHEME.match(address)):
+            return "mixed_blocked" if blocked else "mixed_media"
+    for how, address in CSS_URL.findall(tag.attrs.get("style", "")):  # @import: a stylesheet; url(): image, font
+        if address.lower().startswith("http://"):
+            return "mixed_blocked" if how.startswith("@") else "mixed_media"
 
 def tag_rules(tag, label_for, https, base_http):  # the rules one tag breaks, judged on its own
     attrs = tag.attrs
@@ -206,7 +206,7 @@ def tag_rules(tag, label_for, https, base_http):  # the rules one tag breaks, ju
     if https and mixed_rule(tag, base_http):
         yield mixed_rule(tag, base_http)
 
-def check(page, url=None, size=0):
+def check(page, url=None, size=0, pwa=True):
     """All findings for a parsed page, most severe first. Without a url, https is assumed."""
     https = urllib.parse.urlsplit(url or "").scheme != "http"
     label_for = {tag.attrs.get("for", "") for tag in page.by_name["label"]} - {""}  # worked out once
@@ -219,7 +219,7 @@ def check(page, url=None, size=0):
     broken["no_name"] = [tag for tag, pieces in page.named if not "".join(pieces).strip()]
     levels = [(int(tag.name[1]), tag) for tag in page.tags if re.match(r"h[1-6]$", tag.name)]
     broken["heading_skip"] = [tag for (before, _), (level, tag) in zip(levels, levels[1:]) if level > before + 1]
-    found = page_rules(page, url, size) + [hit(rule, examples(tags)) for rule, tags in broken.items() if tags]
+    found = page_rules(page, url, size, pwa) + [hit(rule, examples(tags)) for rule, tags in broken.items() if tags]
     return sorted(found, key=lambda finding: SEVERITIES.index(finding["severity"]))
 
 def read_page(data):  # the parsed page; ValueError when the bytes hold no HTML (empty, plain text, binary)
@@ -247,8 +247,7 @@ def load(url, path=None):
         with open(saved, "rb") as handle:
             return answer["status"], handle.read(), answer["cut"]
 
-def format_human(findings, summary, intro):
-    """The report for people: the intro, one block per finding, then a one-line summary."""
+def format_human(findings, summary, intro):  # the intro, one block per finding, then a one-line summary
     lines = [intro, ""]
     for f in findings:
         lines.append("%-8s  %s\n          where: %s\n          why:   %s\n          fix:   %s\n"
@@ -266,6 +265,7 @@ def main(argv=None):
     parser.add_argument("--url", dest="file_url", metavar="URL", help="with --file: the page's address")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     parser.add_argument("--fail-on", choices=SEVERITIES, default="high", help="exit 1 at this or a worse one")
+    parser.add_argument("--no-pwa", action="store_true", help="skip the PWA tags (plan.md says PWA: no)")
     args = parser.parse_args(argv)
     if bool(args.url) == bool(args.file) or (args.url and args.file_url):  # one or the other
         parser.error("give one URL to load, or --file SAVED_HTML with an optional --url")
@@ -284,7 +284,7 @@ def main(argv=None):
             reason = "getpage.py did not finish in time"
         print("error: could not check %s: %s" % (source, show(reason, 300)), file=sys.stderr)
         return 2
-    findings = check(page, url, len(data))
+    findings = check(page, url, len(data), pwa=not args.no_pwa)
     failed = any(SEVERITIES.index(f["severity"]) <= SEVERITIES.index(args.fail_on) for f in findings)
     summary = {sev: sum(f["severity"] == sev for f in findings) for sev in SEVERITIES}
     summary.update(total=len(findings), url=url and safe_url(url), status=status, bytes=len(data), cut=cut,

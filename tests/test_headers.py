@@ -14,6 +14,7 @@ import re
 import shutil
 import socket
 import ssl
+import subprocess
 import sys
 import tempfile
 import threading
@@ -365,6 +366,17 @@ class CliTests(TempFolder):
         self.fetch = patcher.start()
         self.addCleanup(patcher.stop)
 
+    def test_output_into_a_closed_pipe_ends_quietly(self):
+        # Regression (dogfood): the scripts printed a BrokenPipeError traceback into `| head`.
+        path = self.write("HTTP/1.1 200 OK\n" + "Set-Cookie: a=b\n" * 2000)
+        done = subprocess.Popen([sys.executable, mod.__file__, "--file", path, "--url", HTTPS_URL],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        done.stdout.close()  # the reader is gone before anything is printed
+        error = done.stderr.read().decode()
+        done.stderr.close()
+        self.assertEqual(done.wait(timeout=60), 0)  # nothing high: missing headers and cookie flags
+        self.assertNotIn("Traceback", error)
+
     def test_clean_file(self):
         code, out, err = run("--file", self.write(GOOD_TEXT), "--url", HTTPS_URL)
         self.assertEqual(code, 0)
@@ -693,7 +705,7 @@ class ConventionTests(unittest.TestCase):
             elif isinstance(node, ast.ImportFrom):
                 imported.add(node.module.split(".")[0])
         stdlib = getattr(sys, "stdlib_module_names",
-                         {"argparse", "http", "json", "re", "socket", "ssl", "sys", "threading", "urllib"})
+                         {"argparse", "http", "json", "os", "re", "socket", "ssl", "sys", "threading", "urllib"})
         self.assertLessEqual(imported, set(stdlib))
 
     def test_the_get_uses_the_timeout(self):

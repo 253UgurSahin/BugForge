@@ -80,6 +80,11 @@ def rules(html, url=HTTPS_URL, size=None):
     return {RULE_OF[f["title"]]: f["severity"] for f in findings(html, url, size)}
 
 
+def mixed(html, url=HTTPS_URL):
+    """{rule: severity} without the other-hosts finding, which most mixed-content pages also get."""
+    return {rule: severity for rule, severity in rules(html, url).items() if rule != "other_hosts"}
+
+
 def where(html, rule, url=HTTPS_URL, size=None):
     return [f["where"] for f in findings(html, url, size) if RULE_OF[f["title"]] == rule][0]
 
@@ -166,6 +171,11 @@ class HeadTests(unittest.TestCase):
         self.assertEqual(rules(old_icon), {})
         self.assertIn("only if it should be an installable app", mod.RULES["pwa"]["fix"])
         self.assertIn("192 and 512", mod.RULES["pwa"]["fix"])
+
+    def test_no_pwa_skips_only_the_installable_app_tags(self):  # dogfood: plan.md says PWA: no
+        missing = page(remove=["manifest", "theme-color", "apple-touch-icon", "<title>"])
+        self.assertEqual(rules(missing), {"pwa": "low", "title": "medium"})
+        self.assertEqual({RULE_OF[f["title"]] for f in mod.check(mod.Page(missing), HTTPS_URL, pwa=False)}, {"title"})
 
 
 class AccessibilityTests(unittest.TestCase):
@@ -256,7 +266,44 @@ class SpeedTests(unittest.TestCase):
         self.assertEqual(where(html, "other_hosts"), "hosts: cdn.other.net, stats.other.org")
         self.assertEqual(where(html, "other_hosts", url=None), "hosts: cdn.other.net, static.example.com, "
                          "stats.other.org, www.example.com")
-        self.assertEqual(RULE_OF["Scripts from other hosts"], "other_hosts")  # not "other sites": a sibling may be yours
+        self.assertEqual(RULE_OF["Files from other hosts"], "other_hosts")  # not "other sites": a sibling may be yours
+
+    def test_styles_fonts_images_and_frames_from_other_hosts_are_listed(self):  # dogfood: Google Fonts unseen
+        loaded = ['<link rel="stylesheet" href="https://css.a.example/x.css">',
+                  '<link rel="preconnect" href="https://b.example" crossorigin><link rel="prefetch" href="//b.example/n">',
+                  '<link rel="shortcut icon" href="//c.example/favicon.ico">',
+                  '<img src="https://d.example/a.png" alt="A" width="1" height="1">',
+                  '<img src="/a.png" srcset="/a2.png 2x, https://e.example/a3.png 3x" alt="A" width="1" height="1">',
+                  '<iframe src="https://f.example/embed/1" title="Map"></iframe>',
+                  '<video src="/v.mp4" poster="https://g.example/p.jpg"></video>',
+                  "<style>@import url('https://h.example/x.css'); .a { background: url(//i.example/bg.png) }</style>",
+                  '<div style="background-image: url( &quot;https://j.example/bg.png&quot; )">x</div>']
+        html = page(body="".join(loaded))
+        self.assertEqual(where(html, "other_hosts"), "hosts: b.example, c.example, css.a.example, d.example, "
+                         "e.example, f.example, g.example, h.example, i.example, j.example")
+        self.assertEqual(rules(html), {"other_hosts": "low"})
+        nothing = ['<a href="https://k.example/">K</a>', '<link rel="canonical" href="https://k.example/">',
+                   '<link rel="dns-prefetch" href="https://k.example">', '<form action="https://k.example/post">'
+                   '</form>', '<script type="text/plain" src="https://k.example/held-for-consent.js"></script>',
+                   '<meta property="og:image" content="https://k.example/og.png">', '<base href="https://k.example/">',
+                   '<img src="data:image/png;base64,iVBORw0KGgo=" alt="A" width="1" height="1">',
+                   '<div style="background: url(/own.png)">x</div>']
+        self.assertEqual(rules(page(body="".join(nothing))), {})
+
+    def test_font_and_analytics_hosts_are_medium(self):
+        fonts = ('<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" '
+                 'href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family='
+                 'Inter:wght@400;600&amp;display=swap" rel="stylesheet">')  # the dogfood app's base.html
+        html = page(head=fonts)
+        self.assertEqual(rules(html, url="http://127.0.0.1:8083/accounts/login/"), {"other_hosts": "medium"})
+        self.assertEqual(where(html, "other_hosts"), "hosts: fonts.googleapis.com, fonts.gstatic.com")
+        for host in ["www.google-analytics.com", "www.googletagmanager.com", "use.typekit.net", "connect.facebook.net"]:
+            self.assertEqual(rules(page(body='<script src="https://%s/x.js" async></script>' % host)),
+                             {"other_hosts": "medium"}, host)
+        for host in ["cdn.other.net", "evilgoogle-analytics.com", "fonts.googleapis.com.other.net"]:
+            self.assertEqual(rules(page(body='<script src="https://%s/x.js" async></script>' % host)),
+                             {"other_hosts": "low"}, host)
+        self.assertIn("IP address", mod.RULES["other_hosts"]["why"])
 
     def test_www_of_the_page_is_its_own_host(self):
         html = page(body='<script src="https://example.com/a.js"></script>')
@@ -276,7 +323,7 @@ class MixedContentTests(unittest.TestCase):
                      '</object>', '<video src="/v.mp4"><track src="http://cdn.example.net/c.vtt"></video>',
                      '<style>@import url("http://cdn.example.net/x.css");</style>']:
             self.assertEqual(rules(page(body=html)).get("mixed_blocked"), "high", html)
-        self.assertEqual(rules(page(head='<link rel="stylesheet" href="http://x.example/a.css">')),
+        self.assertEqual(mixed(page(head='<link rel="stylesheet" href="http://x.example/a.css">')),
                          {"mixed_blocked": "high"})
 
     def test_media_over_http_is_medium(self):
@@ -286,7 +333,7 @@ class MixedContentTests(unittest.TestCase):
                      '<input type="image" src="http://cdn.example.net/go.png" alt="Go">',
                      '<div style="background-image:url(http://cdn.example.net/bg.png)">x</div>',
                      "<style>.hero { background: url('http://cdn.example.net/bg.png') }</style>"]:
-            self.assertEqual(rules(page(body=html)), {"mixed_media": "medium"}, html)
+            self.assertEqual(mixed(page(body=html)), {"mixed_media": "medium"}, html)
 
     def test_an_http_base_makes_relative_files_http(self):
         html = GOOD.replace("<head>\n", '<head>\n<base href="http://cdn.example.net/">\n').replace(
@@ -305,12 +352,12 @@ class MixedContentTests(unittest.TestCase):
                      '<img src="data:image/png;base64,iVBORw0KGgo=" alt="A" width="1" height="1">',
                      '<input type="text" src="http://x.example/a.png" aria-label="Name">',
                      '<div style="background:url(https://x.example/a.png)">x</div>']:
-            self.assertEqual(rules(page(body=html)), {}, html)
+            self.assertEqual(mixed(page(body=html)), {}, html)
 
     def test_an_http_page_has_no_mixed_content_but_https_is_assumed_without_a_url(self):
         html = page(body='<img src="http://x.example/a.png" alt="A" width="1" height="1">')
-        self.assertEqual(rules(html, url="http://localhost:8080/"), {})
-        self.assertEqual(rules(html, url=None), {"mixed_media": "medium"})
+        self.assertEqual(mixed(html, url="http://localhost:8080/"), {})
+        self.assertEqual(mixed(html, url=None), {"mixed_media": "medium"})
 
 
 class ParserTests(unittest.TestCase):
@@ -413,6 +460,12 @@ class CliTests(TempFolder):
         self.assertEqual(run("--file", high)[0], 1)
         self.assertEqual(run("--file", high, "--fail-on", "critical")[0], 0)
 
+    def test_no_pwa(self):
+        path = self.write(page(remove=["manifest", "theme-color", "apple-touch-icon"]))
+        self.assertIn("Installable-app (PWA) tags missing", run("--file", path, "--fail-on", "low")[1])
+        code, out, err = run("--file", path, "--fail-on", "low", "--no-pwa")
+        self.assertEqual((code, out.strip()[-12:]), (0, "No findings."), out + err)
+
     def test_secrets_and_page_text_are_never_printed(self):
         key = "AIza" + "SyB" + "1" * 32
         text = "Zebra" + "Unicorn" + "Paragraph"
@@ -491,7 +544,7 @@ class LocalServer(http.server.BaseHTTPRequestHandler):
     requests = []
     routes = {
         "/": (200, [("Content-Type", "text/html; charset=utf-8")], GOOD),
-        "/plain": (200, [], page(body='<img src="http://img.example.net/a.png" alt="A" width="1" height="1">')),
+        "/plain": (200, [], page(body='<img src="http://127.0.0.1/a.png" alt="A" width="1" height="1">')),
         "/old": (301, [("Location", "/new?session=s3cr3t")], "<html>moved</html>"),
         "/missing": (404, [("Content-Type", "text/html")], "<html>not found</html>"),
         "/packed": (200, [("Content-Type", "text/html"), ("Content-Encoding", "gzip")], "\x1f\x8b not really"),

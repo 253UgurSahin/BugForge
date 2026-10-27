@@ -184,6 +184,21 @@ class PythonTests(Project):
         self.assertEqual(names(result["databases"]), ["PostgreSQL"])
         self.assertEqual(by_name(result["tests"], "pytest")["version"], "8.3.4")
 
+    def test_django_test_runner_without_pytest(self):
+        """A dogfood run: 'Tests: none found', while manage.py test ran the 13 tests in events/tests.py."""
+        self.write("requirements.txt", "Django==5.2.8\nrequests==2.32.3\n")
+        self.write("manage.py", DJANGO_MANAGE)
+        self.write("events/tests.py", "from django.test import Client, TestCase\n")
+        self.assertEqual(self.describe()["tests"], [{"name": "Django test runner", "version": "", "role": "test",
+                                                     "source": "events/tests.py", "ecosystem": "python"}])
+        self.assertIn("Tests:       Django test runner (events/tests.py)", run(self.dir)[1])
+
+    def test_pytest_runs_django_tests_too(self):
+        self.write("requirements.txt", "Django==5.2.8\npytest-django==4.9.0\n")
+        self.write("manage.py", DJANGO_MANAGE)
+        self.write("events/tests.py", "from django.test import TestCase\n")
+        self.assertEqual(names(self.describe()["tests"]), ["pytest"])
+
     def test_pipfile_lock(self):
         self.write("Pipfile", '[packages]\ndjango = "*"\n\n[dev-packages]\npytest = "*"\n')
         self.write("Pipfile.lock", '{"_meta": {"requires": {"python_version": "3.12"}}, "default": {"django": '
@@ -312,7 +327,9 @@ class TelltaleTests(Project):
                  ("conftest.py", "import pytest\n", "tests", "pytest"),
                  ("pyproject.toml", "[tool.pytest.ini_options]\naddopts = '-q'\n", "tests", "pytest"),
                  ("playwright.config.ts", "export default {}\n", "tests", "Playwright"),
-                 ("tests/Pest.php", "<?php\n", "tests", "Pest")]
+                 ("tests/Pest.php", "<?php\n", "tests", "Pest"),
+                 ("events/tests.py", "from django.test import TestCase\n", "tests", "Django test runner"),
+                 ("shop/tests/test_views.py", "from django.urls import reverse\n", "tests", "Django test runner")]
         for path, content, kind, name in cases:
             with self.subTest(file=path):
                 folder = tempfile.mkdtemp()
@@ -326,6 +343,7 @@ class TelltaleTests(Project):
         self.write("artisan", "#!/usr/bin/env php\n<?php echo 'my own console';\n")
         self.write("manage.py", "import click\n")
         self.write("pyproject.toml", "[tool.black]\nline-length = 100\n")
+        self.write("app/tests.py", "import unittest\n")  # Django's runner only when the file uses Django
         result = self.describe()
         self.assertEqual((result["frameworks"], result["tests"]), ([], []))
 
@@ -503,7 +521,9 @@ class HelperTests(unittest.TestCase):
             with self.subTest(framework=row["name"]):
                 self.assertIn(row["ecosystem"], mod.STACKS["ecosystems"])
                 self.assertIn(row["role"], list(mod.TIERS) + ["test"])
-                self.assertTrue(row["packages"])
+                self.assertTrue(row["packages"] or row["telltale"])
+                if "unless" in row:  # a row found earlier in the list
+                    self.assertIn(row["unless"], names(mod.STACKS["frameworks"][:mod.STACKS["frameworks"].index(row)]))
 
 
 class CommandLineTests(Project):

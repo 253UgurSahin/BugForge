@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Find anything of the original app left in your project: its name, domains and brand colours.
+"""Find names, domains and brand colours that must not ship: the original's, a rival's or an old name.
 
 Every leftover ships: a page title, a link, a CSS colour, a file such as CalendlyEmbed.tsx.
 forge-brand runs this after the rebrand; the forge gate runs it again. There is no --fail-on:
@@ -16,10 +16,10 @@ match in any case, inside words and file names, with or without spaces, dashes, 
 underscores; domains as the host or a subdomain; colours as #rgb up to #rrggbbaa and rgb(), not
 hsl(). "allow": single words that hold a whole name and are fine (linear-gradient for Linear),
 never a domain. A line with forge:allow is listed, not a finding: each needs the user's OK.
-Not read: SKIP_ANYWHERE, SKIP_AT_TOP, lock files, the brand file, binary files, symlink targets.
+Not read: SKIP_ANYWHERE, SKIP_AT_TOP, TOOL_FILES, the brand file, binary files, symlink targets.
 
 Exit codes:
-    0  nothing of the original found
+    0  nothing on the lists found
     1  at least one leftover
     2  bad usage (a missing path or brand file, invalid JSON, an unknown key, a bad entry) or an
        INCOMPLETE sweep (no text file checked, or a file or folder that could not be read)
@@ -36,24 +36,24 @@ LIST_KEYS = ["avoid", "domains", "colors", "allow"]
 SKIP_ANYWHERE = {".git", "node_modules", "venv", ".venv", "__pycache__", ".next", ".nuxt", ".cache",
                  ".idea", ".vscode"}  # dependencies and tool folders: never your own pages
 SKIP_AT_TOP = {"forge-work", "vendor", "dist", "build", "out", "coverage", os.path.join("storage", "framework")}
-LOCK_FILES = {"package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock",
-              "composer.lock", "poetry.lock", "Pipfile.lock", "uv.lock"}  # written by tools, not people
+TOOL_FILES = {"package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "composer.lock",
+              "poetry.lock", "Pipfile.lock", "uv.lock", "next-env.d.ts", ".eslintcache", ".phpunit.result.cache"}
 HEX = re.compile(r"(?<!&)#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})(?![\w-])")  # not &#169; or #add-to
 DOMAIN = r"(?<![\w-])%s(?![\w-])"  # a whole host: help.calendly.com counts, mycalendly.com does not
 RGB = re.compile(r"rgba?\(\s*(\d{1,3})[\s,_]+(\d{1,3})[\s,_]+(\d{1,3})(?!\d)", re.IGNORECASE)
 
 KINDS = {  # kind: (title, why, fix), in the order of the report
-    "name": ("The original's name: %s",
-             "their name in your pages, code or emails can break their trademark and confuses people",
-             "replace it with your new name, or a plain word in code (BookingWidget, not TheirNameWidget)"),
-    "path": ("The original's name in a file or folder name: %s",
+    "name": ("A name to avoid: %s",
+             "an old name looks unfinished; another app's name confuses people and can break its trademark",
+             "replace it with your app's name, or a plain word in code (BookingWidget, not TheirNameWidget)"),
+    "path": ("A name to avoid in a file or folder name: %s",
              "file names end up in URLs, imports, bundles and error messages",
              "rename the file or folder and update everything that points to it"),
-    "domain": ("The original's domain: %s",
-               "a link or request to their site sends your users, and maybe their data, to them",
+    "domain": ("A domain to avoid: %s",
+               "a link or request to another site sends your users, and maybe their data, there",
                "point it at your own domain or remove it"),
-    "color": ("The original's brand colour: %s",
-              "their signature colour on the same layout makes your app look like theirs (trade dress)",
+    "color": ("A brand colour to avoid: %s",
+              "another app's signature colour on a similar layout makes yours look like theirs (trade dress)",
               "use the matching role from your own palette in forge-work/design/tokens.json"),
 }
 
@@ -185,16 +185,17 @@ def sweep(root, matchers, skip_file=None):
     """Sweep a folder or one file, but never skip_file (the brand file). Returns (findings, summary)."""
     findings, allowed, places = [], [], {"checked": [], "binary": [], "unreadable": []}
     is_folder = os.path.isdir(root)
-    everything = walk(root) if is_folder else [(root, "file")]
-    for path, kind in everything:
+    for path, kind in (walk(root) if is_folder else [(root, "file")]):
         shown = os.path.relpath(path, root) if is_folder else path
         if kind == "unreadable":
             places["unreadable"].append(shown)
             continue
-        for what, label, text in scan_line(os.path.basename(path), matchers):
+        name = os.path.basename(path)
+        for what, label, text in scan_line(name, matchers):
             if what == "name":
                 findings.append(make_finding("path", label, text, shown + ("/" if kind == "folder" else "")))
-        if kind == "file" and os.path.basename(path) not in LOCK_FILES and os.path.realpath(path) != skip_file:
+        tool_file = name in TOOL_FILES or name.endswith(".tsbuildinfo")  # lock files, caches: not by people
+        if kind == "file" and not tool_file and os.path.realpath(path) != skip_file:
             status, found, allowed_here = sweep_file(path, shown, matchers)
             places[status].append(shown)
             findings += found
@@ -253,18 +254,18 @@ def format_human(findings, summary):
         lines.append("FAIL: %d leftover(s) in %d file(s). Replace every one, then run sweep.py again."
                      % (len(findings), len({finding["file"] for finding in findings})))
     else:
-        lines.append("PASS: clean, nothing of the original's name, domains or colours found.")
+        lines.append("PASS: clean, none of the names, domains or colours to avoid found.")
     return "\n".join(lines)
 
 
 def main(argv=None):
     """Run the sweep from the command line. Returns the exit code: 0, 1 or 2 (see the top)."""
-    parser = argparse.ArgumentParser(description="Find the original app's leftovers. No --fail-on: all count.")
+    parser = argparse.ArgumentParser(description="Find names, domains and colours to avoid. No --fail-on.")
     parser.add_argument("path", nargs="?", default=".", help="project folder or one file (default: .)")
     parser.add_argument("--config", help="brand file (default: %s if it exists)" % DEFAULT_CONFIG)
-    parser.add_argument("--avoid", default="", help="the original's names, comma-separated")
-    parser.add_argument("--domains", default="", help="the original's domains, comma-separated")
-    parser.add_argument("--colors", default="", help="the original's brand colours, comma-separated")
+    parser.add_argument("--avoid", default="", help="names to avoid, comma-separated")
+    parser.add_argument("--domains", default="", help="domains to avoid, comma-separated")
+    parser.add_argument("--colors", default="", help="brand colours to avoid, comma-separated")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     args = parser.parse_args(argv)
     config = args.config or (DEFAULT_CONFIG if os.path.isfile(DEFAULT_CONFIG) else None)
@@ -283,10 +284,8 @@ def main(argv=None):
         return 2
     findings, summary = sweep(args.path, matchers, os.path.realpath(config) if config else None)
     summary["config"] = config
-    if args.json:
-        text = json.dumps({"findings": findings, "summary": summary}, indent=2)
-    else:
-        text = format_human(findings, summary)
+    text = (json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
+            else format_human(findings, summary))
     encoding = getattr(sys.stdout, "encoding", None) or "utf-8"  # an ASCII pipe, or a file name that
     print(text.encode(encoding, "backslashreplace").decode(encoding))  # is not UTF-8: escape, no crash
     if summary["incomplete"]:

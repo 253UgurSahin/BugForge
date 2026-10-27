@@ -232,6 +232,26 @@ class CommandLineTests(unittest.TestCase):
         for f in json.loads(run(self.dir, "--json")[1])["findings"]:
             self.assertTrue({"severity", "title", "where", "why", "fix"} <= set(f))
 
+    def test_an_override_file_adds_to_the_main_file(self):
+        """forge-build's dev override publishes the db port for the tests: it keeps the restart policy,
+        the build and the image of the main file, and every safety rule still applies to it."""
+        self.write("docker-compose.yml", "services:\n  app:\n    build: .\n    restart: unless-stopped\n"
+                                         "  store:\n    image: postgres:18\n    restart: unless-stopped\n")
+        self.write("docker-compose.override.yml", "services:\n  store:\n    ports:\n"
+                                                  "      - \"127.0.0.1:5433:5432\"\n  app:\n    image: myapp\n")
+        code, out = run(self.dir, "--fail-on", "low")
+        self.assertEqual(code, 0, out)
+        self.assertIn("No findings.", out)
+        self.write("docker-compose.override.yml", "services:\n  store:\n    ports:\n      - \"5433:5432\"\n"
+                                                  "  app:\n    privileged: true\n  adminer:\n    image: adminer:5\n")
+        found = json.loads(run(self.dir, "--json")[1])["findings"]
+        self.assertEqual([(f["rule"], f["where"]) for f in found], [
+            ("privileged", "docker-compose.override.yml:6"), ("db_port", "docker-compose.override.yml:4"),
+            ("no_restart", "docker-compose.override.yml:7")])  # adminer is new: it needs its own
+        os.remove(os.path.join(self.dir, "docker-compose.yml"))  # no main file: checked on its own
+        self.write("docker-compose.override.yml", "services:\n  app:\n    image: myapp\n")
+        self.assertEqual(rules(json.loads(run(self.dir, "--json")[1])["findings"]), ["no_restart", "tag"])
+
     def test_a_file_that_starts_with_a_bom(self):
         self.write("docker-compose.yml", "\ufeff" + service("    privileged: true\n"), encoding="utf-8")
         code, out = run(self.dir)

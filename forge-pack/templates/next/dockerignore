@@ -13,9 +13,13 @@ out/
 coverage/
 test-results/
 playwright-report/
-e2e/node_modules/
+e2e/
 *.tsbuildinfo
 npm-debug.log*
 .idea/
 .vscode/
 .DS_Store
+# Database dumps and upload backups, if one ends up here (RUN.md writes them to ~/backups).
+*.sql
+*.sql.gz
+uploads-*.tgz

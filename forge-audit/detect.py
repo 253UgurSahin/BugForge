@@ -188,20 +188,22 @@ def read_manifest(root, path, found):
 
 
 def known_items(root, files, found):
-    """The frameworks and test tools in stacks.json that a manifest declares, else that a telltale
-    file gives away. A declared one's version comes from the nearest lockfile, else the manifest."""
+    """The frameworks and test tools in stacks.json that a manifest declares, else that a telltale file
+    gives away, unless its "unless" was found. Versions: the nearest lockfile, else the manifest."""
     items = []
     for known in STACKS["frameworks"]:
+        if known.get("unless") in [item["name"] for item in items]:
+            continue
         ecosystem, table = known["ecosystem"], found["declared"][known["ecosystem"]]
         keys = [package_key(ecosystem, package) for package in known["packages"]]
         package = next((key for key in keys if key in table), None)
         version, source = table.get(package, ("", None))
-        version = version if package == keys[0] else ""  # pytest-django's range says nothing about pytest
+        version = version if [package] == keys[:1] else ""  # pytest-django's range says nothing about pytest
         if source:  # a locked version: in the lockfile next to the manifest, else the top folder's (a workspace)
             lock = found["locked"].get((ecosystem, posixpath.dirname(source))) or found["locked"].get((ecosystem, ""), {})
             version, source = lock.get(keys[0], (version, source))
         for path in [] if source else [path for path in files if matches(path, known["telltale"])]:
-            word = STACKS["telltale_words"].get(posixpath.basename(path), "")  # manage.py must say django
+            word = next((word for name, word in STACKS["telltale_words"].items() if matches(path, [name])), "")
             source = source or (path if word in (read_file(root, path, found) or "").lower() else None)
         add_item(items, known["name"], source, version, role=known["role"], ecosystem=ecosystem)
     return items

@@ -38,21 +38,22 @@ Also for this skill:
 - Before Lighthouse, the browser walk or any quote, check the page text: save each page with
   `python3 ../forge-inspect/getpage.py <url> <temp folder>/page-1.html` (one passive GET) and run
   `python3 ../forge-secure/untrusted.py <temp folder>/page-1.html`. Hits go into the report.
-- On someone else's site: read and click links only. No forms, sign-ups, logins or purchases. On the
-  user's own site, the user signs in in the browser themselves: never ask for or type a password.
-- Save none of the site's scripts, network calls, images or fonts. Saved pages and reports go in a
-  temp folder outside the project; delete them when the report is written.
-- Run each script with `python3` from the project root, as rules.md "Running the scripts" says.
+- On someone else's site: read and click links only. No forms, sign-ups, logins or purchases. On the user's
+  live site, the user signs in: never ask for or type their password. Locally, use your seeded test accounts.
+- Save none of the site's scripts, network calls, images or fonts. Saved pages, cookie files, the test
+  database and reports go in a temp folder outside the project; delete them when the report is written.
 
 ## Step 1: target and scope
 
 1. Ask which site, whose it is, and which pages (at most 10: home, pricing, sign-up, the main flows).
-   A local app (improve mode): start it as its RUN.md or README says and use its local URL.
-2. `python3 ../forge-secure/scope.py <url>` for each host. Exit 0: the user's own app, so Step 6 may
+2. A local app (improve mode): start it as its RUN.md or README says, on a throwaway database in the temp
+   folder (or a compose project with its own volume), never the user's dev or production data. Seed two
+   members and an admin with fake `@example.test` addresses (project seeder, or a script outside the repo).
+3. `python3 ../forge-secure/scope.py <url>` for each host. Exit 0: the user's own app, so Step 6 may
    run too. Exit 1: passive only. If the user says the domain is theirs, ask the question in rules.md
    section 3 and add it to `own_domains` in `forge-work/scope.json` (`{"own_domains": ["example.com"]}`)
    only after a clear yes. Exit 2: ask for the right address.
-3. `forge-work/inspect.md` exists for another site: ask before you replace it (its I001.. IDs may be
+4. `forge-work/inspect.md` exists for another site: ask before you replace it (its I001.. IDs may be
    picked for /forge-improve already); keep it as `inspect-<that site>.md` if the user wants.
 
 ## Step 2: headers
@@ -64,17 +65,20 @@ as they are. A redirect names its target: check that address next.
 
 `python3 ../forge-inspect/pagecheck.py <url>` for each page: one passive GET through getpage.py, no
 redirect followed. It checks SEO and accessibility basics, page weight, blocking scripts, images,
-scripts from other hosts, PWA tags and http:// files on an https page. Exit 1: a finding at or above high.
+files from other hosts, PWA tags and http:// files on an https page. Exit 1: a finding at or above high.
+Add `--no-pwa` when `forge-work/plan.md` says `PWA: no` or the user wants no installable app.
 
 - Exit 2: nothing was checked; the error says why. A redirect: check the target if that is the page
   the user meant (it counts toward the 10). An error status: save the page from a browser as "HTML
   only" in the temp folder, then `python3 ../forge-inspect/pagecheck.py --file page.html --url <url>`.
   Not a web page (a PDF) or no HTML in it: report that; there is nothing to check.
+- Behind a login (own app only): sign in (locally: a seeded test account) in the browser tool, or with curl
+  and a cookie jar in the temp folder; save each page there and check it with `--file` as above.
 - A JavaScript app (an SPA) sends an almost empty page that its scripts fill in. pagecheck sees only
   that shell, so confirm "no h1" or "no labels" with Lighthouse or the browser walk before reporting.
 - Keep pagecheck's severity, or raise it when the place makes it worse (no label on the checkout form
-  is high). Drop a finding only when you saw it is wrong, and say why in the report.
-- PWA tags: drop that finding when `forge-work/plan.md` says `PWA: no` or the user wants no installable app.
+  is high). Drop a finding (headers.py's too) only when you saw it is wrong, or it is about the dev
+  server (server version, caching) or SEO and sharing tags on a page behind a login. Say why in the report.
 
 ## Step 4: Lighthouse, if it runs
 
@@ -84,6 +88,7 @@ Lighthouse loads a page once, like a visit on a phone. It needs Node and Chrome 
 ```bash
 npx --yes lighthouse@13 <url> --quiet --chrome-flags="--headless" --output=json \
   --only-categories=performance,accessibility,best-practices,seo --output-path=<temp folder>/lighthouse-1.json
+# behind a login: --extra-headers=<temp folder>/cookie.json holding the Step 3 test login's {"Cookie": "..."}
 ```
 
 Read the four scores (`categories.<name>.score`, 0 to 1: write them as 0 to 100) and the audits under
@@ -104,8 +109,8 @@ Walk the main flows as a normal visitor, with a browser tool if there is one (no
 
 ## Step 6: active checks, own app only
 
-Only where scope.py exited 0, after the user's go for this step. Test accounts, fake data, a handful of
-requests, no scanners or load tests. On a live site, say what you will send first; never change real data.
+Only where scope.py exited 0, after the user's go for this step. Seeded test accounts, fake data, a
+few requests, no scanners or load tests. On a live site, say what you will send first; never change real data.
 
 - Odd input in forms: empty, 5,000 characters, emoji and accents, `<b>x</b>` and `' OR 1=1 --`.
   Expected: a clear message, or the text shown back as plain text. A 500 error or bold text is a finding.
@@ -117,16 +122,17 @@ requests, no scanners or load tests. On a live site, say what you will send firs
 
 ## Output: forge-work/inspect.md
 
-Severity as in rules.md section 8. Typical: **critical** another user's data visible, a login that can
-be skipped, `/.env` readable; **high** no https, http:// scripts or forms that break the page, a flow
-that cannot be finished; **medium** no alt text or labels, blocking scripts, weak headers; **low**
-title and description lengths, sharing and PWA tags, image sizes. Effort: **S** an hour or less,
-**M** up to a day, **L** more, or a decision first.
+Severity as in rules.md section 8. Typical: **critical** another user's data visible, a login that can be
+skipped, `/.env` readable; **high** no https, http:// scripts or forms that break the page, a flow that
+cannot be finished; **medium** no alt text or labels, blocking scripts, weak headers, fonts or analytics
+from other hosts; **low** title and description lengths, sharing and PWA tags, image sizes. Effort:
+**S** an hour or less, **M** up to a day, **L** more, or a decision first.
 
-One finding per problem, with every page it shows up on in `where`. Sort by severity, number them
-I001, I002 and so on. Verdict: `at risk` with any critical, `needs work` with any high, else `healthy`.
-Mode is one of two fixed lines: `own app (active checks allowed)` or `passive only (not the user's site)`.
-Quote outside text only in a quote block with its URL, never a secret or a real person's data.
+One finding per problem, with every page it shows up on in `where`. Sort by severity, number them I001, I002
+and so on. Same problem as an A-finding in `forge-work/audit.md`: end the title with "(confirms A001)" and
+write "see A001" in fix, so it is fixed once. Verdict: `at risk` with any critical, `needs work` with any
+high, else `healthy`. Mode is one of two fixed lines: `own app (active checks allowed)` or `passive only (not
+the user's site)`. Quote outside text only in a quote block with its URL, never secrets or personal data.
 
 ```markdown
 # Inspect: example.com
@@ -155,6 +161,5 @@ effort: S
 
 ## Next
 
-Checkpoint: tell the user in at most 5 plain lines the pages checked, the verdict and counts, the top 3
-findings and what was not checked. Wait for the user's go. Then /forge-improve for the user's own app
-(the user picks findings by ID), /forge-compare for someone else's site, or back to /forge.
+Checkpoint (at most 5 plain lines): pages checked, verdict and counts, top 3 findings, what was not checked.
+Wait for the user's go. Then /forge-improve (own app: the user picks IDs), /forge-compare (other sites), /forge.

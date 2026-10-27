@@ -141,6 +141,16 @@ class InitTests(Project):
         self.assertEqual(code, 0)
         self.assertEqual((self.state()["mode"], self.state()["phases"]), ("clone", {}))
 
+    def test_init_keeps_forge_work_out_of_git(self):
+        self.gate("init", "--mode", "clone")
+        self.assertEqual(read(os.path.join(self.root, "forge-work", ".gitignore")).splitlines()[-1], "*")
+        if HAS_GIT:  # screenshots and quotes of the original are never addable, not even before forge-build
+            subprocess.run(["git", "init", "-q", self.root], check=True, timeout=60)
+            self.finish("recon", "plan")
+            status = subprocess.run(["git", "-C", self.root, "status", "--porcelain", "--untracked-files=all"],
+                                    check=True, timeout=60, stdout=subprocess.PIPE, universal_newlines=True)
+            self.assertEqual(status.stdout, "")
+
     def test_init_needs_a_known_mode(self):
         for args in (["init"], ["init", "--mode", "deploy"]):
             with self.subTest(args=args), self.assertRaises(SystemExit) as stop:
@@ -254,7 +264,7 @@ class DoneTests(Project):
         self.assertIn("error:", err)
         self.assertEqual(self.state_text(), before)
         self.assertEqual(sorted(os.listdir(os.path.join(self.root, "forge-work"))),
-                         ["features.csv", "recon.md", "state.json"])
+                         [".gitignore", "features.csv", "recon.md", "state.json"])
 
     def test_done_refuses_while_a_check_fails(self):
         write(self.root, "forge-work/recon.md", "# Recon\n")
@@ -591,7 +601,8 @@ class SaveTests(Project):
     def test_no_temporary_files_are_left(self):
         self.gate("init", "--mode", "idea")
         self.approve("compare")
-        self.assertEqual(sorted(os.listdir(os.path.join(self.root, "forge-work"))), ["compare.md", "state.json"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.root, "forge-work"))),
+                         [".gitignore", "compare.md", "state.json"])
 
     def test_a_failed_write_keeps_the_old_state(self):
         self.gate("init", "--mode", "idea")
@@ -602,7 +613,8 @@ class SaveTests(Project):
         self.assertEqual(code, 2)
         self.assertIn("disk full", err)
         self.assertEqual(self.state_text(), before)
-        self.assertEqual(sorted(os.listdir(os.path.join(self.root, "forge-work"))), ["compare.md", "state.json"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.root, "forge-work"))),
+                         [".gitignore", "compare.md", "state.json"])
 
 
 if __name__ == "__main__":

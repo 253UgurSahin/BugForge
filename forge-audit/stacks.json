@@ -5,6 +5,8 @@
     "role = the forge profile it points to, 'server' (a server framework forge has no profile for),",
     "'static' (a front end) or 'test'. telltale = files that give it away when no manifest names it.",
     "telltale_words: such a file counts only when it holds the word (a Flask-Script manage.py is not Django).",
+    "unless = leave it out when that one was found. Django's test runner (manage.py test) is built in, so it",
+    "has no packages: its test files give it away, unless pytest was found (pytest runs those tests too).",
     "ecosystems: the language, the forge profile in that language, and file names in that language.",
     "databases: words in an image, package or setting that point to a database.",
     "ci_files: the file each CI service reads, from the top folder (inventory.py has the same table).",
@@ -43,6 +45,7 @@
     {"ecosystem": "php", "name": "PHPUnit", "role": "test", "packages": ["phpunit/phpunit"], "telltale": ["phpunit.xml*"]},
     {"ecosystem": "php", "name": "Pest", "role": "test", "packages": ["pestphp/pest"], "telltale": ["Pest.php"]},
     {"ecosystem": "python", "name": "pytest", "role": "test", "packages": ["pytest", "pytest-django", "pytest-cov", "pytest-asyncio", "pytest-mock"], "telltale": ["pytest.ini", "conftest.py", "pyproject.toml"]},
+    {"ecosystem": "python", "name": "Django test runner", "role": "test", "packages": [], "telltale": ["tests.py", "test_*.py"], "unless": "pytest"},
     {"ecosystem": "node", "name": "Vitest", "role": "test", "packages": ["vitest"], "telltale": ["vitest.config.*"]},
     {"ecosystem": "node", "name": "Jest", "role": "test", "packages": ["jest"], "telltale": ["jest.config.*"]},
     {"ecosystem": "node", "name": "Playwright", "role": "test", "packages": ["@playwright/test"], "telltale": ["playwright.config.*"]},
@@ -51,7 +54,9 @@
   "telltale_words": {
     "artisan": "illuminate",
     "manage.py": "django",
-    "pyproject.toml": "[tool.pytest"
+    "pyproject.toml": "[tool.pytest",
+    "tests.py": "django",
+    "test_*.py": "django"
   },
   "ecosystems": {
     "php": {"language": "PHP", "profile": "laravel", "files": ["*.php"]},

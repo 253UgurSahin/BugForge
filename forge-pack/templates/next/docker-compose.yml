@@ -1,5 +1,6 @@
 # Next.js: app (Node, standalone server) -> db (PostgreSQL).
-# Start: docker compose up -d --build --wait, then open http://localhost:8080. RUN.md has the rest.
+# Start: docker compose up -d --build --wait, then open http://localhost:8080 (another port: APP_PORT
+# in .env). RUN.md has the rest.
 # Settings and secrets come from .env (copy .env.example). Nothing secret is written in this file.
 
 services:
@@ -10,7 +11,7 @@ services:
       # Made from the DB_ parts in .env, so the password is written in one place only.
       DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
     ports:
-      - "127.0.0.1:8080:3000"  # this machine only; a reverse proxy with HTTPS goes in front (RUN.md)
+      - "127.0.0.1:${APP_PORT:-8080}:3000"  # this machine only; a reverse proxy with HTTPS goes in front (RUN.md)
     depends_on:
       db:
         condition: service_healthy
@@ -39,13 +40,13 @@ services:
     restart: unless-stopped
     # No ports: only the app reaches the database, by its name "db".
 
-  # Development only: catches every email; inbox at http://localhost:8025.
+  # Development only: catches every email; inbox at http://localhost:8025 (MAILPIT_PORT in .env).
   # Starts only with COMPOSE_PROFILES=dev in .env (see .env.example).
   mailpit:
     image: axllent/mailpit:v1.32
     profiles: ["dev"]
     ports:
-      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
     restart: unless-stopped
 
 volumes:

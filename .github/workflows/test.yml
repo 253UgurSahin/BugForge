@@ -26,3 +26,40 @@ jobs:
       - run: python -m unittest discover -s tests -v
       # Dogfood: the repo itself must pass its own secret scan.
       - run: python forge-secure/secretscan.py .
+
+  templates:
+    # forge-pack's container templates, one job per stack profile. Each is installed in a scratch
+    # folder the way forge-pack installs it, then compose must accept it and packcheck.py must
+    # find nothing at all.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [laravel, django, next, static]
+    env:
+      PROFILE: ${{ matrix.profile }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # The templates store dotfiles without the dot. The .env is a copy of .env.example with its
+      # fake values: compose reads env_file and the ${...} variables from it.
+      - name: Install the template in a scratch folder
+        run: |
+          dir="$RUNNER_TEMP/$PROFILE"
+          cp -r "forge-pack/templates/$PROFILE" "$dir"
+          mv "$dir/dockerignore" "$dir/.dockerignore"
+          mv "$dir/env.example" "$dir/.env.example"
+          cp "$dir/.env.example" "$dir/.env"
+      # Valid compose file, also with the development-only services (mailpit) switched on.
+      - name: docker compose config
+        run: |
+          docker compose -f "$RUNNER_TEMP/$PROFILE/docker-compose.yml" config -q
+          COMPOSE_PROFILES=dev docker compose -f "$RUNNER_TEMP/$PROFILE/docker-compose.yml" config -q
+      # Dockerfile, compose file, .dockerignore and .env.example: not even a low finding.
+      - name: packcheck
+        run: python forge-pack/packcheck.py "$RUNNER_TEMP/$PROFILE" --fail-on low

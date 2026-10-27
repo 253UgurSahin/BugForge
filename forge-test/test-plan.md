@@ -8,7 +8,8 @@ Runs against: {{http://localhost:8080}}, the local compose stack with seed data.
 - Unit and integration tests, on the host (forge-test Step 2): `{{php artisan test | pytest | npx vitest run}}`
 - End to end: `cd e2e && FORGE_BASE_URL=http://localhost:8080 E2E_PASSWORD=<the seed password> npx playwright test`.
   Without `E2E_PASSWORD` every signed-in test is skipped: Playwright still exits 0, so read the
-  skipped count and write each skip in the result column.
+  skipped count and write each skip in the result column. Between two runs, reset the app's rate
+  limits: `{{docker compose exec app php artisan cache:clear | docker compose restart app}}`.
 
 ## Cases
 

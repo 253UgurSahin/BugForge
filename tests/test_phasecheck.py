@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,14 @@ phasecheck = load("forge", "phasecheck")
 HAS_GIT = shutil.which("git") is not None
 FEATURES = "feature,area,priority,original,clone,notes\nBook a slot,booking,must,yes,yes,\nReminders,email,could,yes,no,\n"
 NO_BUGS = "# Bugs\n\nNo bugs found.\n"
+SECTIONS = "".join("\n## %s\n\n%s\n" % pair for pair in (
+    ("Entities and schema", "```sql\nCREATE TABLE bookings (id bigint PRIMARY KEY);\n```"),
+    ("Routes and API", "| GET | /bookings | my bookings |"), ("Build order", "1. Vertical slice: book a slot"),
+    ("Decisions log", "| 2026-10-27 | profile next | the user knows React |")))
+PLAN = "# Plan: Slotwise\n\nProfile: next\nPWA: no\n" + SECTIONS
+CASES = "| case | flow | type | steps | expected | auto | result |\n| --- | --- | --- | --- | --- | --- | --- |\n" \
+        "| F01-H1 | book a slot | happy | pick 10:00 | booked | e2e | pass |\n" \
+        "| F01-E1 | | edge: slot taken | | message | e2e | fail B001 |\n"
 STATIC = os.path.join(ROOT, "forge-pack", "templates", "static")
 COMPONENTS = "# Design\n\nProfile: next. Tailwind: 4.\nFont: Inter (SIL OFL, next/font).\n\n```css\n" \
              ":root { --color-<role>: <color.role>; }\n```\n\nButton\n  a11y  real <button>, visible focus\n"
@@ -68,12 +77,13 @@ PASSING = {
     "recon": lambda root: (write(root, "forge-work/recon.md", "# Recon\n"),
                            write(root, "forge-work/features.csv", FEATURES)),
     "compare": lambda root: write(root, "forge-work/compare.md", "# Compare\n"),
-    "plan": lambda root: (write(root, "forge-work/plan.md", "# Plan: Slotwise\n\nProfile: next\nPWA: no\n"),
+    "plan": lambda root: (write(root, "forge-work/plan.md", PLAN),
                           write(root, "forge-work/features.csv", FEATURES)),
     "design": lambda root: (write(root, "forge-work/design/tokens.json", template("forge-design", "tokens.json")),
                             write(root, "forge-work/design/components.md", COMPONENTS)),
-    "build": lambda root: write(root, "forge-work/build-log.md", "| S01 | 2026-10-27 | done | booking page | |\n"),
-    "test": lambda root: (write(root, "forge-work/test-plan.md", "# Test plan\n"),
+    "build": lambda root: (write(root, "forge-work/build-log.md", "| S01 | 2026-10-27 | done | booking page | |\n"),
+                           write(root, "forge-work/features.csv", FEATURES), copy_static_pack(root)),
+    "test": lambda root: (write(root, "forge-work/test-plan.md", "# Test plan\n\n## Cases\n\n" + CASES),
                           write(root, "forge-work/bugs.md", NO_BUGS)),
     "diff": lambda root: write(root, "forge-work/features.csv", FEATURES),
     "brand": lambda root: (write(root, "forge-work/brand.json", '{"name": "Slotwise", "avoid": ["Calendly"]}'),
@@ -132,6 +142,11 @@ class TableTests(unittest.TestCase):
                 if check is phasecheck.check_run:
                     self.assertTrue(os.path.isfile(os.path.join(ROOT, args[0])), "%s: %s" % (phase, args[0]))
 
+    def test_the_plan_sections_are_headings_of_the_plan_template(self):
+        headings = [line[3:] for line in template("forge-plan", "plan.md").splitlines() if line.startswith("## ")]
+        for title in phasecheck.PLAN_SECTIONS:
+            self.assertIn(title, headings)
+
     def test_every_fresh_report_is_a_file_its_phase_checks(self):
         for phase, name in phasecheck.FRESH.items():
             self.assertIn(name, [args[0] for _, *args in phasecheck.CHECKS[phase]])
@@ -182,6 +197,82 @@ class PhaseTests(Checks):
         os.remove(os.path.join(self.root, "forge-work", "recon.md"))
         self.assert_fails("recon", "forge-work/recon.md is missing")
 
+    def test_every_feature_row_follows_the_contract(self):
+        """Values parity.py refuses (exit 2) fail at recon and plan already, not six phases later."""
+        write(self.root, "forge-work/recon.md", "# Recon\n")
+        header = "feature,area,priority,original,clone,notes\n"
+        for rows, expected in (
+                ("Create poll,create,MUST!,maybe,done,\n", [
+                    "line 2: priority 'MUST!' is not one of must, should, could",
+                    "line 2: original 'maybe' is not one of yes, no",
+                    "line 2: clone 'done' is not one of yes, partial, no, skip"]),
+                ("Grid,s2,must,yes,yes please,\n", ["line 2: clone 'yes please'"]),
+                ("Grid,must,yes\n", ["line 2 has 3 cells, not 6"]),
+                ("Book, pay,x,must,yes,no,\n", ["line 2 has 7 cells, not 6: put text with a comma in double quotes"]),
+                (",x,must,yes,no,\n", ["line 2: the feature name is empty"]),
+                ("Book,x,must,yes,no,\nPay,x,should,yes,skip,\n", ["line 3: Pay is skipped without a reason"])):
+            with self.subTest(rows=rows):
+                write(self.root, "forge-work/features.csv", header + rows)
+                for phase in ("recon", "plan"):
+                    self.assert_fails(phase, "forge-work/features.csv breaks the contract in", *expected)
+        write(self.root, "forge-work/features.csv", header + "Book,x,Must,YES,No,\nPay,x,should,,,\n")
+        self.assert_passes("recon")  # case and empty cells as parity.py reads them
+
+    def test_a_skipped_or_own_must_have_is_not_one_to_build_from_the_original(self):
+        write(self.root, "forge-work/recon.md", "# Recon\n")
+        write(self.root, "forge-work/features.csv",
+              "feature,area,priority,original,clone,notes\nExisting polls,data,must,yes,skip,their data\n")
+        self.assert_fails("recon", "0 row(s) with priority must, not skipped")
+        write(self.root, "forge-work/features.csv",
+              "feature,area,priority,original,clone,notes\nSMS reminders,booking,must,no,no,C003: 23 reviews\n")
+        self.assert_fails("recon", "0 row(s) with priority must, not skipped, that the original has")
+        write(self.root, "forge-work/plan.md", PLAN)
+        self.assert_passes("plan")  # idea mode: every row is the user's own (original no)
+
+    def test_build_needs_the_must_haves_built(self):
+        """Idea mode has no diff phase: the build gate is the only one that reads the clone column."""
+        self.finish("build")
+        header = "feature,area,priority,original,clone,notes\n"
+        for rows, expected in (
+                ("Book,x,must,no,no,\nPay,x,must,no,yes,\n", "line 2: Book, clone no"),
+                ("Book,x,must,yes,,\nPay,x,must,no,yes,\n", "line 2: Book, clone empty"),
+                ("Book,x,must,no,partial,\nPay,x,must,no,yes,\n", "line 2: Book, clone partial, no note"),
+                ("Book,x,must,no,skip,their data\nPay,x,should,no,yes,\n", "0 of 1 must-have(s) built"),
+                ("Book,x,must,no,maybe,\n", "line 2: clone 'maybe'")):
+            with self.subTest(rows=rows):
+                write(self.root, "forge-work/features.csv", header + rows)
+                self.assert_fails("build", expected)
+        write(self.root, "forge-work/features.csv", header + "Book,x,must,no,yes,\n"
+              "Pay,x,must,no,partial,no refunds yet\nOld data,x,must,yes,skip,their data\nTeams,x,could,no,no,\n")
+        out = self.assert_passes("build")
+        self.assertIn("1 of 3 must-have(s) built, the rest partial or skipped with a note", out)
+        os.remove(os.path.join(self.root, "docker-compose.yml"))
+        self.assert_fails("build", "compose.yaml or compose.yml or docker-compose.yaml or docker-compose.yml "
+                                   "is missing")
+
+    def test_plan_needs_its_sections(self):
+        self.finish("plan")
+        write(self.root, "forge-work/plan.md", "Profile: laravel\nPWA: no\n")
+        self.assert_fails("plan", "forge-work/plan.md needs text under ## Entities and schema, ## Routes and API, "
+                                  "## Build order, ## Decisions log, as in ../forge-plan/plan.md")
+        write(self.root, "forge-work/plan.md", PLAN.replace("1. Vertical slice: book a slot", "<!-- later -->"))
+        self.assert_fails("plan", "needs text under ## Build order,")
+        write(self.root, "forge-work/plan.md", PLAN.replace("## Entities and schema", "## Entities and schema (SQL)"))
+        out = self.assert_passes("plan")  # the schema section is only SQL in a code block: that is text
+        self.assertIn("has text under ## Entities and schema, ## Routes and API", out)
+
+    def test_test_plan_needs_its_cases_run(self):
+        self.finish("test")
+        example = re.sub(r"\{\{[^}]*\}\}", "x", template("forge-test", "test-plan.md"))
+        write(self.root, "forge-work/test-plan.md", example)
+        self.assert_fails("test", "has only the example rows of ../forge-test/test-plan.md")
+        write(self.root, "forge-work/test-plan.md", "# Test plan\n\nAll good.\n\n```\n" + CASES + "```\n")
+        self.assert_fails("test", "has no Cases table with rows")  # a table in a code block is not one
+        write(self.root, "forge-work/test-plan.md", CASES.replace("fail B001", " ") + "| F01-N1 | | negative | | x |\n")
+        self.assert_fails("test", "forge-work/test-plan.md has 2 case row(s) without a result: F01-E1, F01-N1")
+        write(self.root, "forge-work/test-plan.md", "| Case | result |\n|:--|--:|\n| F01-H1 | skipped: no account |\n")
+        self.assert_passes("test")
+
     def test_the_example_rows_of_the_template_are_not_a_feature_list(self):
         write(self.root, "forge-work/recon.md", "# Recon\n")
         example = template("forge-recon", "features.csv")
@@ -215,7 +306,7 @@ class PhaseTests(Checks):
         write(self.root, "forge-work/plan.md",
               "# Plan\n<!-- Replace every {{...}}, then delete this comment. -->\nProfile: laravel\nPWA: no\n\n"
               "Greeting in Blade: `{{ $user->name }}`, in Django {{ user.first_name }}.\n\n"
-              "```blade\n<h1>{{$title}}</h1>\n```\n\n~~~tsx\n<div style={{color: 'red'}} />\n~~~\n")
+              "```blade\n<h1>{{$title}}</h1>\n```\n\n~~~tsx\n<div style={{color: 'red'}} />\n~~~\n" + SECTIONS)
         self.assert_passes("plan")
 
     def test_plan_lines(self):
@@ -231,9 +322,10 @@ class PhaseTests(Checks):
                 write(self.root, "forge-work/plan.md", text)
                 self.assert_fails("plan")
         for profile in ("laravel", "django", "next", "static"):
-            write(self.root, "forge-work/plan.md", "# Plan\nProfile:  %s \r\nPWA: yes\r\n" % profile)
+            write(self.root, "forge-work/plan.md", "# Plan\nProfile:  %s \r\nPWA: yes\r\n%s" % (profile, SECTIONS))
             self.assert_passes("plan")
-        write(self.root, "forge-work/plan.md", "# Plan\nProfile: next\nPWA: no\n- Profile page: the user edits a name\n")
+        write(self.root, "forge-work/plan.md", "# Plan\nProfile: next\nPWA: no\n- Profile page: the user edits a name\n"
+              + SECTIONS)
         self.assert_passes("plan")  # a list item about a profile page is not a Profile line
 
     def test_idea_mode_plan_needs_the_feature_list(self):
@@ -349,7 +441,7 @@ class PhaseTests(Checks):
         self.assertEqual(code, 1)
         data = json.loads(out)
         self.assertEqual((data["phase"], data["ok"]), ("plan", False))
-        self.assertEqual([item["ok"] for item in data["checks"]], [True, False, True, False])
+        self.assertEqual([item["ok"] for item in data["checks"]], [True, False, True, False, False])
         self.assertEqual(set(data["checks"][0]), {"ok", "what", "output"})
 
     def test_unknown_phase_or_time(self):

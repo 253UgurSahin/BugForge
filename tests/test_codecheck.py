@@ -60,6 +60,13 @@ RISKY = [
     ("python", "py-sql", "critical", "User.objects.raw(f\"SELECT * FROM auth_user WHERE email = '{email}'\")"),
     ("python", "py-sql", "critical", "qs.extra(where=[\"name = '%s'\" % name])"),
     ("python", "py-sql", "critical", 'cursor.executescript(f"DROP TABLE {name}")'),
+    ("python", "py-sql", "critical", "sql = f\"SELECT * FROM events_event WHERE title LIKE '%%{term}%%'\""),
+    ("python", "py-sql", "critical", 'query = "DELETE FROM t WHERE id = %s" % item_id'),
+    ("python", "py-sql", "critical", "q = \"SELECT * FROM t WHERE name = '\" + name + \"'\""),
+    ("python", "py-sql", "critical", 'q = "select * from t where id = {}".format(x)'),
+    ("python", "py-sql", "critical", 'stmt = rf"UPDATE shop_order SET note = {note!r} WHERE id = 1"'),
+    ("python", "py-naive-now", "low", "from django.db import models; today = datetime.datetime.now()"),
+    ("python", "py-naive-now", "low", "from django.db import models; stamp = datetime.utcnow()"),
     ("python", "py-verify-false", "high", "requests.get(url, verify=False)"),
     ("python", "py-debug", "medium", "DEBUG = True"),
     ("python", "py-allowed-hosts", "medium", "ALLOWED_HOSTS = ['*']"),
@@ -133,6 +140,15 @@ SAFE = [
     ("python", "from django.views.decorators.csrf import csrf_exempt"),
     ("python", "from django.views.decorators.csrf import (csrf_exempt, csrf_protect)"),
     ("python", "from django.utils.safestring import mark_safe"),
+    ("python", 'print(f"Select a seat from the {n} free seats")'),  # a sentence, not SQL
+    ("python", 'log.info(f"Deleted {n} rows from the cart")'),
+    ("python", 'msg = "Select one from the list: %s" % name'),
+    ("python", 'sql = "SELECT * FROM t WHERE id = %s"'),
+    ("python", 'sql = "SELECT * FROM t " "WHERE id = %s"'),
+    ("python", "now = datetime.now()"),  # not Django code
+    ("python", "from django.utils import timezone; now = timezone.now()"),
+    ("python", "from django.db import models; now = datetime.now(tz=timezone.utc)"),
+    ("php", "{{-- Never use {!! !!} with user input here --}}"),
     ("js", "el.innerHTML = '';"),
     ("js", "el.innerHTML = ''; // start empty"),
     ("js", "if (el.innerHTML === '') { show(); }"),
@@ -249,6 +265,33 @@ class MultilineTests(unittest.TestCase):
         code = 'cursor.execute(\n    f"SELECT * FROM users WHERE id = {user_id}"\n)\n'
         self.assertEqual([(f["rule"], f["line"]) for f in codecheck.scan_text(code, "python", "x")], [("py-sql", 1)])
 
+    def test_sql_pieces_glued_together_then_an_f_string(self):
+        # Regression (dogfood): the critical injection in events/search.py was not reported.
+        code = ('def search(term):\n    return Event.objects.raw(\n        "SELECT * FROM events_event "\n'
+                '        "WHERE status = \'published\' "\n        f"AND (title LIKE \'%%{term}%%\')"\n    )\n')
+        self.assertEqual([(f["rule"], f["line"]) for f in codecheck.scan_text(code, "python", "x")], [("py-sql", 2)])
+
+    def test_sql_f_string_in_a_variable_first(self):
+        # Regression (dogfood): sql = f"SELECT ... {term}" and then .raw(sql) was not reported.
+        code = 'def search(term):\n    sql = f"SELECT * FROM events_event WHERE title LIKE \'%%{term}%%\'"\n    return Event.objects.raw(sql)\n'
+        self.assertEqual([(f["rule"], f["line"]) for f in codecheck.scan_text(code, "python", "x")], [("py-sql", 2)])
+        code = 'sql = f"""\n    SELECT *\n    FROM events_event\n    WHERE title = \'{term}\'\n"""\nrows = Event.objects.raw(sql)\n'
+        self.assertEqual([(f["rule"], f["line"]) for f in codecheck.scan_text(code, "python", "x")], [("py-sql", 1)])
+
+    def test_naive_time_only_in_django_code(self):
+        code = "from django.db import models\n\nclass Event(models.Model):\n    def upcoming(self):\n" \
+               "        return self.filter(starts_at__gte=datetime.now())\n"
+        self.assertEqual([(f["rule"], f["line"]) for f in codecheck.scan_text(code, "python", "x")], [("py-naive-now", 5)])
+        self.assertEqual(rule_ids("python", code.replace("django", "peewee")), [])
+
+    def test_blade_comments_are_not_checked(self):
+        # Regression (dogfood): {!! !!} inside {{-- --}} was reported, once per comment line.
+        code = "{{-- Plain-text mail:\n     never {!! $name !!} here\n--}}\n<p>{{ $name }}</p>\n<div>{!! $html !!}</div>\n"
+        self.assertEqual([(f["rule"], f["line"]) for f in codecheck.scan_text(code, "php", "a.blade.php")],
+                         [("php-blade-raw", 5)])
+        code = "{{-- a --}}\r{!! $a !!}\r\n{{-- b\r--}} {!! $b !!}\n{{-- not closed {!! $c !!}\n"
+        self.assertEqual([f["line"] for f in codecheck.scan_text(code, "php", "x")], [2, 4, 5])
+
     def test_safe_multiline_calls_are_not_flagged(self):
         self.assertEqual(rule_ids("js", "db.query(\n  'SELECT * FROM users WHERE id = $1',\n  [id]\n);"), [])
         self.assertEqual(rule_ids("python", 'cursor.execute(\n    "SELECT 1 WHERE a = %s",\n    [a],\n)'), [])
@@ -261,7 +304,8 @@ class MultilineTests(unittest.TestCase):
 class SpeedAndSelfTests(unittest.TestCase):
     def test_pathological_input_stays_fast(self):
         tokens = ["select from ", ".execute(", "pass md5( ", "aRaw( '", "echo ", "{!! ", "`", "query(", "exec(",
-                  "ALLOWED_HOSTS = ", ".innerHTML = '' //", "sprintf(", "update x set ", "(\n", "query(`\n"]
+                  "ALLOWED_HOSTS = ", ".innerHTML = '' //", "sprintf(", "update x set ", "(\n", "query(`\n",
+                  "{{--", "{{-- {!! --}}", 'f"SELECT a ', '"select a ', '"""\n', ".raw('a' ", "datetime.now() django "]
         for token in tokens:
             text = (token * (200000 // len(token)))[:200000]
             for language in ("php", "python", "js"):
@@ -526,6 +570,17 @@ class MainTests(unittest.TestCase):
     def test_bad_arguments_are_exit_2(self):
         self.assertEqual(run_main(self.root, "--fail-on", "urgent")[0], 2)
         self.assertEqual(run_main()[0], 2)
+
+    def test_output_into_a_closed_pipe_ends_quietly(self):
+        # Regression (dogfood): `codecheck.py . | head` printed a BrokenPipeError traceback.
+        with open(self.path("many.py"), "w") as handle:
+            handle.write("x = eval(y)\n" * 5000)
+        done = subprocess.Popen([sys.executable, SCRIPT, self.root], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        done.stdout.close()  # the reader is gone before anything is printed
+        error = done.stderr.read().decode()
+        done.stderr.close()
+        self.assertEqual(done.wait(timeout=60), 1)
+        self.assertNotIn("Traceback", error)
 
     def test_runs_as_a_script(self):
         result = run_script(self.path("only_high.js"), "--json")

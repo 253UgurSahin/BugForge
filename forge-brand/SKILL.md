@@ -2,11 +2,12 @@
 name: forge-brand
 description: >-
   Makes the app forge built the user's own before it launches: a new name
-  with the trademark, trade name and domain checks to run (EUIPO, BOIP, WIPO,
-  USPTO when selling in the US, KvK, domains), a new palette that passes the
-  contrast check, a logo brief, a voice guide with the most-seen strings
-  rewritten, and a sweep that finds anything of the original (its name,
-  domains and brand colours) left in the code. Writes forge-work/brand.md and
+  (or the user's own business name, kept) with the trademark, trade name and
+  domain checks to run (EUIPO, BOIP, WIPO, USPTO when selling in the US, KvK,
+  domains), a new palette that passes the contrast check, a logo brief, a
+  voice guide with the most-seen strings rewritten, and a sweep that finds
+  names, domains and brand colours to avoid (the original's, a competitor's,
+  an old working name) left in the code. Writes forge-work/brand.md and
   forge-work/brand.json. Not legal advice. Use after /forge-diff in clone
   mode or /forge-test in idea mode, or when the user says "name my app",
   "rebrand", "make it mine", "pick a name and colours", "logo brief", "brand
@@ -15,9 +16,8 @@ description: >-
 
 # forge-brand
 
-Reads `forge-work/plan.md`, `forge-work/compare.md` (the angle, if there is one), `forge-work/recon.md`
-and `forge-work/design/`. Writes `forge-work/brand.md`, `forge-work/brand.json`, new token values and
-the renamed app. Nothing launches under the original's identity.
+Reads `plan.md`, `compare.md` (the angle, if there is one), `recon.md` and `design/` in `forge-work/`. Writes
+`forge-work/brand.md`, `forge-work/brand.json`, new token values and the renamed app.
 
 ## Ground rules
 
@@ -31,7 +31,10 @@ Read `../forge/rules.md` once per session. In short:
 
 ## Step 1: the name
 
-Read the angle in compare.md and the plan. Write 20 candidates across five styles: descriptive
+Ask first: does the app carry a name the user already has (their own business, a salon's booking page)?
+Then keep it: no candidates, only the Step 2 checks they want, their own colours and logo in Steps 3 and 4.
+
+Otherwise read the angle in compare.md and the plan. Write 20 candidates across five styles: descriptive
 (Booklink), compound (Slotwise), invented (Calvo), metaphor (Harbor), verb (Book). Cut to 5:
 
 - **Not confusingly similar** to the original or any other app in the same category, in sound, look
@@ -75,11 +78,9 @@ also the manifest's colours and the `theme-color` meta tag).
 
 ## Step 4: the logo brief
 
-Not a logo: a brief for whoever makes it (the user, a designer, or an image tool whose terms give
-the user the rights).
+Not a logo but a brief for the user, a designer, or an image tool whose terms give the user the rights.
 - The idea in one line, tied to the name and the angle.
-- Mark type: wordmark, symbol plus wordmark, or monogram.
-- Reads at 16px as a favicon and works as a square app icon.
+- Mark type: wordmark, symbol plus wordmark, or monogram. Reads at 16px as a favicon, works as a square icon.
 - Files: an SVG master; `favicon.ico` (32x32) and an SVG favicon; a 180x180 apple-touch-icon;
   with `PWA: yes` icons of 192x192 and 512x512 plus a maskable 512x512 with the mark inside the
   middle 80%; an Open Graph image of 1200x630.
@@ -98,10 +99,12 @@ has. All fresh, none echoing the original's phrasing.
 ## Step 6: rename and sweep
 
 1. Write `forge-work/brand.json` (below).
-   - `avoid`: the original's product and company names. Idea mode: the working name (plan.md's
-     title) unless the user keeps it, the closest competitors from compare.md, and the scaffold's
-     title ("Create Next App"; Vite's "Vite + React" and the like). Never a framework name: Laravel,
-     Django, Next or Vite sit in every config file (Laravel's `APP_NAME=Laravel` is fixed in item 2).
+   - `avoid`: the original's product and company names. Idea mode: the working name (plan.md's title)
+     unless the user keeps it, the closest competitors from compare.md, and what the scaffold shows
+     ("Create Next App" and Vercel, Vite's "Vite + React", Laravel's Laracasts). Never a framework name:
+     Laravel, Django, Next or Vite sit in every config file (`APP_NAME=Laravel` is fixed in item 2). A
+     working name that is a plain word for what the app holds (Notes, Bookings, Kapsalon) stays a word:
+     rename it where it is the name (titles, manifest, emails), leave it out of `avoid`, say why in brand.md.
    - `domains`: the original's (idea mode: the competitors'). `colors`: the signature colours under
      `## Original brand colours` in components.md, never white, black or greys (every app has them).
    - `allow`: single words that hold a name and are fine, such as `linear-gradient` for an app

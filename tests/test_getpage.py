@@ -230,6 +230,38 @@ class GetPageTests(unittest.TestCase):
         self.assertNotIn("Errno", err)
 
 
+class RefusingProxy(http.server.BaseHTTPRequestHandler):
+    """A proxy that says no to every site, like some company and sandbox networks do."""
+
+    asked = []
+
+    def do_CONNECT(self):
+        RefusingProxy.asked.append(self.path)
+        self.send_response(403)
+        self.end_headers()
+
+    def log_message(self, *args):  # keep test output quiet
+        pass
+
+
+class ProxyTests(unittest.TestCase):
+    def test_a_proxy_that_refuses_the_site_is_said_in_plain_words(self):  # dogfood: raw urllib text before
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), RefusingProxy)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        proxy = "http://127.0.0.1:%d" % server.server_address[1]
+        with mock.patch.dict(os.environ, {"https_proxy": proxy, "HTTPS_PROXY": proxy, "no_proxy": "", "NO_PROXY": ""}):
+            code, out, err = run("https://shop.example.com/", os.path.join(folder, "page.html"))
+        self.assertEqual((code, RefusingProxy.asked), (2, ["shop.example.com:443"]))
+        self.assertIn("a proxy on this network refused that site (HTTP 403 from the proxy, not from the site): "
+                      "save the page from your browser instead", err)
+        self.assertNotIn("Tunnel connection failed", err)
+        self.assertFalse(os.listdir(folder))
+
+
 class PlainWordsTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
@@ -247,6 +279,12 @@ class PlainWordsTests(unittest.TestCase):
         code, out, err = self.failing_fetch(urllib.error.URLError(certificate))
         self.assertIn("certificate is not trusted", err)
         self.assertNotIn("_ssl.c", err)
+
+    def test_a_proxy_that_wants_a_login(self):
+        tunnel = OSError("Tunnel connection failed: 407 Proxy Authentication Required")
+        code, out, err = self.failing_fetch(urllib.error.URLError(tunnel))
+        self.assertEqual(code, 2)
+        self.assertIn("refused that site (HTTP 407 from the proxy, not from the site)", err)
 
 
 class ConventionTests(unittest.TestCase):

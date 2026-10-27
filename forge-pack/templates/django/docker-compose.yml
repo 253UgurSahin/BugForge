@@ -1,5 +1,6 @@
 # Django: app (gunicorn + WhiteNoise) -> db (PostgreSQL).
-# Start: docker compose up -d --build --wait, then open http://localhost:8080. RUN.md has the rest.
+# Start: docker compose up -d --build --wait, then open http://localhost:8080 (another port: APP_PORT
+# in .env). RUN.md has the rest.
 # Settings and secrets come from .env (copy .env.example). Nothing secret is written in this file.
 
 services:
@@ -7,7 +8,7 @@ services:
     build: .
     env_file: .env
     ports:
-      - "127.0.0.1:8080:8000"  # this machine only; a reverse proxy with HTTPS goes in front (RUN.md)
+      - "127.0.0.1:${APP_PORT:-8080}:8000"  # this machine only; a reverse proxy with HTTPS goes in front (RUN.md)
     volumes:
       - media:/app/media  # uploads; serve them through a view that checks who may see them
     depends_on:
@@ -59,13 +60,13 @@ services:
   #     start_period: 30s
   #   restart: unless-stopped
 
-  # Development only: catches every email; inbox at http://localhost:8025.
+  # Development only: catches every email; inbox at http://localhost:8025 (MAILPIT_PORT in .env).
   # Starts only with COMPOSE_PROFILES=dev in .env (see .env.example).
   mailpit:
     image: axllent/mailpit:v1.32
     profiles: ["dev"]
     ports:
-      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
     restart: unless-stopped
 
 volumes:

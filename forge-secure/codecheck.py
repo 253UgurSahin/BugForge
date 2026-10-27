@@ -3,10 +3,10 @@
 
 Flags patterns that often lead to security holes and says what, where, why and how to fix.
 This is a first pass, not a full scanner: it misses some problems and can flag safe code. For
-a deeper scan, run semgrep if it is installed. Lines containing forge:allow are not checked.
-Skips node_modules, vendor, build and cache folders and symlinks. Big or binary files are
-listed as skipped. Files or folders that cannot be read are listed too, and make the scan
-INCOMPLETE: exit 2, never a pass.
+a deeper scan, run semgrep if it is installed. Lines containing forge:allow are not checked,
+nor are Blade comments ({{-- ... --}}). Skips node_modules, vendor, build and cache folders
+and symlinks. Big or binary files are listed as skipped. Files or folders that cannot be read
+are listed too, and make the scan INCOMPLETE: exit 2, never a pass.
 
 Usage: python3 codecheck.py PATH [--json] [--fail-on critical|high|medium|low], for example
     python3 codecheck.py . --fail-on medium     (also fail on medium findings)
@@ -44,8 +44,15 @@ PHP_RAW_VAR = (r"(?:DB::raw|\b(?:select|from|where|orWhere|having|orHaving|order
                r"\s*\(\s*(?:\$|\"[^\"]*\$|" + STRING + r"\s*\.\s*\$)")  # 1st argument holds a $var
 PHP_ESCAPED = r"htmlspecialchars|htmlentities|strip_tags|intval|\(int\)|\be\("  # escaped output
 PASSWORD = r"(?i)passw(?:or)?d|(?<![a-z])pass(?![a-z])"  # password, passwd, $pass; not bypass
-PY_SQL = (r"\.(?:execute(?:many|script)?|raw|extra)\s*\(\s*(?:\w+\s*=\s*)?\[?\s*"  # 1st argument is
-          r"(?:(?i:r?fr?)[\"']|(?:" + STRING + r"|[\w.]+)\s*(?:[%+]|\.format\s*\())")  # f"", or % + .format
+PY_SQL_CALL = (r"\.(?:execute(?:many|script)?|raw|extra)\s*\(\s*(?:\w+\s*=\s*)?\[?\s*(?:" + STRING +
+               r"\s*)*(?:(?i:r?fr?)[\"']|(?:" + STRING + r"|[\w.]+)\s*(?:[%+]|\.format\s*\())")
+# The 1st argument: maybe literals glued together, then an f"", or % + .format. Also SQL in an
+# f-string, or in a literal with % + or .format after it, anywhere (sql = f"SELECT ..." then
+# .raw(sql)). SQL in capitals or lower case only: "Select a seat from" is a sentence.
+SQL_START = (r"\s*(?:(?:SELECT|select)\s[^;]{0,300}?\s(?:FROM|from)|(?:INSERT|insert)\s+(?:INTO|into)"
+             r"|(?:UPDATE|update)\s+\w+\s+(?:SET|set)|(?:DELETE|delete)\s+(?:FROM|from))\s")
+PY_SQL = (PY_SQL_CALL + r"|(?<!\w)(?i:r?fr?)(?:\"{3}|'{3}|\"|')" + SQL_START + r"|(?<![\w\"'])(?P<q>[\"'])"
+          + SQL_START + r"(?:(?!(?P=q)).)*(?P=q)\s*(?:%\s*[\w(]|\+\s*[A-Za-z_]|\.format\s*\()")
 CSRF_OFF = r"(?:@|[(\[,]\s*)csrf_exempt\b|\bcsrf_exempt\s*\("  # @decorator, list, call, wrapper
 JS_BUILT = r"(?:`[^`]*\$\{|" + STRING + r"\s*\+|[\w.$]+\s*\+)"  # `...${x}...`, "..." + x, cmd + x
 JS_EXEC = r"(?:(?<![\w.$])exec|\b(?:child_process|childProcess|cp|shell)\.exec|\bexecSync)\s*\(\s*"
@@ -65,11 +72,14 @@ FORGED = "other sites can make a logged-in visitor's browser send this request"
 PUBLIC = "NEXT_PUBLIC_ values are built into the JavaScript that every visitor downloads"
 
 
-def rule(rule_id, severity, pattern, title, why, fix, also=None, unless=None, multiline=False):
-    """A check: `pattern` matches, `also` (if given) matches too, `unless` (if given) does not."""
+def rule(rule_id, severity, pattern, title, why, fix, also=None, unless=None, multiline=False,
+         file_has=None):
+    """A check: `pattern` matches, `also` (if given) matches too, `unless` (if given) does not,
+    and `file_has` (if given) is somewhere in the file."""
     return {"info": {"rule": rule_id, "severity": severity, "title": title, "why": why, "fix": fix},
             "pattern": re.compile(pattern), "also": re.compile(also) if also else None,
-            "unless": re.compile(unless) if unless else None, "multiline": multiline}
+            "unless": re.compile(unless) if unless else None, "multiline": multiline,
+            "file_has": re.compile(file_has) if file_has else None}
 
 
 PHP_RULES = [
@@ -84,7 +94,8 @@ PHP_RULES = [
     rule("php-echo-input", "high", PHP_ECHO, "Visitor input printed into the page unescaped", XSS,
          "escape it with htmlspecialchars(), or use {{ }} in Blade", unless=PHP_ESCAPED),
     rule("php-blade-raw", "medium", r"\{!!", "HTML printed without escaping ({!! !!})", XSS,
-         "use {{ }}, which escapes; keep {!! !!} only for HTML you built yourself"),
+         "use {{ }}, which escapes; keep {!! !!} only for HTML you built yourself; for a plain-text"
+         " email, use a Markdown mailable"),
     rule("php-raw-sql", "high", PHP_RAW_VAR, "Raw database query with a PHP variable inside", SQLI,
          "pass values as bindings, such as whereRaw('price > ?', [$price])"),
     rule("php-weak-hash", "medium", r"(?i)\b(?:md5|sha1)\s*\(", "Password hashed with md5 or sha1",
@@ -115,6 +126,9 @@ PY_RULES = [
          "use format_html(), which escapes each value, or escape() the input first"),
     rule("py-csrf-exempt", "medium", CSRF_OFF, "Forged-request protection turned off", FORGED,
          "remove the exemption; for a webhook, check its signature instead", unless=r"\bimport\b"),
+    rule("py-naive-now", "low", r"\bdatetime\.(?:now|utcnow)\(\s*\)", "Time without a time zone",
+         "Django compares times with a time zone (USE_TZ), so lists and checks shift by hours",
+         "use django.utils.timezone.now()", file_has=r"\bdjango\b"),  # only in Django code
 ]
 JS_RULES = [
     rule("js-eval", "high", NOT_METHOD + r"eval\s*\(|\bnew\s+Function\s*\(",
@@ -133,27 +147,36 @@ JS_RULES = [
          "Secret sent to every browser", PUBLIC, "drop the prefix and use it in server code only"),
 ]
 RULES = {"php": PHP_RULES, "python": PY_RULES, "js": JS_RULES}
+BLADE_COMMENT = re.compile(r"\{\{--.*?--\}\}", re.S)  # {{-- never shown --}}
 
 
 def fires(rule, lines, index):
-    """True when the rule matches line `index` (multiline rules read on while ( or ` is open)."""
+    """When the rule matches line `index`: the index of the last line the match reaches, else
+    None. Multiline rules read on while (, ` or a triple-quoted string is open."""
     line = text = lines[index]
-    if rule["multiline"] and (line.count("(") > line.count(")") or line.count("`") % 2):
+    is_open = line.count("(") > line.count(")") or line.count("`") % 2
+    if rule["multiline"] and (is_open or line.count('"' * 3) % 2 or line.count("'" * 3) % 2):
         text = "\n".join(lines[index:index + 20])  # read on for at most 20 lines
     match = rule["pattern"].search(text)
     if not match or match.start() >= len(line):  # a match that starts on a later line is not ours
-        return False
-    if rule["also"] and not rule["also"].search(text):
-        return False
-    return not (rule["unless"] and rule["unless"].search(text))
+        return None
+    if (rule["also"] and not rule["also"].search(text)) or (rule["unless"] and rule["unless"].search(text)):
+        return None
+    return index + text.count("\n", 0, match.end())
 
 
 def scan_text(text, language, where):
     """Check the text of one file. `where` is the path shown in the report. No file access."""
-    lines, findings = re.split(r"\r\n?|\n", text), []
+    if language == "php":  # blank out Blade comments, keep their line breaks for the line numbers
+        end = text.rfind("--}}") + 4  # only up to the last end mark, so odd input stays fast
+        text = BLADE_COMMENT.sub(lambda c: re.sub(r"[^\r\n]", "", c.group(0)), text[:end]) + text[end:]
+    rules = [rule for rule in RULES[language] if not rule["file_has"] or rule["file_has"].search(text)]
+    lines, findings, reached = re.split(r"\r\n?|\n", text), [], {}
     for index, line in enumerate(lines):
-        for rule in RULES[language]:
-            if "forge:allow" not in line and fires(rule, lines, index):
+        for rule in rules:  # reached: a match over several lines is reported once, where it starts
+            last = None if "forge:allow" in line else fires(rule, lines, index)
+            if last is not None and reached.get(rule["info"]["rule"], -1) < index:
+                reached[rule["info"]["rule"]] = last
                 place = {"where": "%s:%d" % (where, index + 1), "file": where, "line": index + 1}
                 findings.append(dict(rule["info"], **place))
     return findings
@@ -256,11 +279,12 @@ def main(argv=None):
     findings.sort(key=lambda f: (SEVERITIES.index(f["severity"]), f["file"], f["line"]))
     summary = {s: sum(f["severity"] == s for f in findings) for s in SEVERITIES}
     summary.update(stats, total=len(findings), incomplete=bool(stats["unreadable"]))
-    if args.json:
-        shown = dict(summary, unreadable=[{"path": p, "reason": r} for p, r in stats["unreadable"]])
-        print(json.dumps({"findings": findings, "summary": shown, "note": FOOTER}, indent=2))
-    else:
-        print(format_human(findings, summary))
+    shown = dict(summary, unreadable=[{"path": p, "reason": r} for p, r in stats["unreadable"]])
+    try:
+        print(json.dumps({"findings": findings, "summary": shown, "note": FOOTER}, indent=2)
+              if args.json else format_human(findings, summary), flush=True)
+    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     if stats["unreadable"]:
         return 2  # some code was never read, so the result cannot be trusted
     limit = SEVERITIES.index(args.fail_on)
