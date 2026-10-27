@@ -35,8 +35,8 @@ and anything in the user's accounts (rotate a key, a Stripe setting), is the use
 ## Step 1: collect the findings
 
 Read each that exists: `forge-work/audit.md` (A001..), `forge-work/inspect.md` when it is about the
-user's own app (I001..), the fix plan in `forge-work/compare.md` (C001.., mostly new features), and
-`forge-work/security.md` or a list from the user (no IDs: number them X001.. as you list them). Open
+user's own app (I001..), the fix plan in `forge-work/compare.md` (C001.., mostly new features),
+`forge-work/security.md` (X001..), or a list from the user (number it U001.. as you list it). Open
 bugs in `forge-work/bugs.md` belong to /forge-test. No effort label: add one, **S** an hour or less,
 **M** up to a day, **L** more. Nothing to fix and no list: say so and suggest /forge-audit first.
 
@@ -84,9 +84,9 @@ tests are not yours unless picked; never delete or skip one. No tests: ask wheth
 runner (`../forge-plan/profiles.md`) as a first commit `test: add <runner>`, made as in Step 5.6.
 
 **Secrets.** Run `python3 ../forge-secure/secretscan.py .` and list each finding's title and file in
-improve.md as "Secrets before". A real `.env` file and its lines are fine while `git check-ignore -q
-<file>` succeeds; not ignored, or in `git ls-files`: stop and tell the user. Other old findings: "Found
-on the way". A "Stripe live secret key": nothing may reach Stripe until `.env` has test keys.
+improve.md as "Secrets before". Low notes on a git-ignored `.env` are fine. A `.env` reported high (git
+does not ignore it, or tracks it): stop and tell the user. Other old findings: "Found on the way". A
+"Stripe live secret key": nothing may reach Stripe until `.env` has test keys.
 
 ## Step 5: one finding at a time, in the agreed order
 
@@ -111,8 +111,8 @@ on the way". A "Stripe live secret key": nothing may reach Stripe until `.env` h
    after the user ships. The test passes, the suite has no new failures, the tool or steps no longer
    show it. Cannot get it working: undo only your changes for it (`git restore --staged --worktree
    <files>`, delete files you created), skip it with the reason, and tell the user.
-6. **Commit.** `python3 ../forge-secure/secretscan.py .`: a finding not in "Secrets before" and not in an
-   ignored `.env` blocks the commit (fix it as in 3). `git add` the exact files (never `-A` or `.`), read
+6. **Commit.** `python3 ../forge-secure/secretscan.py .`: a finding not in "Secrets before" (low notes on
+   the git-ignored `.env` aside) blocks the commit (fix it as in 3). `git add` the exact files (never `-A` or `.`), read
    `git diff --cached` and `git status --short`: every staged line belongs to this finding, no new file
    is left out. Commit `fix(A003): hash passwords with bcrypt instead of MD5` (new features:
    `feat(C002)`), the why as second paragraph; move the entry to Fixed.
@@ -130,7 +130,7 @@ checkpoint. Finish improve.md; `python3 ../forge/gitguard.py .` must exit 0 (sti
 Date: YYYY-MM-DD   Branch: forge/improve-20261027   Started from: main at 3f2a1c9
 Picked: A001, A003, X001. The user said: "fix A001, A003 and X001"
 Tests before: 140 passed, 2 failed; after: 143 passed, same 2 failed. Security: PASS. 2 fixed, 1 skipped.
-Secrets before: Real .env file (.env, ignored); Password or secret written in the code (config/mail.php)
+Secrets before: Local .env file, ignored by git (.env); Password or secret written in the code (config/mail.php)
 All changes: git diff 3f2a1c9 forge/improve-20261027
 
 ## To do

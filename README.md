@@ -25,14 +25,17 @@ and changes the rest:
 
 ## Status
 
-Built in four phases. This is phase 1.
+Built in four phases. Phases 1 to 3 are in; the `/forge` orchestrator is next. Until it
+lands, run the skills yourself, in this order. Rebuild an app: recon, compare, plan, design,
+build, test, diff, brand, launch, secure, pack. Improve your own: audit, inspect, improve, test,
+secure.
 
 | phase | what | status |
 | --- | --- | --- |
 | 1 | shared rules, `/forge-secure`, tests, CI | done |
-| 2 | build skills: recon, plan, design, build, test, diff, brand, launch, pack | next |
-| 3 | analysis skills: audit, inspect, compare, improve | planned |
-| 4 | the `/forge` orchestrator | planned |
+| 2 | build skills: recon, plan, design, build, test, diff, brand, launch, pack | done |
+| 3 | analysis skills: audit, inspect, compare, improve | done |
+| 4 | the `/forge` orchestrator | next |
 
 ## The skills
 

@@ -91,7 +91,8 @@ Read `../forge/rules.md` once per session. In short:
   names. Components use those variables, never raw hex or pixel values. A value is missing: add it to
   tokens.json, rewrite the theme file, run `python3 ../forge-design/contrast.py forge-work/design/tokens.json`.
 - The basic components components.md lists (button, input, dialog) in every state, on a `/design` page that
-  answers 404 unless the app runs in development mode. A seed script with fake data, never real people.
+  answers 404 unless the app runs in development mode. A seed script (the names forge-test Step 2 uses) with
+  fake data, never real people: users `alice@example.test` and `bob@example.test`, password from `SEED_PASSWORD`.
 - `PWA: yes`: the manifest, service worker and offline page from profiles.md, placeholder icons until forge-brand.
 
 ## Step 3: the vertical slice
@@ -143,9 +144,9 @@ build it from the basic components with real data through the data access layer.
 2. Set the rows in `forge-work/features.csv` (`clone`: `yes`, `partial` with what is missing, `no`, or `skip` with
    why) and add a row to `forge-work/build-log.md` (`| ID | date | status | what | notes |`, new packages in the
    notes). A feature bigger than it looked: say so there and in the chat; never quietly ship half of it.
-3. Right before the commit, `python3 ../forge-secure/secretscan.py .`. It always reports the real `.env` (HIGH):
-   expected while `git check-ignore -q .env` succeeds and `git ls-files .env` prints nothing. Any other high or
-   critical finding stops the commit: move the secret to `.env`; one that reached git must be rotated by the user.
+3. Right before the commit, `python3 ../forge-secure/secretscan.py .` must exit 0. The git-ignored `.env` is a
+   low note; a `.env` git does not ignore is high (fix `.gitignore`). Any high or critical finding stops the
+   commit: move the secret to `.env`; one that reached git must be rotated by the user.
 4. Commit with a message that says what and why: `build: S07 booking page`, `build: F03 iDEAL deposit`.
 
 ## Step 7: finish the build and check in

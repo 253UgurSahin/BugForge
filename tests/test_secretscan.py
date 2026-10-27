@@ -9,6 +9,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -244,6 +245,62 @@ class EnvFileTests(TempFolder):
                 findings, _ = mod.scan_path(self.dir)
                 self.assertEqual([f["severity"] for f in findings], ["critical", "high"])
                 self.assertEqual(run(self.dir)[0], 1)
+
+    def git(self, *args):
+        """Run git in the temp folder (made a repository first)."""
+        if not shutil.which("git"):
+            self.skipTest("needs git")
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.test",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.test")
+        subprocess.run(["git"] + list(args), cwd=self.dir, env=env, check=True, timeout=60,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def test_git_ignored_env_is_low_but_a_live_key_stays_critical(self):
+        self.git("init", "-q")
+        write(self.dir, ".gitignore", ".env\n")
+        write(self.dir, ".env", "DATABASE_URL=" + DB_URL + "\nSTRIPE_SECRET=" + STRIPE_TEST + "\n")
+        findings, _ = mod.scan_path(self.dir)
+        self.assertEqual([f["severity"] for f in findings], ["low"] * 3)
+        self.assertEqual(findings[0]["title"], "Local .env file, ignored by git")
+        self.assertIn(CONN + ", in the git-ignored .env", [f["title"] for f in findings])
+        self.assertNotIn("Pr0dDbPassw0rd", json.dumps(findings), "still masked")
+        self.assertEqual(run(self.dir)[0], 0)
+        write(self.dir, "sub/.env", "STRIPE_SECRET=" + STRIPE_LIVE + "\n")  # .env ignores it too
+        findings, _ = mod.scan_path(self.dir)
+        self.assertEqual(findings[0]["title"], "Stripe live secret key")
+        self.assertEqual((findings[0]["severity"], run(self.dir)[0]), ("critical", 1))
+
+    def test_env_that_git_tracks_or_does_not_ignore_is_high(self):
+        self.git("init", "-q")
+        write(self.dir, ".env", "DATABASE_URL=" + DB_URL + "\n")
+        self.assertEqual([f["severity"] for f in mod.scan_path(self.dir)[0]], ["high", "high"])
+        write(self.dir, ".gitignore", ".env\n")
+        self.git("add", "-f", ".env")  # tracked: ignoring it now changes nothing, it is in git
+        self.assertEqual([f["title"] for f in mod.scan_path(self.dir)[0]],
+                         ["Real .env file in the project", CONN])
+        self.assertEqual(run(self.dir)[0], 1)
+
+    def test_env_is_high_when_git_cannot_answer(self):
+        write(self.dir, ".gitignore", ".env\n")
+        write(self.dir, ".env", "DATABASE_URL=" + DB_URL + "\n")
+        with mock.patch.object(mod.subprocess, "run", side_effect=OSError(2, "No such file")):
+            self.assertEqual(run(self.dir)[0], 1)
+        with mock.patch.dict(os.environ, {"GIT_DIR": os.path.join(self.dir, "elsewhere")}):
+            self.git("init", "-q")
+            self.assertEqual(run(self.dir)[0], 0, "a GIT_DIR from outside is not used")
+
+    def test_public_build_settings_are_fine_unless_a_name_says_secret(self):
+        write(self.dir, ".env.production", "# public\nVITE_SITE_URL=https://example.com\n"
+              "NEXT_PUBLIC_SITE_URL=https://example.com\nexport VITE_APP_NAME=Demo\n")
+        self.assertEqual(mod.scan_path(self.dir)[0], [])
+        write(self.dir, ".env.production", "VITE_SITE_URL=https://example.com\nVITE_STRIPE_SECRET=abc\n"
+              "NEXT_PUBLIC_DB_PASSWORD=abc\nVITE_OLD_SECRET=x  # forge:allow\n")
+        findings, _ = mod.scan_path(self.dir)
+        self.assertEqual([(f["severity"], f["line"]) for f in findings], [("high", 2), ("high", 3)])
+        self.assertEqual(findings[0]["title"], "Secret-looking name in public build settings")
+        write(self.dir, ".env.production", "VITE_SITE_URL=https://example.com\nDB_PASSWORD=abc\n")
+        self.assertEqual([f["title"] for f in mod.scan_path(self.dir)[0]], ["Real .env file in the project"])
 
     def test_env_templates_are_scanned_like_normal_files(self):
         fake = "sk_" + "live_" + "yourstripekeyhere"

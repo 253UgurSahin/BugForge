@@ -158,5 +158,5 @@ Not yet better than the original: 1 of 3 fixes from forge-compare is built.
 
 Checkpoint: tell the user in at most 5 plain lines the parity score, must-haves done of total, the
 layout score, the verdict and the top three things to build next. Wait for the user's go. Then
-`/forge-build` for missing must-haves and bugs (then `/forge-test` and back here), or back to
-`/forge` for the next phase.
+`/forge-build` for missing must-haves and bugs (then `/forge-test` and back here). Once it is
+shippable: `/forge-brand`, or back to `/forge` when it runs the phases.

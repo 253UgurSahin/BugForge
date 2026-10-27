@@ -136,8 +136,8 @@ mailpit for development mail (only with `COMPOSE_PROFILES=dev` in `.env`).
    A failure here is a bug to fix in the app or the files. Never make the setup weaker to get it
    running: no root user, no published database port, no secret in the compose file.
 6. **Commit.** Only on the work branch: `python3 ../forge/gitguard.py .` must exit 0.
-   Run `python3 ../forge-secure/secretscan.py .` first: the real `.env` is reported, and that
-   is fine only while `git check-ignore -q .env` succeeds. Anything else gets fixed. Commit
+   `python3 ../forge-secure/secretscan.py .` must exit 0 first (the git-ignored `.env` is only a
+   low note; a high one means git does not ignore it: fix `.gitignore`). Commit
    `pack: container setup (<profile>)`. Never commit `.env`.
 
 ## Output

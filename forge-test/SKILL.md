@@ -74,8 +74,9 @@ only (`3306` MariaDB, `5432` PostgreSQL), with `DB_HOST=127.0.0.1` (next: in `DA
 | django | `python manage.py seed` | `pytest`, or `python manage.py test` |
 | next / static | `npm run seed` / none | `npx vitest run` |
 
-Seed with forge-build's seeder (another name: see build-log.md or the README). Run the unit tests
-and add some for the cases marked `unit`: logic, a second user's access, money in cents, time zones.
+Seed with forge-build's seeder (another name: see build-log.md or the README; its users' password,
+`SEED_PASSWORD`, is the `E2E_PASSWORD` below). Run the unit tests and add some for the cases marked
+`unit`: logic, a second user's access, money in cents, time zones.
 
 ## Step 3: end to end with Playwright
 

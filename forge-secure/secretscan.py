@@ -11,7 +11,11 @@ Usage:
 
 Finds Stripe, AWS, GitHub, Slack and Google keys, private keys, passwords in connection
 strings (postgres://user:pass@host) and quoted passwords in code (password = "...",
-define('DB_PASSWORD', '...')). A real .env file is always high; its lines are scanned too.
+define('DB_PASSWORD', '...')). A real .env file (.env, .env.local, ...) is high, its lines
+are scanned. Two exceptions. One git ignores (so it stays on this machine) is low, and so are
+its lines, but a Stripe live key stays critical (forge works in test mode only); no git: high.
+One with only public build values (VITE_..., NEXT_PUBLIC_...) is fine, unless a name says
+SECRET, PRIVATE or PASSWORD.
 Skipped: placeholders (changeme, ${DB_PASS}, <password>), lines with forge:allow, the
 folders .git, node_modules, vendor, venv, build and cache folders, symlinks, binary files,
 files over 1 MB. Not checked: unquoted values, values with spaces, git history.
@@ -27,6 +31,7 @@ import collections
 import json
 import os
 import re
+import subprocess
 import sys
 
 SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
@@ -87,6 +92,14 @@ ENV_FILE = Rule("high", "Real .env file in the project", None,
                 "it holds real passwords and keys: they leak if git commits it (even once) or if it "
                 "is copied into a container image or a zip", "list .env in .gitignore and "
                 ".dockerignore; if `git ls-files` lists it, `git rm --cached` it and change its secrets")
+LOCAL_ENV_FILE = Rule("low", "Local .env file, ignored by git", None,
+                      "fine on this machine; it must never be committed, shared or put in an image",
+                      "keep .env in .gitignore and .dockerignore; never paste what is in it")
+PUBLIC_SECRET = Rule("high", "Secret-looking name in public build settings",
+                     re.compile(r"^\s*(?:export\s+)?(?:VITE|NEXT_PUBLIC)_\w*(?i:secret|private|passw)"),
+                     "VITE_ and NEXT_PUBLIC_ values go into the JavaScript every visitor downloads",
+                     "keep secrets out of the browser: use them in server code, without that prefix")
+PUBLIC_NAME = re.compile(r"^\s*(?:export\s+)?(?:VITE|NEXT_PUBLIC)_\w*\s*=")
 
 # A real key is random, so only clear fakes are skipped: AKIAIOSFODNN7EXAMPLE, sk_live_yourkey...
 KEY_PLACEHOLDER_WORDS = ("example", "placeholder", "xxxxxx", "yours", "your_", "your-")
@@ -149,6 +162,44 @@ def is_real_env_file(name):
     return is_env and name.rsplit(".", 1)[-1] not in ("example", "sample", "dist", "template")
 
 
+def only_public_values(lines):
+    """True when every setting in an env file is a VITE_ or NEXT_PUBLIC_ build value."""
+    settings = [line for line in lines if line.strip() and not line.lstrip().startswith("#")]
+    return bool(settings) and all(PUBLIC_NAME.match(line) for line in settings)
+
+
+def git_ignores(file_path):
+    """True when git ignores this file and does not track it (git check-ignore says so).
+    False when git is missing, the folder is not a repository, or git says no."""
+    folder, name = os.path.split(os.path.abspath(file_path))
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    try:  # no GIT_DIR and the like from outside, and no fsmonitor program from the repo's config
+        done = subprocess.run(["git", "-c", "core.fsmonitor=false", "check-ignore", "-q", "--", name],
+                              cwd=folder, env=env, timeout=20, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return done.returncode == 0
+
+
+def env_file_findings(text, path):
+    """Findings for a real .env file and its lines (see the top of this file)."""
+    lines = re.split(r"\r\n|\r|\n", text)
+    if only_public_values(lines):
+        return scan_text(text, path) + [
+            make_finding(PUBLIC_SECRET, path, number) for number, line in enumerate(lines, start=1)
+            if PUBLIC_SECRET.pattern.match(line) and "forge:allow" not in line]
+    if not git_ignores(path):
+        return [make_finding(ENV_FILE, path)] + scan_text(text, path)
+    found = [make_finding(LOCAL_ENV_FILE, path)]
+    for finding in scan_text(text, path):
+        if finding["title"] != "Stripe live secret key":  # forge never runs with live keys
+            finding.update(severity="low", title=finding["title"] + ", in the git-ignored .env",
+                           fix="nothing while .env stays git-ignored; change it if it was ever shared")
+        found.append(finding)
+    return found
+
+
 def files_under(folder, unreadable):
     """Yield every regular file under FOLDER, minus skipped folders and symlinks.
     Folders that cannot be opened are added to the unreadable list."""
@@ -174,8 +225,7 @@ def scan_path(path):
     were checked, how many were skipped (binary or over 1 MB) and which could not be read."""
     findings, unreadable, checked, skipped = [], [], 0, 0
     for file_path in files_under(path, unreadable) if os.path.isdir(path) else [path]:
-        if is_real_env_file(os.path.basename(file_path)):
-            findings.append(make_finding(ENV_FILE, file_path))
+        real_env = is_real_env_file(os.path.basename(file_path))
         try:
             with open(file_path, "rb") as handle:
                 data = handle.read(MAX_BYTES + 1)
@@ -184,9 +234,11 @@ def scan_path(path):
             continue
         if len(data) > MAX_BYTES or b"\0" in data[:8192]:  # too big, or binary (a NUL byte)
             skipped += 1
+            findings += [make_finding(ENV_FILE, file_path)] if real_env else []
             continue
         checked += 1
-        findings.extend(scan_text(data.decode("utf-8", errors="replace"), file_path))
+        text = data.decode("utf-8", errors="replace")
+        findings.extend(env_file_findings(text, file_path) if real_env else scan_text(text, file_path))
     findings.sort(key=lambda f: (SEVERITIES.index(f["severity"]), f["file"], f["line"] or 0))
     return findings, {"files_checked": checked, "files_skipped": skipped,
                       "unreadable": sorted(unreadable)}

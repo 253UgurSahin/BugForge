@@ -42,7 +42,7 @@ Also for this skill:
   each change, before you open a page, run pagecheck or run the end-to-end tests.
 - Commit at the end of each step that changed the app (`launch: pricing and checkout`) once the whole test suite
   passes, `python3 ../forge-brand/sweep.py . --config forge-work/brand.json` exits 0 and
-  `python3 ../forge-secure/secretscan.py .` finds nothing but the git-ignored `.env` (forge-build Step 6).
+  `python3 ../forge-secure/secretscan.py .` exits 0 (forge-build Step 6).
 
 ## Step 1: read, ask, branch
 

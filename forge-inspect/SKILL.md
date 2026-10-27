@@ -50,7 +50,8 @@ Also for this skill:
    A local app (improve mode): start it as its RUN.md or README says and use its local URL.
 2. `python3 ../forge-secure/scope.py <url>` for each host. Exit 0: the user's own app, so Step 6 may
    run too. Exit 1: passive only. If the user says the domain is theirs, ask the question in rules.md
-   section 3 and add it to `forge-work/scope.json` only after a clear yes. Exit 2: ask for the right address.
+   section 3 and add it to `own_domains` in `forge-work/scope.json` (`{"own_domains": ["example.com"]}`)
+   only after a clear yes. Exit 2: ask for the right address.
 3. `forge-work/inspect.md` exists for another site: ask before you replace it (its I001.. IDs may be
    picked for /forge-improve already); keep it as `inspect-<that site>.md` if the user wants.
 

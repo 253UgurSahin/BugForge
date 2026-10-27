@@ -57,12 +57,12 @@ Keep the scanner's severity unless the table below differs: the table wins. deps
 checked" notes, any exit 2, and "git history not scanned for secrets" (unless you ran a history
 scanner such as gitleaks) go under "Not checked". /forge-secure stays the gate before shipping.
 
-**Local `.env` files.** secretscan reports every real `.env` and its keys, also one that never
-left this machine. Check each: `git log --all --oneline -- <file>` (any output: it was committed)
-and `git check-ignore -q <file>` (exit 0: ignored). Committed, now or ever: keep the findings, the
-keys are leaked until rotated. Ignored and never committed: no finding; note it under Numbers and
-check that `.dockerignore` lists it (missing: high). Not ignored: one high finding, "`.env` is not
-in .gitignore", instead of one per key. No git: keep the findings.
+**Local `.env` files.** secretscan rates a `.env` that git ignores, and its keys, low; one git does
+not ignore (or tracks) high. For each, check the history: `git log --all --oneline -- <file>` (any
+output: it was committed). Committed, now or ever: the keys are leaked until rotated, so each key
+is a finding at secretscan's normal severity. Ignored and never committed: no finding; note it
+under Numbers and check that `.dockerignore` lists it (missing: high). Not ignored: one high
+finding, "`.env` is not in .gitignore", instead of one per key.
 
 ## Step 3: tests and framework checks
 
@@ -161,4 +161,5 @@ effort: S
 
 Checkpoint: tell the user in at most 5 plain lines the verdict with the counts, the top 3 findings
 and what was not checked. Ask which findings to fix, by ID ("A001, A003"), and wait for the user's
-go. Then /forge-improve with those IDs, or back to /forge.
+go. Then /forge-inspect when the app has a UI (it checks the running app; the user may skip it),
+then /forge-improve with the picked IDs, or back to /forge.
