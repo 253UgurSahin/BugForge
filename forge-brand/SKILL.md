@@ -94,7 +94,8 @@ Not a logo but a brief for the user, a designer, or an image tool whose terms gi
 Three words for how it sounds, each with what it does not mean ("direct, not blunt"). Five do and
 don't pairs. Then rewrite the 10 most-seen strings (sign up, the main button, the empty states, the
 confirmation, the main error, the welcome email subject) in that voice, in every language the app
-has. All fresh, none echoing the original's phrasing.
+has. All fresh, none echoing the original's phrasing. In clone mode
+`python3 ../forge-build/copycheck.py --words 4` lists every run of 4 or more words the app shares with it.
 
 ## Step 6: rename and sweep
 
@@ -125,10 +126,10 @@ has. All fresh, none echoing the original's phrasing.
    title in the browser tab.
 5. Run the unit and e2e tests as `forge-work/test-plan.md` says until green (a rename breaks imports
    and expected texts). A failure the rename did not cause is a bug: it goes into `forge-work/bugs.md`
-   and through the fix loop of /forge-test, a failing test first; a missing or partial must-have goes
-   back to /forge-build.
-6. `python3 ../forge-secure/secretscan.py .` and `python3 ../forge/gitguard.py` must exit 0 (gitguard
-   exit 1: `git switch -c forge/brand`). Then commit: `brand: rename to <name>, new palette`.
+   and forge-test's fix loop, a failing test first; a missing or partial must-have goes back to /forge-build.
+6. `python3 ../forge-secure/secretscan.py .`, `python3 ../forge/gitguard.py` and, in clone mode,
+   `python3 ../forge-build/copycheck.py` must exit 0 (gitguard exit 1: `git switch -c forge/brand`; a run
+   the user OKs goes in `forge-work/copy-allow.txt`). Then commit: `brand: rename to <name>, new palette`.
 
 ## Output
 
