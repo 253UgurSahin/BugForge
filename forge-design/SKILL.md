@@ -57,6 +57,7 @@ the user for two or three apps whose look they like, then design fresh.
   common). Note the font category (geometric sans, humanist sans, serif), not the font file.
 - **Spacing** (almost always a 4 or 8 base), **radius, shadow, motion** (two or three of each).
 - **Layout**: content max width, grid, breakpoints, sidebar width, header height.
+- **Sizes** (`size`): border and focus ring widths, icons, control heights, a dialog's width.
 - **Dark theme**: only when the original has one or the user asks for it.
 
 ## Step 2: write the tokens and check the contrast
@@ -83,9 +84,9 @@ list, an unknown or doubled name, a colour that is not `#rgb` or `#rrggbb`). The
 
 ## Step 3: the theme, per profile
 
-tokens.json is the only place values live. forge-build writes the app's theme file from it when it
-scaffolds, and whoever changes tokens.json later rewrites that file and runs contrast.py again.
-Read `Profile:` in plan.md:
+tokens.json is the only place values live: `../forge-design/theme.py` writes the app's theme file
+from it when forge-build scaffolds, and whoever changes tokens.json later runs it and contrast.py
+again. Read `Profile:` in plan.md:
 
 | Profile | Theme file | Tailwind |
 |---|---|---|
@@ -96,9 +97,9 @@ Read `Profile:` in plan.md:
 
 The laravel and next installers ship Tailwind 4 today; forge-build confirms the major version in
 package.json. Copy `../forge-design/components.md` to `forge-work/design/components.md` and fill in
-its header and the theme file. Its `## Theme` maps every token group (colours, fonts, type, spacing,
-radius, shadows, motion, layout, dark theme, breakpoints) to a CSS variable by name, never by value,
-so it cannot go stale, and says what changes for Tailwind 4 and 3. With `PWA: yes` in plan.md, the
+its header, theme file and theme.py command. Its `## Theme` maps every token group (colours, fonts,
+type, spacing, radius, shadows, motion, layout, sizes, dark theme, breakpoints) to a CSS variable by
+name, never by value, for plain CSS and Tailwind 4 and 3: theme.py writes that. With `PWA: yes`, the
 manifest's `theme_color` and `background_color` and the `theme-color` meta tag take token values.
 
 ## Step 4: fonts and icons
@@ -147,9 +148,10 @@ forge-build builds them first, on a development-only `/design` page with every s
 ## Output
 
 `forge-work/design/tokens.json`, on which contrast.py exits 0, and `forge-work/design/components.md`
-from the template with every `<...>` filled in, for example `Profile: next. Tailwind: 4. Font: Inter
-(SIL OFL, Fontsource with next/font/local). Icons: Lucide (ISC), as a package.` In clone mode, its `## Original brand
-colours` lists the original's colours for forge-brand's sweep; nothing ever uses them.
+from the template with every `<...>` filled in, but those in the `## Theme` code block (it is the
+mapping), for example `Profile: next. Tailwind: 4. Font: Inter (SIL OFL, Fontsource with
+next/font/local). Icons: Lucide (ISC), as a package.` In clone mode, its `## Original brand colours`
+lists the original's colours for forge-brand's sweep; nothing ever uses them.
 
 ## Next
 

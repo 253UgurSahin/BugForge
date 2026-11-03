@@ -64,6 +64,18 @@ class Ported(unittest.TestCase):
         self.assertEqual(run("#aaaaaa", "#ffffff")[0], 1)
         self.assertEqual(run("#222222", "#ffffff")[0], 0)
 
+    def test_the_size_group_and_files_without_it(self):
+        """The template has a size group (borders, rings, icons, controls); older token files do not."""
+        tokens = template()
+        self.assertIn("control", tokens["size"])
+        del tokens["size"], tokens["_size"]
+        with tempfile.TemporaryDirectory() as folder:
+            older = os.path.join(folder, "tokens.json")
+            with open(older, "w", encoding="utf-8") as handle:
+                json.dump(tokens, handle)
+            self.assertEqual(run(older)[1], run(TEMPLATE)[1].replace(TEMPLATE, older))
+            self.assertEqual(run(older)[0], 0)
+
 
 class CoreTests(unittest.TestCase):
     def test_parse_hex(self):

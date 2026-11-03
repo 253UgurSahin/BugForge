@@ -89,9 +89,9 @@ Read `../forge/rules.md` once per session. In short:
 ## Step 2: routes, layout and theme
 
 - Routes for every screen (recon.md; idea mode: plan.md), stubs are fine, and the shared layout.
-- The theme: copy the CSS under `## Theme` in `forge-work/design/components.md` into the file its `File:` line
-  names. Components use those variables, never raw hex or pixel values. A value is missing: add it to tokens.json,
-  rewrite the theme file, run `python3 ../forge-design/contrast.py forge-work/design/tokens.json`.
+- The theme: run the theme.py command under `## Theme` in `forge-work/design/components.md` and remove the theme
+  values the scaffold brought (theme.py names those it still sees). Components use its variables, never raw hex or
+  pixel values. A value is missing: add it to tokens.json, then run both commands under `## Theme` again.
 - The basic components components.md lists (button, input, dialog) in every state, on `/design` (404 outside dev).
 - A seed script (the names forge-test Step 2 uses) with fake users `alice@example.test` and `bob@example.test`,
   password from `SEED_PASSWORD`, made only in dev and tests (laravel `app()->environment('local', 'testing')`,

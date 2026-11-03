@@ -9,9 +9,10 @@ Icons: <Lucide (ISC) | Heroicons (MIT) | Tabler Icons (MIT)>, as <package | SVG 
 File: <the theme file for the profile, from forge-design Step 3>
 
 Values live only in `forge-work/design/tokens.json`. forge-build writes the file above from it with
-this mapping (names only, so it never goes stale). After any change to tokens.json, rewrite the file
-from it and run `python3 ../forge-design/contrast.py forge-work/design/tokens.json` again.
-Components use these variables, never raw hex or px.
+this command, which follows the mapping below (names only, so it never goes stale):
+`python3 ../forge-design/theme.py forge-work/design/tokens.json --tailwind <4|3|no> --write <the file above>`.
+After any change to tokens.json, run it again, then `python3 ../forge-design/contrast.py
+forge-work/design/tokens.json`. Components use these variables, never raw hex or px.
 
 ```css
 :root {                                     /* Tailwind 4: @theme static { }, see below */
@@ -21,7 +22,7 @@ Components use these variables, never raw hex or px.
   --text-<step>: <size>px;                  /* three lines per type step */
   --text-<step>--line-height: <line>px;
   --text-<step>--font-weight: <weight>;
-  --space-<n>: <value>px;                   /* per space value, n = value / 4: --space-4 is 16px */
+  --space-<n>: <value>px;                   /* per space value, n = value / 4: --space-4 is 16px, --space-1_5 is 6px */
   --radius-<name>: <value>px;
   --shadow-<name>: <value>;
   --ease-standard: <motion.ease>;
@@ -30,6 +31,7 @@ Components use these variables, never raw hex or px.
   --duration-fast: <motion.fast>;
   --duration-base: <motion.base>;
   --layout-<name>: <value>px;               /* content, sidebar, header */
+  --size-<name>: <value>px;                 /* borders, focus ring, icons, controls, a dialog */
 }
 @media (prefers-color-scheme: dark) {       /* only with a dark group in tokens.json */
   :root { --color-<role>: <color.dark.role>; }
@@ -37,14 +39,15 @@ Components use these variables, never raw hex or px.
 /* Breakpoints go into media queries as numbers, @media (min-width: 768px): var() fails there. */
 ```
 
-Tailwind 4: put the first block in `@theme static { }` right after `@import "tailwindcss";`.
-Start it with `--color-*: initial;`, so only your roles exist (`bg-surface`, `text-text-muted`), and
-`--breakpoint-*: initial;` plus `--breakpoint-<name>: <value>px;` per breakpoint, so `md:` follows
-the measured breakpoints. Leave out `--space-*`: Tailwind's own 4px `--spacing` makes `p-4` 16px.
-`static` writes out every variable, so the dark block works without `dark:` classes. Use the plain
-`:root` values as `duration-(--duration-fast)` and `max-w-(--layout-content)`.
+Tailwind 4 (`--tailwind 4`): the first block is `@theme static { }`, right after
+`@import "tailwindcss";`. It starts with `--color-*: initial;`, so only your roles exist
+(`bg-surface`, `text-text-muted`), and has `--breakpoint-*: initial;` plus one `--breakpoint-` line
+per breakpoint (`--breakpoint-md: 768px;`), so `md:` follows the measured breakpoints. It leaves out
+`--space-*`: Tailwind's own 4px `--spacing` makes `p-4` 16px. `static` writes out every variable, so
+the dark block works without `dark:` classes. Use the plain `:root` values as
+`duration-(--duration-fast)`, `max-w-(--layout-content)` and `h-(--size-control)`.
 
-Tailwind 3: keep both `:root` blocks and map them in tailwind.config.js, for example
+Tailwind 3 (`--tailwind 3`): both `:root` blocks, mapped in tailwind.config.js, for example
 `colors: { surface: "var(--color-surface)" }`, with `screens` from the breakpoints.
 
 Animations sit inside `@media (prefers-reduced-motion: no-preference)`.
