@@ -71,8 +71,8 @@ theirs is blue, yours is not blue. Note the old values, write the new ones in to
 `python3 ../forge-design/contrast.py forge-work/design/tokens.json` until it exits 0. Copy them into
 the theme file named in components.md and every other copy of the old ones: the icons, and with
 `PWA: yes` the manifest's colours, the `theme-color` meta tag and the offline page's CSS. Then
-`python3 ../forge-brand/sweep.py . --colors "<the old values gone from tokens.json>"` must exit 0
-(it skips forge-work/ and cannot read PNG files: Step 4 draws the icons again).
+`python3 ../forge-brand/sweep.py . --colors "<old value>,<old value>"`, with each old value gone from
+tokens.json, must exit 0 (it skips forge-work/ and cannot read PNG files: Step 4 draws the icons again).
 
 ## Step 4: the logo brief
 
