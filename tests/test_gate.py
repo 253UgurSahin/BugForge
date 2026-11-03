@@ -331,7 +331,8 @@ class DoneTests(Project):
 
 
 class FreshReportTests(Project):
-    """A security.md from the build or from an earlier round says nothing about the app as it is now."""
+    """A security.md from the build or from an earlier round, or a parity.md from before test's fixes,
+    says nothing about the app as it is now."""
 
     def test_the_build_report_is_not_the_secure_phase(self):
         self.gate("init", "--mode", "idea")
@@ -359,6 +360,18 @@ class FreshReportTests(Project):
         code, out, _ = self.gate("done", "secure", "--approved", "go")
         self.assertEqual(code, 1)
         self.assertIn("is older than the last go", out)
+
+    def test_a_parity_report_from_before_tests_go_does_not_count(self):
+        """test's fix loop changes the clone, so diff must score it after test's go (N26, N27)."""
+        self.gate("init", "--mode", "clone")
+        self.approve("recon", "compare", "plan", "design", "build", "test")
+        self.finish("diff")
+        self.age("forge-work/parity.md")  # written before test's fixes
+        code, out, _ = self.gate("done", "diff", "--approved", "go")
+        self.assertEqual(code, 1)
+        self.assertIn("forge-work/parity.md is older than the last go (%s)" % self.state()["phases"]["test"]["at"], out)
+        self.assertNotIn("diff", self.state()["phases"])
+        self.approve("diff")  # forge-diff ran again from its Step 1: a new report
 
     def test_a_secret_added_after_secure_stops_pack(self):
         self.gate("init", "--mode", "idea")

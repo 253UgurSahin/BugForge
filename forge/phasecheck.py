@@ -9,8 +9,9 @@ Usage:
     python3 phasecheck.py plan
     python3 phasecheck.py secure --since 2026-10-27T09:51:44+00:00 --mode improve --json
 
---since TIME: the phase's report (secure: forge-work/security.md) must be newer than TIME, the last go
-before the phase, so a report from the build or from an earlier round does not count.
+--since TIME: the phase's report (diff: forge-work/parity.md, secure: forge-work/security.md) must be
+newer than TIME, the last go before the phase, so a report from before test's fixes, from the build or
+from an earlier round does not count.
 --mode MODE: clone, idea or improve, for the checks that differ by mode (where test's specs are).
 Without it, the mode in forge-work/state.json; without that, only the checks every mode shares.
 
@@ -36,7 +37,7 @@ PYTHON = shlex.quote(sys.executable) if os.name == "nt" and sys.executable else 
 MODES, PROFILES = ("clone", "idea", "improve"), ("laravel", "django", "next", "static")
 UNSEEN = re.compile(r"<!--.*?(?:-->|\Z)|^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1|\Z)", re.S | re.M)  # comments, code
 TODO = re.compile(r"\{\{[^\s{}][^{}\n]{0,80}\}\}")  # any one-line {{...}}; Blade and Jinja write {{ x }}
-FRESH = {"secure": "forge-work/security.md"}  # the report that --since applies to
+FRESH = {"diff": "forge-work/parity.md", "secure": "forge-work/security.md"}  # the reports --since applies to
 
 
 def read_text(*parts):

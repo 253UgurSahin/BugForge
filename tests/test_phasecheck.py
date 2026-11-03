@@ -6,6 +6,7 @@ fool the line checks; a script that prints nothing, crashes or hangs fails; a re
 fails. Every test works in its own folder."""
 
 import contextlib
+import datetime
 import glob
 import io
 import json
@@ -746,14 +747,30 @@ class SinceTests(Checks):
         self.assert_passes("secure", "--since", "2017-01-01T00:00:00+00:00")
         self.assert_passes("secure")  # without --since, its age is not checked
 
+    def test_a_parity_report_from_before_tests_go_does_not_count(self):
+        """N26, N27: test's fix loop changes the clone after build, so diff's parity.md must be newer than
+        the go before diff (test's), or it scores the clone as it was before those fixes."""
+        self.finish("diff")
+        go = "2026-10-27T09:51:44+00:00"
+        at = datetime.datetime.fromisoformat(go).timestamp()
+        os.utime(os.path.join(self.root, "forge-work", "parity.md"), (at - 1, at - 1))
+        self.assert_fails("diff", "forge-work/parity.md is older than the last go (%s)" % go,
+                          "Run the phase's skill again in full", args=("--since", go))
+        self.assert_passes("diff")  # without --since, its age is not checked
+        os.utime(os.path.join(self.root, "forge-work", "parity.md"), (at + 1, at + 1))
+        self.assertIn("forge-work/parity.md is newer than the last go (%s)" % go,
+                      self.assert_passes("diff", "--since", go))
+
     def test_since_applies_only_to_a_phase_with_a_report(self):
         self.finish("plan")
         os.utime(os.path.join(self.root, "forge-work", "plan.md"), (OLD, OLD))
         self.assert_passes("plan", "--since", "2026-10-27T09:51:44+00:00")
 
     def test_a_missing_report_is_named_once(self):
-        out = self.assert_fails("secure", args=("--since", "2026-10-27T09:51:44+00:00"))
-        self.assertEqual(out.count("forge-work/security.md is missing"), 1)
+        for phase, name in phasecheck.FRESH.items():
+            with self.subTest(phase=phase):
+                out = self.assert_fails(phase, args=("--since", "2026-10-27T09:51:44+00:00"))
+                self.assertEqual(out.count("%s is missing" % name), 1)
 
 
 class ScriptTests(Checks):
