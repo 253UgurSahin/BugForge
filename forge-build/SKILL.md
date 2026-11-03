@@ -98,7 +98,8 @@ Read `../forge/rules.md` once per session. In short:
 - A seed script (the names forge-test Step 2 uses) with fake users `alice@example.test` and `bob@example.test`,
   password from `SEED_PASSWORD`, made only in dev and tests (laravel `app()->environment('local', 'testing')`,
   django `DEBUG`, next `NODE_ENV !== "production"`). Reference data goes in a migration. Static: none, no accounts.
-- `PWA: yes`: the manifest, service worker and offline page from profiles.md, placeholder icons until forge-brand.
+- `PWA: yes`, per profiles.md's PWA toggle: `manifest.webmanifest`, `offline.html` with `/offline.css` and `sw.js`
+  (copy `../forge-plan/sw.example.js`, `ASSETS` set per profile) in `public/`; placeholder icons until forge-brand.
 
 ## Step 3: the vertical slice
 
@@ -147,9 +148,8 @@ the basic components with real data through the data access layer. Done when:
 1. Set the rows in `forge-work/features.csv` (`clone`: `yes`, `partial` with what is missing, `no`, or `skip` with
    why) and add a row to `forge-work/build-log.md` (`| ID | date | status | what | notes |`, new packages in the
    notes). A feature bigger than it looked: say so there and in the chat; never quietly ship half of it.
-2. Right before the commit, `python3 ../forge-secure/secretscan.py .` must exit 0. The git-ignored `.env` is a low
-   note; a `.env` git does not ignore is high (fix `.gitignore`). Any high or critical finding stops the commit:
-   move the secret to `.env`; one that reached git must be rotated by the user.
+2. Right before the commit, `python3 ../forge-secure/secretscan.py .` must exit 0: a high or critical finding stops
+   the commit. Move the secret to `.env`, fix `.gitignore` if it misses `.env`; the user rotates one already in git.
 3. The whole test suite passes. Commit with what and why: `build: S07 booking page`, `build: F03 iDEAL deposit`.
 
 ## Step 7: finish the build and check in
