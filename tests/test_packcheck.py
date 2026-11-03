@@ -225,10 +225,10 @@ class TemplateTests(unittest.TestCase):
         self.assertIn("mkdir -p storage/app/public storage/framework/cache/data", dockerfile)
 
     def test_laravel_builds_the_app_name_into_its_javascript(self):
-        """Dogfood: no .env reaches the image build, so `npm run build` had no VITE_APP_NAME and the
-        Inertia kits' page titles said Laravel, also after a rename. compose passes APP_NAME as a build
-        arg, the same to each service that builds (web serves the Vite files app's pages name). No
-        .env.production: Laravel would load it at run time, as APP_ENV is production."""
+        """No .env reaches the image build, so `npm run build` had no VITE_APP_NAME and the Inertia
+        kits' page titles said Laravel, also after a rename. compose passes APP_NAME as a build arg,
+        the same to each service that builds (web serves the Vite files app's pages name). No
+        .env.production either: in the image, Laravel would load it at run time (APP_ENV is set)."""
         stage, steps = None, []  # (stage, INSTRUCTION, arguments)
         for _, keyword, args, _ in mod.instructions(read(os.path.join(TEMPLATES, "laravel", "Dockerfile"))):
             stage = args.split()[-1] if keyword == "FROM" else stage

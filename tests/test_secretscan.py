@@ -338,8 +338,8 @@ class EnvFileTests(TempFolder):
         self.assertEqual([f["title"] for f in mod.scan_path(self.dir)[0]], ["Real .env file in the project"])
 
     def test_public_build_file_with_no_settings_yet_is_fine(self):
-        # Dogfood: a committed .env.production with only comments was a high "Real .env file", so
-        # a project whose app reads no build value yet failed its scan.
+        # A committed .env.production with only comments was a high "Real .env file", so a project
+        # whose app reads no build value yet failed its scan, and the secure and pack gates with it.
         for text in ["# Public build settings only, never a secret.\n# VITE_SITE_URL=\n", "", "\n\n"]:
             with self.subTest(text=text):
                 write(self.dir, ".env.production", text)
