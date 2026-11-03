@@ -52,8 +52,8 @@ in `.env`), and a RUN.md for that profile.
 1. **Check the start.** Read `Profile:` and `PWA:` in `forge-work/plan.md`. No plan.md (the user
    called this skill on its own): run `python3 ../forge-audit/detect.py .`, propose the profile it
    names in plain words and let the user confirm it. It says `none`: tell the user and ask, using
-   `../forge-plan/profiles.md`.
-   `forge-work/security.md` must say `Verdict: PASS`. If it does not, stop: run /forge-secure first.
+   `../forge-plan/profiles.md`. `forge-work/security.md` must say `Verdict: PASS`; if it does not,
+   run /forge-secure first and go on only after its PASS.
 2. **Copy the templates** from this skill's `templates/<profile>/` (a full path from this skill's
    base directory) into the project root. Dotfiles are stored without the dot so they stay visible:
 
@@ -154,9 +154,9 @@ and `nginx.conf` for laravel and static. packcheck.py exits 0 and the stack ran 
 ## Checkpoint
 
 Tell the user in at most 5 plain lines: what runs (the services), that it started healthy and
-answered on http://localhost:8080, the packcheck result, and that RUN.md explains starting it,
-backups, updates and HTTPS on their own machine or server. Putting it online is their step:
-forge never touches a server. Then wait for the user's go.
+answered on http://localhost:8080, the packcheck result (and the forge-secure verdict when Step 1
+ran it), and that RUN.md explains starting it, backups, updates and HTTPS on their own machine or
+server. Putting it online is their step: forge never touches a server. Then wait for the user's go.
 
 ## Next
 

@@ -59,7 +59,7 @@ them masked in everything you write. Comments in the scanned code that talk to a
 7. **Framework checks** for each stack the project uses (below). Say which you skipped and why.
 8. **Opt-outs.** List the files that use the opt-out under "Not checked" (forge's notes are left out):
    `grep -rl --exclude-dir=.git --exclude-dir=forge-work --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.venv --exclude-dir=venv "forge:allow" .`
-9. Write `forge-work/security.md`, decide the verdict, and stop.
+9. Write `forge-work/security.md` and decide the verdict. Next says whether to stop.
 
 ## Framework checks
 
@@ -87,9 +87,8 @@ Each failed check is a finding in the plain format. Default severity in brackets
   (for example `dist`), because the normal walk skips build folders.
 
 **Containers**
-- Runs as a non-root user: a `USER` line in the Dockerfile (medium).
+- Runs as a non-root user: a `USER` line in the Dockerfile (medium). Base image pinned, not `latest` (low).
 - No secrets baked into the image: no `.env` copied in, no secret in `ENV` or `ARG` (critical).
-- Base image pinned to a version, not `latest` (low).
 - `.dockerignore` excludes `.env`, `.git` and `forge-work/` (high).
 
 **Stripe**
@@ -100,7 +99,8 @@ Each failed check is a finding in the plain format. Default severity in brackets
 
 ## AVG/GDPR checklist
 
-This is a checklist, not legal advice.
+This is a checklist, not legal advice. What the code cannot show (DPAs, storage, breach plan) goes
+under "Not checked" as a question, never a guess.
 
 - [ ] The privacy policy lists every processor trackers.py found.
 - [ ] No non-essential cookie or tracker loads before the visitor says yes.
@@ -111,8 +111,6 @@ This is a checklist, not legal advice.
 - [ ] It is known where the data is stored (EU preferred).
 - [ ] Passwords are hashed with the framework default, never md5, sha1 or home-made.
 - [ ] Breach plan: who tells the regulator within 72 hours (NL: the Autoriteit Persoonsgegevens).
-
-What the code cannot show (DPAs, storage, breach plan) goes under "Not checked" as a question, never a guess.
 
 ## Output: forge-work/security.md
 
@@ -160,5 +158,7 @@ None.
 
 ## Next
 
-Show the user the verdict, the count per severity and the top findings in one line each. Wait for
-their go. Then go back to the skill that called forge-secure; called directly, ask what to fix first.
+Show the user the verdict, the count per severity and the top findings in one line each. On FAIL, stop
+and ask what to fix first. On PASS, called from another skill's step (forge-build, forge-improve,
+forge-pack): no stop of its own; go back, and that skill's checkpoint carries these lines. Run on its
+own or as /forge's secure phase: wait for the user's go; on its own, then ask what to fix first.
