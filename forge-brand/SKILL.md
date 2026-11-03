@@ -111,7 +111,7 @@ share with it: `python3 ../forge-build/copycheck.py forge-work/brand.md --words 
    - `allow`: single words that hold a name and are fine, such as `linear-gradient` for an app
      called Linear. The sweep lists them; tell the user which ones you added.
 2. Replace the name, colours and strings everywhere: the app name setting (laravel `APP_NAME` in
-   `.env.example` and `config/app.php`, django settings and `base.html`, next the root layout's
+   `.env.example`, `.env` and `config/app.php`, django settings and `base.html`, next the root layout's
    `metadata`, static `index.html`), titles and meta tags, `package.json` or `composer.json`, email
    templates and the sender name, the PWA manifest's `name` and `short_name`, error pages, the
    README and the texts e2e tests expect. Rename files and folders with the old name; fix imports.
