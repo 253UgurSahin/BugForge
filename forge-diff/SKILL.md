@@ -62,12 +62,12 @@ Compare every reference screenshot in `forge-work/screens/` with a clone shot of
 - The original's are forge-recon's (a new one only from a public page or the user's own account, at
   human speed; never save its code, bundles or network calls).
 - The clone's: take them all again now, as test's fix loop changed the app after build took them.
-  Rebuild the stack (`docker compose up -d --build --wait`), then shoot each with a short Playwright
-  script (or the browser tool) in the state recon.md gives for its reference (which data, which
-  item, which action, which scroll), logged in the same way.
-- Same viewport, same tool, both full-page or neither, and the same name as its reference: `S07.png`
-  (1440x900), `S07-mobile.png` (390x844); a further state is `S07-<state>.png` and
-  `S07-<state>-mobile.png` (lowercase words joined by -: `S05-dialog-open.png`).
+  Rebuild the stack (`docker compose up -d --build --wait`), then, with a short Playwright script
+  (or the browser tool), shoot each as its row under `## Reference screenshots` in recon.md says
+  (how to reach it: which data, which item, which action, which scroll), logged in the same way.
+- Same viewport, same tool, viewport only unless that row says full page, and the same name as its
+  reference: `S07.png` (1440x900), `S07-mobile.png` (390x844); a further state is `S07-<state>.png`
+  and `S07-<state>-mobile.png` (lowercase words joined by -: `S07-dialog-open.png`).
 - A screen left out on purpose (`skip` in features.csv) has no clone shot: say so in the report.
 
 ```bash
