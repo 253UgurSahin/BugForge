@@ -16,9 +16,9 @@ description: >-
 
 # forge-diff
 
-Reads `forge-work/features.csv`, the original's screenshots in `forge-work/screens/` and the clone's in
-`forge-work/clone-screens/`. Writes `forge-work/parity.md`, and diff images and scores next to the
-original's screenshots.
+Reads `forge-work/features.csv`, `forge-work/recon.md` and the original's screenshots in
+`forge-work/screens/`, and takes the clone's again in `forge-work/clone-screens/`. Writes
+`forge-work/parity.md`, and diff images and scores next to the original's screenshots.
 
 ## Ground rules
 
@@ -57,15 +57,18 @@ Exit 2 from either script means it could not run: fix what the message names and
 
 ## Step 2: layout diff
 
-Compare each key screen, at least every screen of the core flow:
+Compare every reference screenshot in `forge-work/screens/` with a clone shot of the same name:
 
-- Same viewport for both (1440x900 desktop, 390x844 mobile), same state (same kind of data, same tab
-  open, logged in the same way), same tool, and both full-page or neither.
-- One file per screen and viewport, with the same name in both folders: `S07.png` for desktop,
-  `S07-mobile.png` for mobile.
-- The original's are forge-recon's, in `forge-work/screens/` (a new one only from a public page or the
-  user's own account, at human speed; never save its code, bundles or network calls). The clone's go
-  in `forge-work/clone-screens/`, taken from the compose stack (the browser tool or Playwright).
+- The original's are forge-recon's (a new one only from a public page or the user's own account, at
+  human speed; never save its code, bundles or network calls).
+- The clone's: take them all again now, as test's fix loop changed the app after build took them.
+  Rebuild the stack (`docker compose up -d --build --wait`), then shoot each with a short Playwright
+  script (or the browser tool) in the state recon.md gives for its reference (which data, which
+  item, which action, which scroll), logged in the same way.
+- Same viewport, same tool, both full-page or neither, and the same name as its reference: `S07.png`
+  (1440x900), `S07-mobile.png` (390x844); a further state is `S07-<state>.png` and
+  `S07-<state>-mobile.png` (lowercase words joined by -: `S05-dialog-open.png`).
+- A screen left out on purpose (`skip` in features.csv) has no clone shot: say so in the report.
 
 ```bash
 python3 ../forge-diff/imgdiff.py forge-work/screens/S07.png forge-work/clone-screens/S07.png \
@@ -74,16 +77,14 @@ python3 ../forge-diff/imgdiff.py forge-work/screens/S07.png forge-work/clone-scr
 
 Reading the result:
 
-- Scores: matches 90+, close 75+, partly 50+, different below 50. A 2x screenshot against a 1x one is
-  fine; a warning about different widths means two viewports: take them again. A long full-page
-  screenshot takes up to a minute.
+- Scores: matches 90+, close 75+, partly 50+, different below. A 2x shot against a 1x one is fine; a
+  width warning means two viewports: take both again. A long full-page shot takes up to a minute.
 - Read the regions, not only the score: one moved block on a long page barely moves the score. The
   regions are in the original's pixels, biggest first. The diff image is a smaller copy of the
   original (the `compared_at` size) with those regions tinted red; it stays in `forge-work/screens/`.
 - A height difference of 5% or more often means a missing or extra section; the rows only one of the
   two has count against the score. Different words wrap differently, which also costs a few points.
-- Exit 2 names the problem. For an unreadable PNG or two blank screenshots, take the screenshot again
-  and delete the empty `.diff.json` the failed run left.
+- Exit 2 (an unreadable PNG, two blank shots): take the shot again; delete the empty `.diff.json`.
 - A low score on a screen you improved on purpose (a fix from forge-compare) is fine: say so in the
   report, never move the clone back towards the original's look.
 
@@ -95,9 +96,10 @@ Compare what the scores cannot see: clicks to finish the flow (fewer than the or
 errors, empty input and empty lists, what is remembered between visits, and which emails arrive and
 what they say (Mailpit in development).
 
-Write each difference as: flow, original does, clone does, fix or keep. A difference that is a bug goes
-into `forge-work/bugs.md` in forge-test's format, for example `## B014 [high] [open] Reschedule link
-opens a not-found page`.
+Write each difference as: flow, original does, clone does, fix or keep. A bug goes into
+`forge-work/bugs.md` in forge-test's format (`## B014 [high] [open] Reschedule link opens a
+not-found page`) and is fixed in forge-test's fix loop, a failing test first. A must-have that is
+missing or half built is no bug: it goes back to /forge-build.
 
 ## Step 4: the report
 
@@ -157,6 +159,7 @@ Not yet better than the original: 1 of 3 fixes from forge-compare is built.
 ## Next
 
 Checkpoint: tell the user in at most 5 plain lines the parity score, must-haves done of total, the
-layout score, the verdict and the top three things to build next. Wait for the user's go. Then
-`/forge-build` for missing must-haves and bugs (then `/forge-test` and back here). Once it is
-shippable: `/forge-brand`, or back to `/forge` when it runs the phases.
+layout score, the verdict and the top three things to build next. Wait for the user's go. Then open
+bugs go through the fix loop of `/forge-test`, and missing or half-built must-haves through
+`/forge-build` (then `/forge-test`); after either, back here from Step 1. Once it is shippable:
+`/forge-brand`, or back to `/forge` when it runs the phases.
