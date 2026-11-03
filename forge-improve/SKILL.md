@@ -121,8 +121,9 @@ tracked): stop, tell the user. A "Stripe live secret key": no call to Stripe unt
 ## Step 6: finish
 
 Rebuild the local app, run the full suite and compare it with the start. Run /forge-secure on the
-branch: fix a critical or high finding your fixes caused now, same steps; name older ones at the
-checkpoint. Finish improve.md; `python3 ../forge/gitguard.py .` must exit 0 (still on the branch).
+branch: on PASS it goes on, its verdict in your checkpoint; on FAIL it stops to ask what to fix first.
+Fix a critical or high finding your fixes caused now, same steps; name older ones at the checkpoint.
+Finish improve.md; `python3 ../forge/gitguard.py .` must exit 0 (still on the branch).
 
 ## Output: forge-work/improve.md
 
@@ -135,7 +136,6 @@ Secrets before: Local .env file, ignored by git (.env); Password or secret writt
 All changes: git diff 3f2a1c9 forge/improve-20261027
 
 ## To do
-
 ## Fixed
 ### A003 [high] Passwords stored with MD5
 where:  app/Models/User.php:41
