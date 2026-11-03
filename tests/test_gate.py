@@ -438,6 +438,8 @@ class StatusTests(Project):
         self.assertIn("/forge-plan", lines[4])
         self.assertIn("Next: plan. Run /forge-plan, then %s " % gate.PYTHON, out)
         self.assertIn("done plan --approved '<their exact words>'", out)
+        # One stop per phase (N10): the skill's own checkpoint, and one line more for the gate.
+        self.assertIn("Show the user the skill's checkpoint plus one line with the gate result, and wait", out)
 
     def test_the_printed_commands_run_on_this_machine(self):
         """python3 on macOS and Linux. Windows has no python3 (only python and py): there the commands

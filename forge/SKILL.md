@@ -113,8 +113,8 @@ Repeat until `status` says all phases are done:
    skill (the vertical slice, the name pick) waits for the user too, but it is not the phase's go.
 4. `python3 ../forge/gate.py check <phase>`. Exit 1: the phase is not finished. Fix what it names
    inside the phase skill, or ask the user.
-5. One stop per phase: the skill's closing checkpoint is this one. Show its summary plus the gate
-   result, at most 5 plain lines, then stop and wait for the user's go. Never ask twice.
+5. One stop per phase: the skill's closing checkpoint is this one. Show it as the skill says, plus
+   one line with the gate result, then stop and wait for the user's go. Never ask twice.
 6. A go: `python3 ../forge/gate.py done <phase> --approved '<their exact words>'`. A question or a
    change: answer it or make it inside the phase, then check and checkpoint again.
 
@@ -127,8 +127,9 @@ refuses a `security.md` older than the last go.
 
 ## When a later phase sends you back
 
-- diff finds a missing must-have, or test or secure finds a bug: do the fix in the skill that owns
-  it (/forge-build, the fix loop of /forge-test), then return to the phase you came from.
+- A bug found by test, by diff's behaviour walk or by secure goes into `forge-work/bugs.md` and
+  through the fix loop of /forge-test, a failing test first. A missing or partial must-have goes to
+  /forge-build. Then rebuild (`docker compose up -d --build --wait`) and go back to that phase.
 - A phase that is done stays done. When its files change, run its check again and fix what fails
   before you go on. `done` may record it again after a new go.
 - secure says FAIL: nothing moves on until it is fixed, or the user accepts one specific risk in
@@ -138,10 +139,9 @@ refuses a `security.md` older than the last go.
 ## Resume
 
 A new session, a break, or "where were we": first `python3 ../forge/gate.py status` in the project
-root. It shows what the user asked for, what is done (with the user's words and the time) and the
-next step. Read the files the last phase wrote before you go on. "No forge state": ask the user for
-the project folder, or start at Step 1. "Damaged": show the user the message, never rebuild
-state.json by hand.
+root. It shows what the user asked for, what is done (the user's words and the time) and the next
+step. Read the files the last phase wrote before you go on. "No forge state": ask for the project
+folder, or start at Step 1. "Damaged": show the user the message; never rebuild state.json by hand.
 
 ## Output
 

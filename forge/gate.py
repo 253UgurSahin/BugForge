@@ -161,8 +161,9 @@ def next_step(state):
     waiting, gate = still_open(state), PYTHON + " " + shlex.quote(os.path.abspath(__file__))
     if not waiting:
         return "All phases are done. Tell the user what they have now, what is left, and that shipping is their step."
-    text = ("Next: {0}. Run /forge-{0}, then {1} check {0}. Show the user a checkpoint (5 plain lines) and "
-            "wait for their go. Then: {1} done {0} --approved '<their exact words>'").format(waiting[0], gate)
+    text = ("Next: {0}. Run /forge-{0}, then {1} check {0}. Show the user the skill's checkpoint plus one line "
+            "with the gate result, and wait for their go. Then: {1} done {0} --approved '<their exact words>'"
+            ).format(waiting[0], gate)
     skip = ". Or, when the user says so: {1} skip {0} --reason '<their reason>'".format(waiting[0], gate)
     return text + (skip if waiting[0] in OPTIONAL else "")
 
