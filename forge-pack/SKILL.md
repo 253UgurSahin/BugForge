@@ -59,10 +59,9 @@ in `.env`), and a RUN.md for that profile.
 
    | template | becomes |
    | --- | --- |
-   | `Dockerfile`, `docker-compose.yml`, `RUN.md` | the same names |
+   | `Dockerfile`, `docker-compose.yml`, `RUN.md`, `nginx.conf` (laravel and static) | the same names |
    | `dockerignore` | `.dockerignore` |
    | `env.example` | `.env.example` |
-   | `nginx.conf` (laravel and static) | `nginx.conf` |
 
    forge-build copied these at the start of the build. When a file exists, compare it with the
    template: keep the project's deliberate changes, add what the template has and the file lacks.
@@ -77,6 +76,7 @@ in `.env`), and a RUN.md for that profile.
      the Stripe lines. Secrets never go in the Dockerfile or the compose file.
    - laravel: `DB_CONNECTION=mariadb`; behind a proxy the app trusts it (`trustProxies` in
      `bootstrap/app.php`); the CSP in `nginx.conf` allows what the app loads, nothing more.
+     `VITE_` values are build args like `VITE_APP_NAME`, the same in each service that builds.
    - django: the `config.wsgi` module in the Dockerfile is the project's; settings.py reads the
      names in `.env.example` and loads with only `DJANGO_SECRET_KEY` set (collectstatic runs at
      build time); `STATIC_ROOT = BASE_DIR / "staticfiles"` with WhiteNoise; `requirements.txt`

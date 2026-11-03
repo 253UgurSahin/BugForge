@@ -118,6 +118,8 @@ and renews the certificate by itself:
   password it was created with. Put the old one back, or change it inside the database.
 - Port 8080 (or mailpit's 8025) is taken: set `APP_PORT` and `APP_URL` (or `MAILPIT_PORT`) in
   `.env`, then `docker compose up -d`.
+- The browser tab still shows an old name (or Laravel) after you changed `APP_NAME` in `.env`: the
+  name is also built into the JavaScript. Run `docker compose up -d --build --wait`.
 - Every form says "Page expired" (419), or you cannot stay logged in, over plain http: some
   browsers (Safari), curl and scripts drop secure cookies there. Until HTTPS works, set
   `SESSION_SECURE_COOKIE=false` in `.env` and run `docker compose up -d`.

@@ -2,12 +2,17 @@
 # Start: docker compose up -d --build --wait, then open http://localhost:8080 (another port: APP_PORT
 # in .env). RUN.md has the rest.
 # Settings and secrets come from .env (copy .env.example). Nothing secret is written in this file.
+# The build args are public values that Vite writes into the JavaScript (see the Dockerfile).
+# The web, app and worker builds each make the Vite files, and web serves the ones app's pages
+# name: give all three the same args.
 
 services:
   web:
     build:
       context: .
       target: web
+      args:
+        VITE_APP_NAME: ${APP_NAME:-Laravel}
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:8080"  # this machine only; a reverse proxy with HTTPS goes in front (RUN.md)
     volumes:
@@ -26,6 +31,8 @@ services:
     build:
       context: .
       target: app
+      args:
+        VITE_APP_NAME: ${APP_NAME:-Laravel}
     env_file: .env
     volumes:
       - storage:/var/www/html/storage
@@ -46,6 +53,8 @@ services:
     build:
       context: .
       target: app
+      args:
+        VITE_APP_NAME: ${APP_NAME:-Laravel}
     command: php artisan queue:work --tries=3 --max-time=3600
     env_file: .env
     volumes:

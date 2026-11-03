@@ -214,6 +214,25 @@ class TemplateTests(unittest.TestCase):
         dockerfile = read(os.path.join(TEMPLATES, "laravel", "Dockerfile"))
         self.assertIn("mkdir -p storage/app/public storage/framework/cache/data", dockerfile)
 
+    def test_laravel_builds_the_app_name_into_its_javascript(self):
+        """Dogfood: no .env reaches the image build, so `npm run build` had no VITE_APP_NAME and the
+        Inertia kits' page titles said Laravel, also after a rename. compose passes APP_NAME as a build
+        arg, the same to each service that builds (web serves the Vite files app's pages name). No
+        .env.production: Laravel would load it at run time, as APP_ENV is production."""
+        stage, steps = None, []  # (stage, INSTRUCTION, arguments)
+        for _, keyword, args, _ in mod.instructions(read(os.path.join(TEMPLATES, "laravel", "Dockerfile"))):
+            stage = args.split()[-1] if keyword == "FROM" else stage
+            steps.append((stage, keyword, args))
+        assets = [(keyword, args) for name, keyword, args in steps if name == "assets"]
+        self.assertLess(assets.index(("ARG", "VITE_APP_NAME")), assets.index(("RUN", "npm run build")))
+        self.assertEqual([step for step in steps if "VITE_" in step[2] and step[0] != "assets"], [])
+        services = compose.compose_services(read(os.path.join(TEMPLATES, "laravel", "docker-compose.yml")))
+        args = {name: [line for _, keys, line in lines if keys == ("build", "args")]
+                for name, lines in services.items() if any(line.startswith("build:") for _, _, line in lines)}
+        self.assertEqual(args, {name: ["VITE_APP_NAME: ${APP_NAME:-Laravel}"] for name in ("web", "app", "worker")})
+        ignore = read(os.path.join(TEMPLATES, "laravel", "dockerignore")).splitlines()
+        self.assertTrue(mod.is_ignored(ignore, ".env.production"))
+
 
 class ProjectTests(Project):
     def test_clean_project(self):

@@ -17,12 +17,16 @@ RUN composer install --no-dev --no-interaction --prefer-dist --no-scripts --no-a
 COPY . .
 RUN mkdir -p bootstrap/cache && composer dump-autoload --no-dev --optimize
 
-# CSS and JavaScript, built by Vite into public/build.
+# CSS and JavaScript, built by Vite into public/build. .dockerignore keeps .env out of the build, so
+# each VITE_ value comes in as a build arg that docker-compose.yml sets: VITE_APP_NAME, the app's
+# name, from APP_NAME in .env. Vite writes them into the JavaScript, for every visitor to read:
+# public values only, never a secret. Another one: an ARG line here and the arg in docker-compose.yml.
 FROM node:24-alpine AS assets
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY --from=vendor /var/www/html ./
+ARG VITE_APP_NAME
 RUN npm run build
 
 # The app image. The code belongs to root; the app may write only to storage/ and bootstrap/cache.
