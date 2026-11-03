@@ -85,7 +85,7 @@
                "--section", "Next to build"],
      "why": "forge-diff, Step 4: parity.md, then by hand the behaviour differences, the verdict with the date and the top five things to build next"},
     {"check": ["work", "compared", "forge-work/screens"],
-     "why": "forge-diff, Step 2: compare each key screen, at least every screen of the core flow"},
+     "why": "forge-diff, Step 2: compare every reference screenshot in forge-work/screens/ with a clone shot of the same name; a screen left out on purpose (skip in features.csv) has none, and the report says so"},
     {"check": ["run", "forge-test/bugs.py", "forge-work/bugs.md"],
      "why": "forge-diff, Step 4: no verdict until bugs.py runs, and an open critical or high bug is not shippable; Next: /forge-brand once it is shippable"}
   ],
@@ -104,7 +104,7 @@
     {"check": ["run", "forge-brand/sweep.py", ".", "--config", "forge-work/brand.json"],
      "why": "forge-brand, Step 6: sweep.py exits 0"},
     {"check": ["run", "forge-build/copycheck.py"], "modes": ["clone"], "when": "forge-work/original-text/",
-     "why": "forge-build, Clean room and your own words: matching its sentence is copying; in clone mode copycheck.py lists each run of 6+ words the project's files share with the original's text. Rewrite it, or with the user's OK add it to forge-work/copy-allow.txt"}
+     "why": "forge-brand, Step 6: secretscan.py, gitguard.py and, in clone mode, copycheck.py must exit 0 before the commit; a run the user OKs goes in forge-work/copy-allow.txt"}
   ],
   "launch": [
     {"check": ["file", "forge-work/launch.md"], "why": "forge-launch, Output: launch.md from the template"},
@@ -112,7 +112,7 @@
                "--section", "Privacy, cookies and SEO", "--section", "Legal pages", "--names", "OG image"],
      "why": "forge-launch, Output: launch.md from the template; Step 4: tick the legal items you wrote; Step 5: an og:image of your own"},
     {"check": ["run", "forge-build/copycheck.py"], "modes": ["clone"], "when": "forge-work/original-text/",
-     "why": "forge-build, Clean room and your own words: matching its sentence is copying; in clone mode copycheck.py lists each run of 6+ words the project's files share with the original's text. Rewrite it, or with the user's OK add it to forge-work/copy-allow.txt"}
+     "why": "forge-launch, Also for this skill: commit once all tests pass and secretscan.py, sweep.py and, in clone mode, copycheck.py exit 0; forge-build, Clean room: rewrite each shared run, or with the user's OK add it to forge-work/copy-allow.txt"}
   ],
   "secure": [
     {"check": ["doc", "forge-work/security.md", "--section", "What was checked", "--section", "Findings",
@@ -123,7 +123,7 @@
     {"check": ["counts", "forge-work/security.md"],
      "why": "forge-secure, The gate: any critical or high finding that is not fixed or accepted is a FAIL"},
     {"check": ["scan", "forge-work/security.md", "forge-secure/codecheck.py", "."],
-     "why": "forge-secure, Step 3 and The gate: each codecheck finding is fixed, or the user accepts it under Accepted risks (a false positive: forge:allow on its line, with the user's OK)"},
+     "why": "forge-secure, Step 3 and The gate: a critical or high codecheck finding is fixed, or passes only as a risk the user accepted under Accepted risks (a false positive: forge:allow on its line, with the user's OK)"},
     {"check": ["run", "forge-secure/secretscan.py", "."],
      "why": "forge-secure, The gate: secretscan.py must exit 0; its findings are fixed, not accepted"}
   ],

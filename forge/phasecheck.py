@@ -36,7 +36,6 @@ PACK = os.path.join(HERE, "..")  # the forge skill pack
 PYTHON = shlex.quote(sys.executable) if os.name == "nt" and sys.executable else "python3"  # no python3 on Windows
 MODES, PROFILES = ("clone", "idea", "improve"), ("laravel", "django", "next", "static")
 UNSEEN = re.compile(r"<!--.*?(?:-->|\Z)|^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1|\Z)", re.S | re.M)  # comments, code
-TODO = re.compile(r"\{\{[^\s{}][^{}\n]{0,80}\}\}")  # any one-line {{...}}; Blade and Jinja write {{ x }}
 FRESH = {"diff": "forge-work/parity.md", "secure": "forge-work/security.md"}  # the reports --since applies to
 
 
@@ -47,16 +46,11 @@ def read_text(*parts):
 
 
 def check_file(root, *names):
-    """One of NAMES exists and has text. A pattern after the names, such as TODO, finds placeholders: none
-    may be left outside comments and code blocks. The table finds a template's own with doccheck.py."""
-    names, todo = (names, None) if isinstance(names[-1], str) else (names[:-1], names[-1])
+    """One of NAMES exists and has text. A template's placeholders are a doc check (doccheck.py)."""
     found = [name for name in names if os.path.isfile(os.path.join(root, name))]
     if not found:
         return False, "%s is missing" % " or ".join(names)
     text = read_text(root, found[0])
-    left = todo.findall(UNSEEN.sub("", text)) if todo else []
-    if left:
-        return False, "%s still has %d template placeholder(s), such as %s" % (found[0], len(left), left[0][:60])
     return bool(text.strip()), "%s %s" % (found[0], "exists" if text.strip() else "is empty")
 
 

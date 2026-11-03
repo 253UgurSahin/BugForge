@@ -142,7 +142,7 @@ def check_compared(folder):
     diffs = [name for name in names if name.endswith(".diff.json")]
     if shots and not diffs:
         return False, "%s has %d reference screenshot(s) and no .diff.json" % (folder, len(shots)), [
-            "Compare at least the core flow's screens with the clone's: ../forge-diff/imgdiff.py --json."]
+            "Compare each reference screenshot with the clone's of the same name: ../forge-diff/imgdiff.py --json."]
     broken = []
     for name in diffs:
         try:

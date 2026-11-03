@@ -606,7 +606,8 @@ class FindingTests(Checks):
         shared run of 6+ words fails until it is rewritten or, with the user's OK, in copy-allow.txt. Without
         the kept text the line says it skipped; idea mode, which has no original, never runs it."""
         sentence = "<main>\n<p>Zo zie je elke dag wat er moet gebeuren.</p>\n</main>\n"
-        for phase in ("build", "brand", "launch"):
+        for phase, why in (("build", "why: forge-build, Step 7"), ("brand", "why: forge-brand, Step 6"),
+                           ("launch", "why: forge-launch, Also for this skill")):
             with self.subTest(phase=phase):
                 shutil.rmtree(self.root, ignore_errors=True)
                 os.makedirs(self.root)
@@ -618,8 +619,7 @@ class FindingTests(Checks):
                       "# kept by pagetext.py\nzo zie je elke dag wat er moet gebeuren met je planten\n")
                 self.assert_fails(phase, "copycheck.py exits 1: it found problems",
                                   '9 words in a row from the original: "zo zie je elke dag wat er moet gebeuren"',
-                                  "where: %s:2" % os.path.join("src", "home.html"), "why: forge-build, ",
-                                  args=("--mode", "clone"))
+                                  "where: %s:2" % os.path.join("src", "home.html"), why, args=("--mode", "clone"))
                 for mode in ("idea", None):
                     self.assertNotIn("copycheck", self.assert_passes(phase, *(["--mode", mode] if mode else [])))
                 write(self.root, "forge-work/copy-allow.txt", "# OK from the user\nZo zie je elke dag wat er moet gebeuren\n")
