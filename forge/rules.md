@@ -108,4 +108,6 @@ from the root of the user's project, so `.` and `forge-work/` mean the
 project, not the skill pack.
 
 Where there is no `python3` (Windows), run the same command with `py -3`
-or `python`.
+or `python`. Git Bash on Windows turns an argument that starts with `/`
+(such as `--approved '/go'`) into a Windows path: put `MSYS_NO_PATHCONV=1`
+before the command to keep it as typed.
