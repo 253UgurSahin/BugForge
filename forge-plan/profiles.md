@@ -164,13 +164,13 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
 
 ## next: Node/TypeScript + Postgres (Next.js, self-hosted)
 
-- **Versions**: Next.js 16.4.3 with React 19 and the App Router, Node 24 LTS `node:24-alpine` (until
-  April 2028, the tag forge-pack uses; Node 26 becomes LTS on 28 October 2026: move the templates and
-  the plan to it together), PostgreSQL 18 `postgres:18-alpine`, Drizzle ORM 0.45 with drizzle-kit
-  0.31 and the `pg` driver 8, Better Auth 1.7, zod 4 for input validation.
+- **Versions**: Next.js 16.4.3 with React 19 and the App Router, Node 24 LTS `node:24-alpine`
+  (maintenance LTS until 30 April 2028, the tag forge-pack's templates use), PostgreSQL 18
+  `postgres:18-alpine`, Drizzle ORM 0.45 with drizzle-kit 0.31 and the `pg` driver 8, Better Auth
+  1.7, zod 4 for input validation.
 - **Start**: `npx create-next-app@latest app` (TypeScript, App Router, Tailwind CSS 4), then
-  `npm i -D @types/node@24 vitest@5` (the scaffold's `@types/node` 20 blocks Vitest 5; 26 with the
-  image). `next.config.ts`: `output: "standalone"`, `poweredByHeader: false`, and with logins delete
+  `npm i -D @types/node@24 vitest@5` (the image's Node; the scaffold's `@types/node` 20 blocks
+  Vitest 5). `next.config.ts`: `output: "standalone"`, `poweredByHeader: false`, and with logins delete
   `cacheComponents` and `partialPrefetching` (the scaffold turns them on; every page then streams a
   200 shell first, so another user's record answers 200, not 404). The Dockerfile copies `public/`
   and `.next/static/` into the standalone build. Health URL: `/api/health` (`app/api/health/route.ts`).
