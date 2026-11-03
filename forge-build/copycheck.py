@@ -88,7 +88,8 @@ def load_original(size):
                         runs.setdefault(tuple(found[i:i + size]), set()).add(name[:-4])
     if not runs:
         raise ValueError("%s holds no text of the original: in clone mode forge-recon keeps it there with "
-                         "pagetext.py, and without it there is nothing to compare" % TEXT_DIR)
+                         "pagetext.py (its Step 2), so run that on the saved pages. With none saved (a "
+                         "secondhand recon) there is nothing to compare: say so at the checkpoint" % TEXT_DIR)
     return runs
 
 
