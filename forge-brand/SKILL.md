@@ -132,14 +132,14 @@ has. All fresh, none echoing the original's phrasing.
 
 ## Output
 
-`forge-work/brand.json` (the gate checks it has a name and an avoid list, and that the sweep exits 0):
+`forge-work/brand.json` and `forge-work/brand.md`, as below. The gate checks the name and avoid list in
+brand.json, a line of text under each of brand.md's five ## headings, that contrast.py, the sweep and, in
+clone mode, the copy check exit 0, and that the app carries the name.
 
 ```json
 {"name": "Slotwise", "avoid": ["Calendly", "Calendly LLC"], "domains": ["calendly.com"],
  "colors": ["#006bff"], "allow": []}
 ```
-
-`forge-work/brand.md`:
 
 ```markdown
 # Brand
