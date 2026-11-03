@@ -15,11 +15,11 @@ SendGrid, Mailgun, OpenAI and Anthropic, private keys, passwords in connection s
 define('DB_PASSWORD', '...')). A real .env file (.env, .env.local, ...) is high, its lines
 are scanned. Two exceptions. One git ignores (so it stays on this machine) is low, and so are
 its lines, but a Stripe live key stays critical (forge works in test mode only); no git: high.
-One with only public build values (VITE_..., NEXT_PUBLIC_...) is fine, unless a name says
-SECRET, PRIVATE or PASSWORD. Skipped: placeholders (changeme, ${DB_PASS}, App\\Rules\\Password),
-lines with forge:allow, SKIP_FOLDERS (.git, node_modules, vendor, build and cache folders,
-Laravel's generated bootstrap/cache), symlinks, binary files, files over 1 MB.
-Not checked: unquoted values, values with spaces, git history.
+One with only public build values (VITE_..., NEXT_PUBLIC_...) is fine, unless a name says SECRET,
+PRIVATE or PASSWORD, and so is a .env.production with no settings. Skipped: placeholders
+(changeme, ${DB_PASS}, App\\Rules\\Password), lines with forge:allow, SKIP_FOLDERS (.git,
+node_modules, vendor, build and cache folders, Laravel's generated bootstrap/cache), symlinks,
+binary files, files over 1 MB. Not checked: unquoted values, values with spaces, git history.
 
 Exit codes: 0 nothing at or above --fail-on (default: high); 1 at least one finding at or above
 it; 2 bad usage, a missing path, or something under it could not be read (incomplete scan).
@@ -173,10 +173,10 @@ def is_real_env_file(name):
     is_env = name == ".env" or name.startswith(".env.")
     return is_env and name.rsplit(".", 1)[-1] not in ("example", "sample", "dist", "template")
 
-def only_public_values(lines):
-    """True when every setting in an env file is a VITE_ or NEXT_PUBLIC_ build value."""
+def only_public_values(lines, name):
+    """True when each setting is a VITE_ or NEXT_PUBLIC_ build value; .env.production may have none."""
     settings = [line for line in lines if line.strip() and not line.lstrip().startswith("#")]
-    return bool(settings) and all(PUBLIC_NAME.match(line) for line in settings)
+    return (bool(settings) or name == ".env.production") and all(PUBLIC_NAME.match(line) for line in settings)
 
 def git_ignores(file_path):
     """True when git ignores this file and does not track it (git check-ignore says so).
@@ -194,7 +194,7 @@ def git_ignores(file_path):
 def env_file_findings(text, path):
     """Findings for a real .env file and its lines (see the top of this file)."""
     lines = re.split(r"\r\n|\r|\n", text)
-    if only_public_values(lines):
+    if only_public_values(lines, os.path.basename(path)):
         return scan_text(text, path) + [
             make_finding(PUBLIC_SECRET, path, number) for number, line in enumerate(lines, start=1)
             if PUBLIC_SECRET.pattern.match(line) and "forge:allow" not in line]

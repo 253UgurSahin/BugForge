@@ -337,6 +337,27 @@ class EnvFileTests(TempFolder):
         write(self.dir, ".env.production", "VITE_SITE_URL=https://example.com\nDB_PASSWORD=abc\n")
         self.assertEqual([f["title"] for f in mod.scan_path(self.dir)[0]], ["Real .env file in the project"])
 
+    def test_public_build_file_with_no_settings_yet_is_fine(self):
+        # Dogfood: a committed .env.production with only comments was a high "Real .env file", so
+        # a project whose app reads no build value yet failed its scan.
+        for text in ["# Public build settings only, never a secret.\n# VITE_SITE_URL=\n", "", "\n\n"]:
+            with self.subTest(text=text):
+                write(self.dir, ".env.production", text)
+                self.assertEqual(mod.scan_path(self.dir)[0], [])
+                self.assertEqual(run(self.dir)[0], 0)
+        write(self.dir, ".env.production", "# public only\nSTRIPE_SECRET=" + STRIPE_TEST + "\n")
+        self.assertEqual([f["title"] for f in mod.scan_path(self.dir)[0]],
+                         ["Real .env file in the project", "Stripe test secret key"])
+        self.assertEqual(run(self.dir)[0], 1)
+        write(self.dir, ".env.production", "# the old key: " + STRIPE_LIVE + "\n")  # comments are still scanned
+        self.assertEqual([f["severity"] for f in mod.scan_path(self.dir)[0]], ["critical"])
+        os.remove(os.path.join(self.dir, ".env.production"))
+        for name in [".env", ".env.local"]:  # where secrets go: high even before the first one
+            with self.subTest(name=name):
+                write(self.dir, name, "# DB_PASSWORD=\n")
+                self.assertEqual([f["title"] for f in mod.scan_path(self.dir)[0]], ["Real .env file in the project"])
+                os.remove(os.path.join(self.dir, name))
+
     def test_env_templates_are_scanned_like_normal_files(self):
         fake = "sk_" + "live_" + "yourstripekeyhere"
         write(self.dir, ".env.example", "STRIPE_SECRET=" + fake + "\nDB_PASSWORD=\n")
