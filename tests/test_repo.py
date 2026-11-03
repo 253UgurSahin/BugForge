@@ -263,6 +263,15 @@ class PackTests(unittest.TestCase):
     def test_rules_exist(self):
         self.assertTrue(os.path.isfile(os.path.join(ROOT, "forge", "rules.md")))
 
+    def test_templates_have_lf_line_endings_in_every_checkout(self):
+        """forge-pack copies these into projects, for Linux containers, where CRLF breaks them. Git on
+        Windows checks text out with CRLF (core.autocrlf), unless .gitattributes says eol=lf."""
+        templates = sorted(glob.glob(os.path.join(ROOT, "forge-pack", "templates", "*", "*")))
+        self.assertTrue(templates)
+        for path in templates:
+            with self.subTest(template=os.path.relpath(path, ROOT)), open(path, "rb") as handle:
+                self.assertNotIn(b"\r", handle.read())
+
     def test_repo_has_no_secrets(self):
         """Dogfood: the pack's own secret scan passes on the pack."""
         done = subprocess.run([sys.executable, os.path.join(ROOT, "forge-secure", "secretscan.py"), ROOT],

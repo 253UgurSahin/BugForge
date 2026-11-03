@@ -123,7 +123,8 @@ sys.stderr.write(os.environ.get("FORGE_FAKE_ERR", ""))
 sys.exit(1)  # npm audit exits 1 when it finds something: never an error for deps.py
 """
 # On Windows a fake runs through a .cmd file, the way npm.cmd runs npm; %~dp0 is the .cmd file's folder.
-FAKE_CMD = '@echo off\n"%s" "%%~dp0..\\fakes\\%s.py" %%*\n'  # written in text mode: CRLF there
+# Python's path comes from the environment: cmd.exe reads a .cmd file in another code page than Python writes.
+FAKE_CMD = '@echo off\n"%%FORGE_FAKE_PYTHON%%" "%%~dp0..\\fakes\\%s.py" %%*\n'  # text mode: CRLF there
 
 
 def write(folder, relative_path, content="{}"):
@@ -466,11 +467,12 @@ class SandboxTests(unittest.TestCase):
         for tool in ("npm", "composer", "pip-audit"):
             if os.name == "nt":
                 write(os.path.join(self.dir, "fakes"), tool + ".py", FAKE_AUDITOR % sys.executable)
-                write(self.bin, tool + ".cmd", FAKE_CMD % (sys.executable, tool))
+                write(self.bin, tool + ".cmd", FAKE_CMD % tool)
             else:
                 os.chmod(write(self.bin, tool, FAKE_AUDITOR % sys.executable), 0o755)
         env = {"PATH": self.bin + os.pathsep + os.environ.get("PATH", ""),
-               "FORGE_FAKE_LOG": self.log, "FORGE_FAKE_OUT": "", "FORGE_FAKE_ERR": ""}
+               "FORGE_FAKE_LOG": self.log, "FORGE_FAKE_OUT": "", "FORGE_FAKE_ERR": "",
+               "FORGE_FAKE_PYTHON": sys.executable}
         patcher = mock.patch.dict(os.environ, env)
         patcher.start()
         self.addCleanup(patcher.stop)
