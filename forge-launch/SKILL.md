@@ -42,8 +42,7 @@ Also for this skill:
 - The stack runs production images (code copied in, routes cached): run `docker compose up -d --build --wait` after
   each change, before you open a page, run pagecheck or run the end-to-end tests.
 - Commit after each step that changed the app (`launch: pricing and checkout`) once all tests pass and both
-  `python3 ../forge-brand/sweep.py . --config forge-work/brand.json` and `python3 ../forge-secure/secretscan.py .`
-  exit 0 (forge-build Step 6).
+  `python3 ../forge-brand/sweep.py .` and `python3 ../forge-secure/secretscan.py .` exit 0 (forge-build Step 6).
 
 ## Step 1: read, ask, branch
 
@@ -53,7 +52,7 @@ Also for this skill:
    or feedback.md: ask the user for the headline (what, for whom) and the problem, and start from plan.md's prices.
 3. Ask what you cannot know: business name, legal form and KvK number; contact email and phone; which address may be
    shown; the VAT ID, or that the business uses the KOR (the Dutch small-business scheme: no VAT charged); who buys
-   (consumers, businesses or both); the public domain.
+   (consumers, businesses or both); the public domain. A hobby that earns nothing: no KvK or VAT ID (to verify).
 4. plan.md's "Money goes to" names other businesses (a salon's client deposits): tell the user first that forge
    builds no Stripe Connect (`../forge-build/payments.md` section 1); the site sells only what the user sells.
 5. Business customers' own clients' data goes through the app (a salon's client list): the user is their processor
@@ -72,8 +71,8 @@ Public, no login, full HTML from the server (link previews skip JavaScript). See
 
 The laravel kits' login pages link to the `home` route. If `/` is already the app, logged-in users get the dashboard,
 as in `Route::get('/', fn () => auth()->check() ? redirect()->route('dashboard') : view('landing'))->name('home');`.
-Static: `nginx.conf` gets `try_files $uri $uri.html $uri/ /index.html;` so `/pricing` serves `pricing.html`; an SPA
-shell moves to `app.html` (router base `/app`, `location /app/ { try_files $uri /app.html; }`).
+Static: `nginx.conf` has forge-pack's multi-page `try_files` line (`/pricing` gets `pricing.html`, unknown paths 404).
+An SPA shell moves to `app.html`: router base `/app`, `location /app/ { expires -1; try_files $uri /app.html; }`.
 
 Sections, in the brand voice:
 1. **Hero**: the angle as headline (what, for whom), one line, one button, a screenshot of the new app.
@@ -85,15 +84,16 @@ Sections, in the brand voice:
 
 `/contact` shows contact details only: a form is a new data flow (rate limit, spam check, queued email, privacy
 policy). Theme variables only (a missing colour is a /forge-design change), self-hosted fonts, images with width and
-height, no third-party scripts. `PWA: yes`: every page links the manifest and sets `theme-color`.
+height, no third-party scripts. `PWA: yes`: every page links the manifest and apple-touch-icon and sets `theme-color`.
 
 ## Step 3: pricing
 
-First, what is sold (plan.md's Payments section): **one-off** (bookings or deposits, a shop), **subscriptions**, or
-both. One-off has no tiers, no `/pricing` page and no Stripe products: each price stands where people buy it (the
-service or product list, the booking page) with plan.md's cancelling and no-show rules, a deposit next to the full
-price ("EUR 10.00 now, taken off the EUR 45.00; kept on a no-show"), and Checkout sends the amount inline
-(`price_data`, `../forge-build/payments.md` section 4). Skip every point marked "Subscriptions" below.
+First, what is sold (plan.md's Payments section): **nothing** (None: skip this step and Step 6's price and checkout
+tests; the hero or FAQ says it is free), **one-off** (bookings or deposits, a shop), **subscriptions**, or both.
+One-off has no tiers, no `/pricing` page and no Stripe products: each price stands where people buy it (the service
+or product list, the booking page) with plan.md's cancelling and no-show rules, a deposit next to the full price
+("EUR 10.00 now, taken off the EUR 45.00; kept on a no-show"), and Checkout sends the amount inline (`price_data`,
+`../forge-build/payments.md` section 4). Skip every point marked "Subscriptions" below.
 
 - Start from compare.md's pricing table and the price complaints in feedback.md (with counts), or from plan.md's
   Payments section. Prices read over three months ago: read those public pages again, save the text outside the
@@ -135,17 +135,17 @@ Then make the app sell exactly that:
 
 ## Step 5: basic SEO
 
-- Every public page passes `python3 ../forge-inspect/pagecheck.py http://localhost:8080/ --fail-on medium` (title,
-  description, one `<h1>`, `lang`, viewport, canonical, `og:title`, `og:image`) and also has `og:description`,
-  `og:url` and `twitter:card`. Fix medium findings. Exit 2 is not a pass (an error or a redirect: rebuild the stack).
 - Absolute URLs (canonical, `og:url`, `og:image`, sitemap) come from one setting, never a written host: laravel
   `config('app.url')` (`APP_URL`), django a `SITE_URL` setting from the environment (add it to `.env.example`), next
   `metadataBase` from `NEXT_PUBLIC_SITE_URL`, static `%VITE_SITE_URL%` in the HTML (those two in `.env.production`).
 - `og:image`: your own, 1200x630, such as the landing page with seed data:
   `npx playwright screenshot --viewport-size=1200,630 http://localhost:8080/ public/og.png`.
 - `robots.txt` in `public/` (laravel's skeleton has one; next: `app/robots.ts`) and `sitemap.xml` with the public
-  pages only, built from that setting (laravel, django: a small route; next: `app/sitemap.ts`; static:
-  `public/sitemap.xml` with the domain written in). Pages behind the login get `noindex`.
+  pages only, built from that setting (laravel, django: a small route; next: `app/sitemap.ts`; static: a Vite plugin
+  that emits it in `generateBundle` and stops the build without `VITE_SITE_URL`). Pages behind the login: `noindex`.
+- Every page in the sitemap passes `python3 ../forge-inspect/pagecheck.py http://localhost:8080/<path> --fail-on low`
+  (plus `--no-pwa` with `PWA: no`): no findings at all. Exit 2 is not a pass (an error or a redirect: rebuild the
+  stack). pagecheck skips `og:description`, `og:url` and `twitter:card`: an e2e test checks them on each page.
 
 ## Step 6: test
 

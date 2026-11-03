@@ -3,14 +3,15 @@
 Date: {{YYYY-MM-DD}}
 Angle: {{the headline: what, for whom}} {{or: no competitor data (compare skipped)}}
 Buyers: {{consumers | businesses | both}}
-Sells: {{one-off (deposits, orders) | subscriptions | both}}
+Sells: {{nothing: the app is free | one-off (deposits, orders) | subscriptions | both}}
 Domain: {{TO-FILL until the user gives it}}
-Pages: / {{/pricing | none: prices on the service or product list}} /privacy /terms /contact {{/dpa}}
+Pages: / {{/pricing | none: prices on the service or product list | none: free}} /privacy /terms /contact {{/dpa}}
 Testimonials: {{none | the person, and the date of their written OK}}
 
 <!-- Replace every {{...}}, then delete this comment. A business detail nobody gave you stays TO-FILL.
      Pricing: one row per tier (subscriptions) or per service or product (one-off). Delete the rows and checklist
-     items that do not fit, such as the "Subscriptions" items for a booking app that takes deposits. -->
+     items that do not fit, such as the "Subscriptions" items for a booking app that takes deposits. Nothing sold:
+     the Pricing section is one line that says so and where the site says it is free; delete the Stripe items. -->
 
 ## Pricing
 
@@ -30,7 +31,8 @@ Testimonials: {{none | the person, and the date of their written OK}}
 - Processors: {{Stripe, Postmark}} (trackers.py, {{YYYY-MM-DD}}); other domains seen: {{none}}; hosting: {{TO-FILL}}
 - Cookie banner: {{no (session, CSRF) | yes, for ...}}. Storage: {{list | not checked}}
 - Data processing agreement for business customers: {{/dpa | not needed, because ...}}
-- pagecheck.py: {{no medium findings on 5 pages}}; low: {{...}}
+- pagecheck.py --fail-on low: {{no findings on the 5 pages in the sitemap}}; og:description, og:url and
+  twitter:card: {{on every page, e2e test}}
 - OG image: {{public/og.png}} (own)
 
 ## Legal pages: what each one covers (to verify)
@@ -52,7 +54,8 @@ Terms (/terms), linked next to the pay button and readable before the order:
       the cancelling, refund and no-show rules (a deposit: when it is kept).
 - [ ] Liability, Dutch law, complaints.
 - [ ] Consumers: the 14-day right of withdrawal, what they pay when the service starts within it, and the model
-      withdrawal form. A booking for a set date: whether the right applies (to verify), and if not, why.
+      withdrawal form. A booking for a set date, or an app that sells nothing: whether the right applies (to
+      verify), and if not, why.
 - [ ] The app takes money for other businesses: who sells what.
 
 Data processing agreement (/dpa, only when business customers' client data goes through the app):
@@ -62,7 +65,9 @@ Data processing agreement (/dpa, only when business customers' client data goes 
 
 Check against acm.nl (selling to consumers), the KvK and the Belastingdienst. Not legal advice.
 
-- [ ] Business name, legal form, KvK number and, when VAT-registered, the VAT ID (btw-id) on the site.
+- [ ] Business name, legal form, KvK number and, when VAT-registered, the VAT ID (btw-id) on the site. A hobby
+      project that earns nothing may not be a business: then none of these, the reason here (to verify with the
+      KvK), and a new check once it earns money (ads, donations, a paid plan).
 - [ ] Contact details easy to find (footer and /contact): email, phone number, a geographic address.
 - [ ] Consumers: prices include VAT and all costs; the terms, the withdrawal rules and the model withdrawal form
       can be read before payment.
@@ -76,8 +81,9 @@ Check against acm.nl (selling to consumers), the KvK and the Belastingdienst. No
 ## Launch checklist (the user's steps)
 
 - [ ] Legal pages checked by someone qualified; no TO-FILL left: `git grep -n TO-FILL -- ':!forge-work'`
-- [ ] `APP_URL` or `SITE_URL` in `.env` (next and static: the value in `.env.production`) set to the real domain,
-      then the image rebuilt.
+- [ ] The address setting set to the real domain, then the image rebuilt: laravel `APP_URL` or django `SITE_URL`
+      in `.env`, next `NEXT_PUBLIC_SITE_URL` or static `VITE_SITE_URL` in `.env.production`. Canonical links,
+      sharing tags and the sitemap follow it.
 - [ ] Stripe live mode: iDEAL turned on again; subscriptions: the products and prices made again, their live price
       IDs in the app's database and the Customer Portal set up again; live keys only in the server's `.env`; a
       live webhook endpoint with its own signing secret.
