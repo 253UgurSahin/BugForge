@@ -150,7 +150,7 @@ missing or half built is no bug: it goes to /forge-build, then back here (say so
 
 Never lower a severity to get through. A bug is `[wontfix]` only when the user says so for that
 bug: write their words under it. A fix that turns out bigger than it looked: stop and ask. A bug
-that diff, secure or pack sent here goes through this loop too, then back to that phase.
+that diff, brand, secure or pack sent here goes through this loop too, then back to that phase.
 
 ## Output
 
