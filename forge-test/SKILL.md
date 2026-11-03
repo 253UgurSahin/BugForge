@@ -16,9 +16,8 @@ description: >-
 
 # forge-test
 
-Reads the flows in `forge-work/recon.md` (idea mode: `forge-work/plan.md`; improve mode: the app
-itself and `forge-work/improve.md`). Writes `forge-work/test-plan.md`, `forge-work/bugs.md`,
-end-to-end tests in `e2e/` and unit tests next to the code.
+Reads the flows in `forge-work/recon.md` (idea mode: plan.md; improve mode: the app and improve.md).
+Writes `forge-work/test-plan.md` and `bugs.md`, specs in `e2e/` and unit tests next to the code.
 
 ## Ground rules
 
@@ -52,7 +51,9 @@ case (F01-H1 happy, F01-E3 edge, F01-N2 negative) and mark it `e2e`, `unit` or `
   saving, mobile width (390px), keyboard only, screen reader labels.
 - **Negative cases**: wrong password, too many login attempts, card `4000 0000 0000 0002` declined,
   **Fail** on the iDEAL test page, a webhook event sent twice, permission denied, a deleted record.
-- `PWA: yes`: install, the offline page, and no signed-in page from the cache after logging out.
+- `PWA: yes`: install, the offline page styled offline (its `/offline.css` comes from the worker's
+  cache), and no signed-in page from the cache after logging out. When plan.md says a static app
+  works offline (profiles.md, "Working offline"), its pages open offline after one online visit.
 
 ## Step 2: the stack, seed data and unit tests
 
@@ -82,7 +83,6 @@ Improve mode, and the app already has Playwright (a `playwright.config.*`): add 
 setup and use its command. Otherwise one spec per flow in `e2e/`, set up as the top of
 `../forge-test/e2e.example.spec.ts` says: its own package.json, ignore lines, a config whose setup
 project signs the seed users in once, and Playwright's own image when the browser download fails.
-
 Start from that example. It shows what every spec needs: the base URL from `FORGE_BASE_URL`, roles
 and labels as selectors (never CSS classes), a failure on any console error, 5xx response or broken
 asset, an axe scan (WCAG 2.2 AA) on each screen, the second-user access check and a double submit.
