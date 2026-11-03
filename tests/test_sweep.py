@@ -203,6 +203,40 @@ class BrandFile(Project):
         self.assertEqual(files, {os.path.join("src", "app", "page.tsx")})
         self.assertEqual(code, 1)
 
+    def test_brand_file_is_not_swept_under_another_name(self):
+        """macOS disks ignore case: --config BRAND.json opens brand.json, yet the two paths differ as text.
+        A hard link is one file under two names on any disk, so it stands in for that here."""
+        cfg = put(self.root, "brand.json", json.dumps({"name": "Slotwise", "avoid": ["Slotwise"]}))
+        try:
+            os.link(cfg, os.path.join(self.root, "brand-link.json"))
+        except (OSError, AttributeError):
+            self.skipTest("this file system has no hard links")
+        code, out, _ = run(self.root, "--config", cfg, "--json")
+        self.assertEqual({f["file"] for f in json.loads(out)["findings"]}, {os.path.join("src", "app", "page.tsx")})
+        self.assertEqual(code, 1)
+
+    def test_brand_file_spelled_in_other_case(self):
+        """The real case, on the disks that ignore case (macOS and Windows; skipped elsewhere)."""
+        put(self.root, "brand.json", json.dumps({"name": "Slotwise", "avoid": ["Slotwise"]}))
+        if not os.path.exists(os.path.join(self.root, "BRAND.JSON")):
+            self.skipTest("this disk tells BRAND.JSON from brand.json")
+        code, out, _ = run(self.root, "--config", os.path.join(self.root, "BRAND.JSON"), "--json")
+        self.assertEqual({f["file"] for f in json.loads(out)["findings"]}, {os.path.join("src", "app", "page.tsx")})
+        self.assertEqual(code, 1)
+
+    def test_old_palette_values_are_found_without_a_brand_file(self):
+        """forge-brand Step 3 looks for copies of the old token values before brand.json exists."""
+        clean = tempfile.mkdtemp(dir=self.root)
+        put(clean, "public/offline.css", ":root { --color-accent: #3F4856; }\n")
+        put(clean, "public/icons/favicon.svg", '<svg><rect fill="#3f4856"/></svg>\n')
+        put(clean, "public/manifest.webmanifest", '{"theme_color": "#3f4856", "background_color": "#f5f8fb"}\n')
+        put(clean, "forge-work/design/tokens.json", '{"color": {"accent": "#3f4856"}}\n')
+        code, out, _ = run(clean, "--colors", "#3f4856", "--json")
+        found = {f["file"] for f in json.loads(out)["findings"]}
+        self.assertEqual(found, {os.path.join("public", name) for name in
+                                 ("offline.css", os.path.join("icons", "favicon.svg"), "manifest.webmanifest")})
+        self.assertEqual(code, 1)
+
     def test_default_config_is_read_from_the_current_folder(self):
         put(self.root, "forge-work/brand.json", json.dumps(
             {"_about": "notes are fine", "name": "Slotwise", "avoid": ["Calendly"], "domains": [], "colors": []}))

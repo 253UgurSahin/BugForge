@@ -161,11 +161,13 @@ def walk(root):
                 yield entry.path, "folder"
 
 
-def sweep_file(path, shown, matchers):
-    """(checked, binary or unreadable; findings; places on a forge:allow line) for one file,
+def sweep_file(path, shown, matchers, skip=None):
+    """(checked, binary, unreadable or brand; findings; places on a forge:allow line) for one file,
     read line by line whatever its size. A NUL byte in the first 8 KB makes it binary."""
     findings, allowed = [], []
     try:
+        if skip and os.path.samestat(os.stat(path), skip):  # by inode: on macOS BRAND.json is brand.json
+            return "brand", [], []
         with open(path, "rb") as handle:
             if b"\0" in handle.read(8192):
                 return "binary", [], []  # an image, a font, an archive
@@ -181,9 +183,9 @@ def sweep_file(path, shown, matchers):
     return "checked", findings, allowed
 
 
-def sweep(root, matchers, skip_file=None):
-    """Sweep a folder or one file, but never skip_file (the brand file). Returns (findings, summary)."""
-    findings, allowed, places = [], [], {"checked": [], "binary": [], "unreadable": []}
+def sweep(root, matchers, skip=None):
+    """Sweep a folder or one file, but never the brand file (skip: its os.stat()). Returns (findings, summary)."""
+    findings, allowed, places = [], [], {"checked": [], "binary": [], "unreadable": [], "brand": []}
     is_folder = os.path.isdir(root)
     for path, kind in (walk(root) if is_folder else [(root, "file")]):
         shown = os.path.relpath(path, root) if is_folder else path
@@ -195,8 +197,8 @@ def sweep(root, matchers, skip_file=None):
             if what == "name":
                 findings.append(make_finding("path", label, text, shown + ("/" if kind == "folder" else "")))
         tool_file = name in TOOL_FILES or name.endswith(".tsbuildinfo")  # lock files, caches: not by people
-        if kind == "file" and not tool_file and os.path.realpath(path) != skip_file:
-            status, found, allowed_here = sweep_file(path, shown, matchers)
+        if kind == "file" and not tool_file:
+            status, found, allowed_here = sweep_file(path, shown, matchers, skip)
             places[status].append(shown)
             findings += found
             allowed += allowed_here
@@ -282,7 +284,7 @@ def main(argv=None):
     except ValueError as error:
         print("error: %s" % error, file=sys.stderr)
         return 2
-    findings, summary = sweep(args.path, matchers, os.path.realpath(config) if config else None)
+    findings, summary = sweep(args.path, matchers, os.stat(config) if config else None)
     summary["config"] = config
     text = (json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
             else format_human(findings, summary))
