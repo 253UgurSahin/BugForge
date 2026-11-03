@@ -74,11 +74,10 @@ Run it with `python3` from the project root (rules.md, "Running the scripts"):
   missing, or an earlier phase is not done or skipped.
 - `python3 ../forge/gate.py skip <phase> --reason '<the user's reason>'`: compare and inspect only.
 
-Put the words in single quotes, exactly as the user typed them (a `'` inside becomes `'\''`), so
-the shell changes nothing. Exit 2: a phase that is not in this mode, or a damaged state.json; for
-status, done and skip also no state.json in this folder. check runs without one, in no mode: it then
-only looks at the files, so in the wrong folder it says they are missing. Run status first. Show the
-user an exit 2 message as it is.
+Put the words in single quotes, exactly as the user typed them (a `'` inside becomes `'\''`), so the
+shell changes nothing. Exit 2: a phase not in this mode, or a damaged state.json; for status, done
+and skip also no state.json here. check runs without one, in no mode: it only looks at the files, so
+in the wrong folder they are missing. Run status first. Show the user an exit 2 message as it is.
 
 ## Step 1: mode and folder
 
@@ -128,8 +127,9 @@ forge-build's last step wrote is from before test, brand and launch changed the 
 ## When a later phase sends you back
 
 - A bug found by test, by diff's behaviour walk or by secure goes into `forge-work/bugs.md` and
-  through the fix loop of /forge-test, a failing test first. A missing or partial must-have goes to
-  /forge-build. Then rebuild (`docker compose up -d --build --wait`) and go back to that phase.
+  through the fix loop of /forge-test, a failing test first. A missing or half-built must-have:
+  /forge-build, then /forge-test (its tests). Then rebuild (`docker compose up -d --build --wait`)
+  and go back to the phase you came from (diff runs again from its Step 1).
 - A phase that is done stays done. When its files change, run its check again and fix what fails
   before you go on. `done` may record it again after a new go.
 - secure says FAIL: nothing moves on until it is fixed, or the user accepts one specific risk in
