@@ -10,10 +10,11 @@ description: >-
   refunds), email, uploads and background jobs. Writes tests alongside, runs
   a secret scan before every commit, commits one screen or feature at a
   time, ticks off forge-work/features.csv and keeps forge-work/build-log.md.
-  Clean-room: every line and every word is written fresh. Use after
-  /forge-design, or when the user says "build the app", "build the clone",
-  "start building", "build screen S07", "add login", "add payments",
-  "connect Stripe", "add iDEAL", "send emails" or "wire up the database".
+  Clean-room: every line and every word is written fresh, and in clone mode
+  a copy check proves it. Use after /forge-design, or when the user says
+  "build the app", "build the clone", "start building", "build screen S07",
+  "add login", "add payments", "connect Stripe", "add iDEAL", "send emails"
+  or "wire up the database".
 ---
 
 # forge-build
@@ -41,9 +42,11 @@ Read `../forge/rules.md` once per session. In short:
 ## Clean room and your own words
 
 - Every line, label, button, empty state and email is written here, fresh, from recon.md and plan.md: never the
-  original's HTML, CSS, JS, SVGs or images, nothing loaded from its domain or CDN. Matching what a button does is
-  parity, matching its sentence is copying. Stuck on how something works? Use the original as a user (help pages,
-  public walkthroughs, the user's own account where its terms allow it), never its code or calls.
+  original's HTML, CSS, JS, SVGs or images, nothing loaded from its domain or CDN. Stuck on how something works? Use
+  the original as a user (help pages, public walkthroughs, the user's own account where its terms allow it), never
+  its code or calls. Matching what a button does is parity, matching its sentence is copying: in clone mode `python3
+  ../forge-build/copycheck.py` lists each run of 6+ words the project's files (logged-in pages too) share with the
+  original's text forge-recon kept. Rewrite it, or with the user's OK add it to `forge-work/copy-allow.txt`.
 
 ## Where things run
 
@@ -63,14 +66,13 @@ Read `../forge/rules.md` once per session. In short:
 
 1. `python3 ../forge/gitguard.py` must exit 0: a named branch that is not main. Exit 1: `git switch -c forge/build`.
    Exit 2, no repo: `git init -b main && git commit --allow-empty -m "start"` (the merge base), then the switch.
-2. Read the profile's section in `../forge-plan/profiles.md`. Scaffold with the choices in plan.md, in an empty
-   temporary folder (the project root already holds `forge-work/`), with the official installer:
+2. Scaffold in an empty temp folder (the root holds `forge-work/`), as plan.md and `../forge-plan/profiles.md` say:
    - laravel: `composer create-project laravel/laravel app`, or for a starter kit (the global `laravel/installer`)
      `laravel new app --livewire --phpunit --npm --no-boost -n` (or `--react`, `--vue`, `--svelte`, `--pest`)
    - django: `django-admin startproject config .`, in the project root itself, from a `.venv` with Django
    - next: `npx create-next-app@latest app --yes --use-npm --disable-git`
    - static: `npm create vite@latest app -- --template <the template in plan.md>`
-3. In the temporary folder delete `.git`, `node_modules` and `.next`, for laravel also the installer's `.env` and
+3. In the temp folder delete `.git`, `node_modules` and `.next`, for laravel also the installer's `.env` and
    `database/database.sqlite` (both for SQLite). Then `cp -an <that folder>/app/. .` (dotfiles too, no overwrites;
    GNU cp's `-n` warning is harmless) and, all but django, `npm install`: the images build from its lockfile.
 4. Copy forge-pack's `templates/<profile>/` files over the scaffold's, fitted as Step 3 of `../forge-pack/SKILL.md`
@@ -112,7 +114,7 @@ the basic components with real data through the data access layer. Done when:
 
 - [ ] every state it lists works, plus empty, loading, error and no permission; a 60 character name fits
 - [ ] it works at 390px and 1440px wide and by keyboard only: semantic HTML, labels, visible focus, alt text
-- [ ] no console errors, no copy from the original, tests for the main path and the access check (Step 5)
+- [ ] no console errors, no copy of the original (copycheck.py), tests for the main path and the access check
 - [ ] clone mode: a screenshot in the reference's viewport and state, under its name in `forge-work/clone-screens/`
       (`npx playwright screenshot --viewport-size=1440,900 <url> <file>`, or 390,844; logged in: `--load-storage`)
 
@@ -124,8 +126,7 @@ the basic components with real data through the data access layer. Done when:
   this user do this to this record?"). A second user gets 404 or 403, never the data. A link for guests (a booking,
   a receipt) carries a random token, never a sequential ID.
 - **Input**: validated on the server on every route; only allowed fields reach the model.
-- **Payments**: Stripe Checkout with iDEAL in test mode, as `../forge-build/payments.md` says. Money for other
-  businesses (salons taking their clients' deposits) needs Stripe Connect: settle it in plan.md first.
+- **Payments**: Stripe Checkout with iDEAL in test mode, as `../forge-build/payments.md` says (section 1 first).
 - **Email**: SMTP settings from `.env`, Mailpit in development, templates written fresh, sent by a job.
 - **Uploads**: checked on the server by size and content type, random names, a named volume outside the web root.
 - **Jobs**: anything slow runs in the profile's worker, with retries. Anything on a clock (reminders) also needs a
@@ -152,9 +153,9 @@ the basic components with real data through the data access layer. Done when:
 
 ## Step 7: finish the build and check in
 
-The full suite passes, `docker compose up -d --build --wait` gives a healthy stack, and /forge-secure has run with
-no critical or high finding open. Checkpoint (5 plain lines): what was built (must-haves done of total), what is
-partial or skipped and why, the tests, the forge-secure verdict, how to open the app. Wait for the user's go.
+The full suite passes, `docker compose up -d --build --wait` gives a healthy stack, copycheck.py exits 0 (clone
+mode) and /forge-secure ran with no critical or high finding open. Checkpoint (5 plain lines): must-haves built of
+total, what is partial or skipped and why, the tests, the security verdict, how to open it. Wait for the user's go.
 
 ## Output
 

@@ -1,0 +1,179 @@
+"""Tests for forge-build/copycheck.py: the runs of words it finds in the clone, where it says they
+are, what it lets through (short runs, labels side by side, the allow list) and what it skips."""
+
+import contextlib
+import io
+import json
+import os
+import shutil
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
+from _load import ROOT, load, run_cp1252  # noqa: E402
+
+copycheck = load("forge-build", "copycheck")
+pagetext = load("forge-build", "pagetext")
+
+ORIGINAL = """<html><head><title>Groeiwijs - waterplanner voor je kamerplanten</title></head><body>
+  <h1>Elke plant <span>op tijd</span> water.</h1>
+  <p>Zo zie je elke dag in een oogopslag wat er moet gebeuren met je planten.</p>
+  <div><a href="/app/">Open de planner</a> <a href="/prijzen/">Bekijk de prijzen</a></div>
+  <p>Bijvoorbeeld Monstera woonkamer</p>
+</body></html>
+"""
+
+
+def run(*args):
+    """main() in the current folder: (exit code, stdout, stderr)."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = copycheck.main(list(args))
+    return code, out.getvalue(), err.getvalue()
+
+
+class TagBlocks(unittest.TestCase):
+    def test_inline_tags_stay_in_a_block_and_others_end_it(self):
+        text = ('<main>\n  <p>Bij ons <a href="/x" title="a > b">zie je</a> elke\n  dag.</p>'
+                '<Button onClick="go()">Open</Button><br/>Verder</main>')
+        self.assertEqual(copycheck.tag_blocks(text), [(2, ["bij", "ons", "zie", "je", "elke", "dag"]),
+                                                      (3, ["open"]), (3, ["verder"])])
+
+    def test_file_blocks_add_lines_and_html_blocks(self):
+        self.assertEqual(copycheck.file_blocks("a.ts", "x = 'Een zin';\n\n"), [(1, ["x", "een", "zin"])])
+        self.assertEqual(copycheck.file_blocks("a.vue", "<p>Een\nzin</p>"),
+                         [(1, ["p", "een"]), (2, ["zin", "p"]), (1, ["een", "zin"])])
+
+
+class Project(unittest.TestCase):
+    """A project folder whose forge-work/original-text/ holds the original's kept text."""
+
+    def setUp(self):
+        base = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, base)
+        self.project = os.path.join(base, "project")
+        os.makedirs(os.path.join(self.project, "forge-work", "original-text"))
+        old = os.getcwd()
+        os.chdir(self.project)
+        self.addCleanup(os.chdir, old)
+        self.write(os.path.join("forge-work", "original-text", "source-1.txt"),
+                   "# kept\n" + "".join(" ".join(found) + "\n" for found in pagetext.page_blocks(ORIGINAL)))
+
+    def write(self, path, text):
+        os.makedirs(os.path.dirname(os.path.join(self.project, path)), exist_ok=True)
+        with open(os.path.join(self.project, path), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+
+
+class CheckTests(Project):
+    def test_a_copied_sentence_is_found_with_where_it_is(self):
+        self.write("src/home.html", "<main>\n  <p>Bij ons zie je elke dag in een oogopslag wat er moet\n"
+                                    "  gebeuren.</p>\n  <p>Elke plant <em>op tijd</em> water</p>\n</main>\n")
+        self.write("src/planner.ts", 'const lead = "Zo zie je elke dag in een oogopslag";\n')
+        code, out, err = run()
+        self.assertEqual(code, 1, err)
+        # the sentence goes on over a line break: as a block it is one run, longer than either line
+        self.assertIn('11 words in a row from the original: "zie je elke dag in een oogopslag wat er moet gebeuren"',
+                      out)
+        self.assertIn("where: " + os.path.join("src", "home.html") + ":2\n", out)
+        self.assertIn("why:   the original's page source-1 has the same words", out)
+        self.assertIn("FAIL: 2 run(s) shared with the original.", out)
+        data = json.loads(run("--json")[1])
+        self.assertEqual(data["summary"]["verdict"], "FAIL")
+        self.assertEqual([f["words"] for f in data["findings"]], [11, 8])
+        self.assertEqual(data["findings"][1]["places"], [os.path.join("src", "planner.ts") + ":1"])
+        self.assertEqual(set(data["findings"][0]), {"severity", "title", "where", "why", "fix", "run", "words",
+                                                    "places", "original"})
+
+    def test_short_runs_and_labels_side_by_side_are_not_copy(self):
+        self.write("index.html", "<p>Zo zie je elke dag</p><div><a>Open de planner</a> <a>Bekijk de prijzen</a>"
+                                 "</div>\n<p>Bijvoorbeeld Monstera woonkamer</p>\n<p>Open de planner bekijk de prijzen</p>")
+        code, out, _ = run()
+        self.assertEqual(code, 0, out)
+        self.assertIn("PASS: no run of 6 or more words", out)
+        code, out, _ = run("--words", "4")
+        self.assertEqual(code, 1)
+        self.assertIn('"zo zie je elke dag"', out)
+
+    def test_a_longer_run_hides_the_runs_inside_it(self):
+        self.write("a.html", "<p>Zo zie je elke dag in een oogopslag wat er moet\ngebeuren</p>\n")
+        data = json.loads(run("--json")[1])
+        self.assertEqual([(f["words"], f["places"]) for f in data["findings"]], [(12, ["a.html:1"])])
+
+    def test_two_pages_of_the_original(self):
+        self.write(os.path.join("forge-work", "original-text", "source-2.txt"),
+                   "zo zie je elke dag in een oogopslag\n")
+        self.write("a.txt", "zo zie je elke dag in een oogopslag\n")
+        data = json.loads(run("--json")[1])
+        self.assertEqual(data["findings"][0]["original"], ["source-1", "source-2"])
+        self.assertIn("pages source-1 and source-2 have", data["findings"][0]["why"])
+
+    def test_the_allow_list_lets_a_phrase_through(self):
+        self.write("terms.html", "<p>Zo zie je elke dag in een oogopslag. Dat is alles.</p>\n")
+        self.write(copycheck.ALLOW_FILE, "# legal phrase, OK from the user on 2026-11-03\n"
+                                         "Zo zie je elke dag in een oogopslag.\n")
+        code, out, _ = run()
+        self.assertEqual(code, 0, out)
+        self.assertIn("each needs the user's OK: zo zie je elke dag in een oogopslag", out)
+        self.write("more.html", "<p>Ja: zo zie je elke dag in een oogopslag wat er moet gebeuren met je planten</p>")
+        code, out, _ = run()
+        self.assertEqual(code, 1)  # what is left after the phrase is still checked
+        self.assertIn('7 words in a row from the original: "wat er moet gebeuren met je planten"', out)
+
+    def test_what_is_skipped(self):
+        sentence = "<p>zo zie je elke dag in een oogopslag</p>\n"
+        for path in ("node_modules/x/index.html", "dist/index.html", "forge-work/notes.html", "package-lock.json",
+                     "src/.next/page.html", "vendor/lib/view.php", "app.js.map"):
+            self.write(path, sentence)
+        with open(os.path.join(self.project, "logo.png"), "wb") as handle:
+            handle.write(b"\x89PNG\r\n\x1a\n\0\0" + sentence.encode("utf-8"))
+        self.write("index.html", "<p>Eigen woorden</p>\n")
+        code, out, _ = run()
+        self.assertEqual(code, 0, out)
+        self.assertIn("Files checked: 1, skipped: 1 (binary)", out)
+        self.assertEqual(run("dist")[0], 1)  # a folder you name is checked, build output too
+        self.assertEqual(run(os.path.join("src", ".next", "page.html"))[0], 1)
+
+    def test_bad_input_and_incomplete_checks_exit_2(self):
+        os.makedirs("empty")
+        for args, words, stream in [(("empty",), "INCOMPLETE, so not a pass. No file read.", 1),
+                                    (("--words", "2"), "from 3 to 50", 2), (("missing",), "does not exist", 2)]:
+            with self.subTest(args=args):
+                code, out, err = run(*args)
+                self.assertEqual(code, 2)
+                self.assertIn(words, out if stream == 1 else err)
+        shutil.rmtree(os.path.join("forge-work", "original-text"))
+        code, _, err = run()
+        self.assertEqual(code, 2)
+        self.assertIn("forge-recon keeps it there with pagetext.py", err)
+
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        self.write(os.path.join("forge-work", "original-text", "source-2.txt"),
+                   "zo werkt het in \u0142\u00f3d\u017a en elders voor iedereen\n")
+        self.write("index.html", "<p>zo werkt het in \u0142\u00f3d\u017a en elders</p>\n")
+        code, out, err = run_cp1252(os.path.join(ROOT, "forge-build", "copycheck.py"), cwd=self.project)
+        self.assertEqual(code, 1, err)
+        self.assertIn("in \\u0142\u00f3d\\u017a en", out)
+
+
+class EndToEnd(Project):
+    def test_kept_pages_against_a_clone(self):
+        """pagetext.py keeps a saved page, copycheck.py finds the sentence the clone took from it."""
+        outside = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, outside)
+        page = os.path.join(outside, "source-7.html")
+        with open(page, "w", encoding="utf-8") as handle:
+            handle.write("<p>Je planten blijven in je eigen browser, niet op onze servers.</p>")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(pagetext.main([page]), 0)
+        self.write("privacy.html", '<meta name="description" content="Druppeldag: je planten blijven in je eigen '
+                                   'browser.">\n')
+        code, out, _ = run()
+        self.assertEqual(code, 1)
+        self.assertIn('"je planten blijven in je eigen browser"', out)
+        self.assertIn("page source-7 has", out)
+
+
+if __name__ == "__main__":
+    unittest.main()
