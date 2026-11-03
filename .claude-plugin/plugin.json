@@ -1,15 +1,15 @@
 {
-  "name": "forge",
-  "description": "Claude skills that turn an app idea, a URL or a repo into a working, tested, container-ready web app, and that audit and improve apps you already have. Clean-room, safe by default. Fork of replica-skill.",
-  "version": "0.1.0",
+  "name": "bugforge",
+  "description": "BugForge: Claude skills that turn an app idea, a URL or a repo into a working, tested, container-ready web app, and that audit and improve apps you already have. Clean-room, safe by default. Fork of replica-skill.",
   "author": {
     "name": "Ugur Sahin",
     "url": "https://github.com/253UgurSahin"
   },
-  "homepage": "https://github.com/253UgurSahin/replica-skill2",
-  "repository": "https://github.com/253UgurSahin/replica-skill2",
+  "homepage": "https://github.com/253UgurSahin/BugForge",
+  "repository": "https://github.com/253UgurSahin/BugForge",
   "license": "MIT",
   "keywords": [
+    "bugforge",
     "claude-code",
     "claude-skills",
     "app-clone",

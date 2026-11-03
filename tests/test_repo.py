@@ -235,10 +235,18 @@ class PackTests(unittest.TestCase):
     def test_plugin_manifests(self):
         plugin = json.loads(read(os.path.join(ROOT, ".claude-plugin", "plugin.json")))
         market = json.loads(read(os.path.join(ROOT, ".claude-plugin", "marketplace.json")))
-        self.assertEqual(plugin["name"], "forge")
+        self.assertEqual(plugin["name"], "bugforge")
         self.assertEqual(plugin["skills"], "./")
-        self.assertEqual(market["name"], "forge")
-        self.assertIn("forge", [entry.get("name") for entry in market.get("plugins", [])])
+        self.assertEqual(market["name"], "bugforge")
+        entries = [entry for entry in market.get("plugins", []) if entry.get("name") == "bugforge"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].get("source"), "./")
+        # No version, here or in the marketplace entry: Claude Code then uses the commit, so every
+        # push reaches users on their next update. A fixed version blocks updates until it is raised.
+        self.assertNotIn("version", plugin)
+        self.assertNotIn("version", entries[0])
+        for url in (plugin["homepage"], plugin["repository"], entries[0]["homepage"]):
+            self.assertEqual(url, "https://github.com/253UgurSahin/BugForge")
 
     def test_license_keeps_the_original_notice(self):
         text = " ".join(read(os.path.join(ROOT, "LICENSE")).split())  # one space between all words

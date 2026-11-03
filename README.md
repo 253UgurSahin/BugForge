@@ -1,9 +1,9 @@
-# forge
+# BugForge
 
 Claude skills that build working web apps for you, and that read, audit and improve the apps you
 already have. Safe by default, clean-room, and written for people to read.
 
-forge is a fork of [replica-skill](https://github.com/Jakeschincariol/replica-skill) by Jake
+BugForge is a fork of [replica-skill](https://github.com/Jakeschincariol/replica-skill) by Jake
 Schincariol (MIT). It keeps the idea (map an app, rebuild it, test it, make it your own) and
 changes the rest:
 
@@ -11,19 +11,20 @@ changes the rest:
 - **It reads apps that exist.** Your codebase, your live site, and competitors side by side. Fixes
   go on a separate branch, one small commit per finding, with a test where one can be written.
 - **Your stack.** Four stack profiles, and any web profile can be a PWA.
-- **Containers, not hosting.** You get a Dockerfile, a compose file and a RUN.md. forge never deploys.
+- **Containers, not hosting.** You get a Dockerfile, a compose file and a RUN.md. BugForge never deploys.
 - **Stripe with iDEAL**, in test mode only.
 - **Safety is a gate.** Scripts check secrets, risky code, dependencies, headers, trackers and the
   container setup, and the work stops until they pass.
 - **You decide.** A checkpoint after every phase. Nothing moves on without your go.
 
-All 15 skills are done. Each script is standard-library Python 3.9+ with tests.
+BugForge has 15 skills, the forge skills: `/forge` runs a whole project, and each of the other 14
+does one phase. Each script is standard-library Python 3.9+ with tests.
 
 ## Quick start
 
-1. Install forge (below).
+1. Install BugForge (below).
 2. Open Claude Code in a new, empty folder (a new app) or in your repo (an existing app).
-3. Type `/forge` (installed as a plugin: `/forge:forge`) and say what you want:
+3. Type `/forge` (installed as a plugin: `/bugforge:forge`) and say what you want:
    - `/forge rebuild https://example.com as my own app` (clone mode)
    - `/forge a booking app for my hair salon` (idea mode)
    - `/forge improve this app` (improve mode)
@@ -65,7 +66,7 @@ skill on its own.
 Claude runs these for you, from your project root. To look yourself:
 
 ```bash
-FORGE=~/.claude/skills   # where the forge folders are installed
+FORGE=~/.claude/skills   # the folder that holds forge/ and the forge-* folders (gate.py status prints it)
 python3 $FORGE/forge/gate.py init --mode idea --about 'a booking app for my salon'   # clone, idea or improve
 python3 $FORGE/forge/gate.py status          # every phase and the next step (--json)
 python3 $FORGE/forge/gate.py check plan      # the exit checks of one phase (--json)
@@ -102,7 +103,7 @@ Improve mode: the fixes you picked on a `forge/improve-<date>` branch, one commi
 a test where one can be written), and `forge-work/improve.md` with what was fixed, what was skipped
 and why, and how to check each fix by hand. Nothing is merged or pushed: that is your step.
 
-Plans, reports and screenshots live in `forge-work/` in your project. It never ships: forge keeps
+Plans, reports and screenshots live in `forge-work/` in your project. It never ships: BugForge keeps
 it out of git and out of every image.
 
 ## The skills
@@ -188,7 +189,7 @@ python3 forge-design/contrast.py '#1a1a1a' '#ffffff'
 python3 forge-design/contrast.py forge-design/tokens.json
 ```
 
-## What forge never does
+## What BugForge never does
 
 - Deploy, SSH into a server, change DNS, open hosting accounts, or use Vercel, Netlify, Supabase or
   any other platform. It builds containers; running them is your step.
@@ -211,22 +212,36 @@ Needs Claude Code, Python 3.9+, git, and Docker with the compose plugin. Buildin
 stack's own tools (PHP and Composer, Python, Node: /forge-build says which), or runs them in their
 Docker image. Playwright and Lighthouse need Node.
 
-As a plugin, in Claude Code:
+As a plugin, in Claude Code, one command at a time:
 
 ```
-/plugin marketplace add 253UgurSahin/replica-skill2
-/plugin install forge@forge
+/plugin marketplace add 253UgurSahin/BugForge
 ```
 
-Plugin skills carry the plugin's name in front: `/forge:forge`, `/forge:forge-audit`. Claude also
-picks the right skill when you just say what you want ("audit my code").
+```
+/plugin install bugforge@bugforge
+```
+
+Plugin skills carry the plugin's name in front: `/bugforge:forge`, `/bugforge:forge-audit`. Claude
+also picks the right skill when you just say what you want ("audit my code").
+
+To update, run both in a terminal and restart Claude Code. The first fetches the new version, the
+second installs it; the second alone finds nothing new.
+
+```bash
+claude plugin marketplace update bugforge
+```
+
+```bash
+claude plugin update bugforge@bugforge
+```
 
 Or copy the folders into your personal skills folder:
 
 ```bash
-git clone https://github.com/253UgurSahin/replica-skill2.git
+git clone https://github.com/253UgurSahin/BugForge.git
 mkdir -p ~/.claude/skills
-cp -r replica-skill2/forge replica-skill2/forge-* ~/.claude/skills/
+cp -r BugForge/forge BugForge/forge-* ~/.claude/skills/
 ```
 
 Copy them all: the skills call each other's scripts with paths like `../forge-secure/scope.py`.
@@ -242,6 +257,13 @@ CI (`.github/workflows/test.yml`) runs on every push and pull request:
 - the full test suite on Python 3.9 and 3.13, then the repo's own secret scan;
 - per stack profile: the container templates installed in a scratch folder, checked with
   `docker compose config -q` and `packcheck.py --fail-on low`.
+
+## Releasing
+
+Every push to `main` is a release. `.claude-plugin/plugin.json` has no `version` on purpose: Claude
+Code then uses the commit as the version, so users get each push with the two update commands
+above. With a fixed version they would get nothing until it was raised. `tests/test_repo.py` keeps
+it that way.
 
 ## Credit and license
 

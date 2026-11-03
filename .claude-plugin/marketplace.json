@@ -1,18 +1,18 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "forge",
-  "description": "The forge skill pack for Claude",
+  "name": "bugforge",
+  "description": "BugForge: the forge skills for Claude, which build, audit and improve web apps",
   "owner": {
     "name": "Ugur Sahin",
     "url": "https://github.com/253UgurSahin"
   },
   "plugins": [
     {
-      "name": "forge",
+      "name": "bugforge",
       "description": "Build, audit and improve web apps with Claude: recon, plan, design, build, test, diff, brand, launch, pack, plus audit, inspect, compare, improve and a security gate.",
       "source": "./",
       "category": "productivity",
-      "homepage": "https://github.com/253UgurSahin/replica-skill2"
+      "homepage": "https://github.com/253UgurSahin/BugForge"
     }
   ]
 }

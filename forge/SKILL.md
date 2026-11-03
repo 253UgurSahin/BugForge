@@ -10,7 +10,7 @@ description: >-
   forge-work/state.json, runs each phase's exit checks and marks a phase
   done only in order and only with the user's own words of go. secure is
   never skipped and nothing is deployed. Use when the user says "forge",
-  "build me an app like X", "clone this app", "I have an idea for an app",
+  "bugforge", "build me an app like X", "clone this app", "I have an idea for an app",
   "build my idea", "improve my app", "audit and fix my repo", "where were
   we", "continue forge", "what is the next step", "maak een app voor ..."
   or "verder met forge".
