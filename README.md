@@ -212,6 +212,16 @@ Needs Claude Code, Python 3.9+, git, and Docker with the compose plugin. Buildin
 stack's own tools (PHP and Composer, Python, Node: /forge-build says which), or runs them in their
 Docker image. Playwright and Lighthouse need Node.
 
+Works on Linux, macOS and Windows: CI runs every script's tests on all three.
+
+- **macOS:** the `python3` from Xcode's command line tools (Python 3.9) is enough; a python.org or
+  Homebrew Python works too.
+- **Windows:** Claude Code runs the scripts in Git Bash (part of Git for Windows). A python.org
+  install has no `python3` there, so Claude runs `py -3` or `python` instead, as
+  [`forge/rules.md`](forge/rules.md) tells it.
+- **Docker:** CI checks the container templates on Linux. On macOS and Windows, Docker Desktop
+  runs the same Linux containers, but CI does not test it there.
+
 As a plugin, in Claude Code, one command at a time:
 
 ```
@@ -254,7 +264,8 @@ python3 -m unittest discover -s tests -v
 
 CI (`.github/workflows/test.yml`) runs on every push and pull request:
 
-- the full test suite on Python 3.9 and 3.13, then the repo's own secret scan;
+- the full test suite on Linux, macOS and Windows, each with Python 3.9 and 3.13, then the repo's
+  own secret scan;
 - per stack profile: the container templates installed in a scratch folder, checked with
   `docker compose config -q` and `packcheck.py --fail-on low`.
 
