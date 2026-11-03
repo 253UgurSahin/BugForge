@@ -110,15 +110,15 @@ fine. Checkpoint: show it running (5 lines max: what works, how to try it, what 
 ## Step 4: screen by screen
 
 Work in plan.md's build order: must, should, could, then the fixes from compare. Per screen read its row in recon.md
-or plan.md, in clone mode look at the reference screenshot for layout and hierarchy (not pixels), and build it from
-the basic components with real data through the data access layer. Done when:
+or plan.md and build it from the basic components with real data through the data access layer. Done when:
 
 - [ ] every state it lists works, plus empty, loading, error and no permission; a 60 character name fits
 - [ ] it works at 390px and 1440px wide and by keyboard only: semantic HTML, labels, visible focus, alt text
 - [ ] no console errors, no copy of the original (copycheck.py), tests for the main path and the access check
-- [ ] clone mode: each reference shot of it in `forge-work/screens/` has one under its name in `clone-screens/`, in
-      the state recon.md gives: `npx playwright screenshot --viewport-size=1440,900 <url> <file>` (or 390,844;
-      logged in: `--load-storage`), or a short Playwright script that clicks there first, at deviceScaleFactor 1
+- [ ] clone mode: the layout and hierarchy of its reference shots, not their pixels; each has one under its name in
+      `clone-screens/`, in the state its row under `## Reference screenshots` in recon.md gives (data, item, action,
+      scroll): as loaded, `npx playwright screenshot --viewport-size=1440,900 <url> <file>` (or 390,844; logged in:
+      `--load-storage`); any other state needs a short Playwright script that clicks there, at deviceScaleFactor 1
 
 ## Step 5: the backend and its tests, as the screens need them
 
