@@ -57,13 +57,12 @@ case (F01-H1 happy, F01-E3 edge, F01-N2 negative) and mark it `e2e`, `unit` or `
 
 ## Step 2: the stack, seed data and unit tests
 
-`docker compose up -d --build --wait`, then open the health URL from `../forge-plan/profiles.md`
-and write the base URL (normally `http://localhost:8080`) and the commit at the top of
-test-plan.md. Improve mode without a compose file: start the app the way its README says.
-
-The images have no dev packages, so seed and unit tests run on the host (`composer install`, a venv
-with the dev requirements, `npm ci`), on the override's port ("Where things run" in
-`../forge-build/SKILL.md`): `127.0.0.1:3307` (MariaDB) or `127.0.0.1:5433` (PostgreSQL). next:
+`docker compose up -d --build --wait`, then open the health URL from `../forge-plan/profiles.md` and
+write the base URL (normally `http://localhost:8080`) and the commit at the top of test-plan.md.
+Improve mode without a compose file: start the app the way its README says. The images have no dev
+packages, so seed and unit tests run on the host (`composer install`, a venv with the dev
+requirements, `npm ci`), on the override's port ("Where things run" in `../forge-build/SKILL.md`):
+`127.0.0.1:3307` (MariaDB) or `127.0.0.1:5433` (PostgreSQL). next:
 `TEST_DATABASE_URL=postgres://app:<DB_PASSWORD>@127.0.0.1:5433/app_test`, made once by `docker
 compose exec db createdb -U app app_test`; the tests migrate it and refuse a name without `_test`.
 
@@ -132,7 +131,7 @@ fixed in: -
 
 Status is `open`, `fixed` or `wontfix`. Only report what you reproduced; "might be an issue" goes
 under `## To check`. Never paste a secret or a real person's data into a bug. A must-have that is
-missing or half built is no bug: it goes back to /forge-build (say so at the checkpoint).
+missing or half built is no bug: it goes to /forge-build, then back here (say so at the checkpoint).
 
 ## Step 6: the fix loop
 
@@ -150,7 +149,8 @@ missing or half built is no bug: it goes back to /forge-build (say so at the che
    after", and per fixed bug a line under "Found on the way": `B001 fixed in d8a76ff, see bugs.md`.
 
 Never lower a severity to get through. A bug is `[wontfix]` only when the user says so for that
-bug: write their words under it. A fix that turns out bigger than it looked: stop and ask.
+bug: write their words under it. A fix that turns out bigger than it looked: stop and ask. A bug
+that diff, secure or pack sent here goes through this loop too, then back to that phase.
 
 ## Output
 
