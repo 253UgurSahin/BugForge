@@ -1,8 +1,8 @@
-"""Tests for forge/gate.py: init per mode, check through phasecheck.py (with and without a state), done
-and skip with all their refusals, words made only of invisible characters, a report older than the last
-go, status in plain words and JSON on any console, a damaged or hand-edited state.json, resuming in a new
-process, and the atomic write. The exit checks themselves are tested in test_phasecheck.py.
-Every test works in its own temporary project folder."""
+"""Tests for forge/gate.py: init per mode, check through phasecheck.py (with and without a state, and with
+the checks of the state's mode), done and skip with all their refusals, words made only of invisible
+characters, a report older than the last go, status in plain words and JSON on any console, a damaged or
+hand-edited state.json, resuming in a new process, and the atomic write. The exit checks themselves are
+tested in test_phasecheck.py. Every test works in its own temporary project folder."""
 
 import contextlib
 import io
@@ -194,6 +194,23 @@ class CheckTests(Project):
         self.assertEqual((code, out), (2, ""))
         self.assertIn("recon is not a phase of idea mode", err)
 
+    def test_the_checks_are_those_of_the_mode(self):
+        """Idea mode tests the app forge built, with specs in e2e/. Improve mode tests the user's own app
+        its own way: a plan that marks no case e2e (an API tested with its unit tests) needs no spec."""
+        self.finish("test")
+        shutil.rmtree(os.path.join(self.root, "e2e"))
+        write(self.root, "forge-work/test-plan.md", read(os.path.join(self.root, "forge-work", "test-plan.md"))
+              .replace("| e2e |", "| unit |"))
+        self.gate("init", "--mode", "idea")
+        code, out, _ = self.gate("check", "test")
+        self.assertEqual(code, 1, out)
+        self.assertIn("Exit checks for test (idea mode):", out)
+        self.assertIn("no end-to-end spec: no file like e2e/", out)
+        self.gate("init", "--mode", "improve", "--force")
+        code, out, _ = self.gate("check", "test")
+        self.assertEqual(code, 0, out)
+        self.assertIn("Exit checks for test (improve mode):", out)
+
     def test_with_a_state_an_old_security_report_fails(self):
         self.gate("init", "--mode", "idea")
         self.approve("compare")
@@ -318,9 +335,9 @@ class FreshReportTests(Project):
 
     def test_the_build_report_is_not_the_secure_phase(self):
         self.gate("init", "--mode", "idea")
-        self.finish("secure")  # forge-build runs forge-secure at its end: this report is from then
-        self.age("forge-work/security.md")
-        self.approve("compare", "plan", "design", "build", "test", "brand", "launch")
+        self.approve("compare", "plan", "design", "build")  # forge-build runs forge-secure at its end
+        self.age("forge-work/security.md")  # so this report is from then, before test, brand and launch
+        self.approve("test", "brand", "launch")
         code, out, _ = self.gate("done", "secure", "--approved", "go")
         self.assertEqual(code, 1)
         self.assertIn("forge-work/security.md is older than the last go (%s)" % self.state()["phases"]["launch"]["at"],

@@ -138,10 +138,12 @@ def last_go(state, phase):
 
 
 def exit_checks(root, phase, state=None, as_json=False):
-    """Run phasecheck.py for PHASE in ROOT and show what it says. With a STATE, the phase's report must be
-    newer than the last go before it. Returns 0 when every check passes, else 1."""
+    """Run phasecheck.py for PHASE in ROOT and show what it says. With a STATE, the checks are those of its
+    mode, and the phase's report must be newer than the last go before it. Returns 0 when every check
+    passes, else 1."""
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phasecheck.py")
-    command = [sys.executable, script, phase] + (["--since", last_go(state, phase)] if state else [])
+    command = [sys.executable, script, phase] + (
+        ["--mode", state["mode"], "--since", last_go(state, phase)] if state else [])
     try:
         done = subprocess.run(command + (["--json"] if as_json else []), cwd=root, stdin=subprocess.DEVNULL,
                               capture_output=True, encoding="utf-8", errors="replace", timeout=TIMEOUT,

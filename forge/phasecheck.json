@@ -1,0 +1,150 @@
+{
+  "_about": "The exit checks of each phase, run by phasecheck.py in the project root. Each check: the function (check_ + its name in phasecheck.py) and its arguments; a ../ path is a file of the skill pack. 'modes' runs it only in those modes (null: no mode known), 'profiles' only for those Profile: values of plan.md. 'why' is the line of the phase's skill it rests on: the gate checks only what the skill promises, and shows the line under a failure.",
+  "recon": [
+    {"check": ["file", "forge-work/recon.md"],
+     "why": "forge-recon, Output: recon.md from the template, every section filled in or marked \"none seen\""},
+    {"check": ["doc", "forge-work/recon.md", "--template", "../forge-recon/recon-map.md"],
+     "why": "forge-recon, Output: recon.md from the template, every section filled in or marked \"none seen\""},
+    {"check": ["work", "features", "forge-work/features.csv", "--theirs"],
+     "why": "forge-recon, Output: features.csv with the contract header and at least one must row"}
+  ],
+  "compare": [
+    {"check": ["file", "forge-work/compare.md"], "why": "forge-compare, Output: forge-work/compare.md"}
+  ],
+  "plan": [
+    {"check": ["file", "forge-work/plan.md"],
+     "why": "forge-plan, Output: plan.md, filled in from the template, with the Profile: and PWA: lines"},
+    {"check": ["doc", "forge-work/plan.md", "--template", "../forge-plan/plan.md"],
+     "why": "forge-plan, Output: plan.md, filled in from the template, with the Profile: and PWA: lines"},
+    {"check": ["work", "features", "forge-work/features.csv"],
+     "why": "forge-plan, Step 1: features.csv with the header feature,area,priority,original,clone,notes (idea mode: the user's must-haves as rows)"},
+    {"check": ["line", "forge-work/plan.md", "Profile", "laravel", "django", "next", "static"],
+     "why": "forge-plan, Step 2: Profile: with exactly one of laravel, django, next or static"},
+    {"check": ["line", "forge-work/plan.md", "PWA", "yes", "no"],
+     "why": "forge-plan, Step 2: PWA: with yes or no, at the start of its own line"}
+  ],
+  "design": [
+    {"check": ["json", "forge-work/design/tokens.json"],
+     "why": "forge-design, Step 2: copy ../forge-design/tokens.json and fill in the values"},
+    {"check": ["work", "tokens", "forge-work/design/tokens.json", "../forge-design/tokens.json"],
+     "why": "forge-design, Step 2: copy ../forge-design/tokens.json and fill in the values"},
+    {"check": ["run", "forge-design/contrast.py", "forge-work/design/tokens.json"],
+     "why": "forge-design, Output: tokens.json, on which contrast.py exits 0"},
+    {"check": ["file", "forge-work/design/components.md"],
+     "why": "forge-design, Output: components.md from the template with every <...> filled in"},
+    {"check": ["doc", "forge-work/design/components.md", "--template", "../forge-design/components.md",
+               "--section", "Theme", "--section", "Fonts and icons", "--section", "Original brand colours",
+               "--section", "Components"],
+     "modes": ["clone"],
+     "why": "forge-design, Output: every <...> filled in, and in clone mode ## Original brand colours lists the original's colours; Step 5: one block per component"},
+    {"check": ["doc", "forge-work/design/components.md", "--template", "../forge-design/components.md",
+               "--section", "Theme", "--section", "Fonts and icons", "--section", "Components"],
+     "modes": ["idea", null],
+     "why": "forge-design, Output: components.md with every <...> filled in; Step 5: one block per component"}
+  ],
+  "build": [
+    {"check": ["file", "forge-work/build-log.md"],
+     "why": "forge-build, Step 6: a row in build-log.md for each screen or feature: | ID | date | status | what | notes |"},
+    {"check": ["doc", "forge-work/build-log.md", "--rows", "status,what"],
+     "why": "forge-build, Step 6: a row in build-log.md for each screen or feature: | ID | date | status | what | notes |"},
+    {"check": ["work", "built", "forge-work/features.csv"],
+     "why": "forge-build, Steps 4 and 6: the must-haves first; clone yes, partial with what is missing, or skip with why; never quietly ship half of one"},
+    {"check": ["file", "compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"],
+     "why": "forge-build, Step 1: forge-pack's templates copied in, the compose stack started early"},
+    {"check": ["run", "forge-pack/composecheck.py", "."],
+     "why": "forge-build, Step 1: forge-pack's templates, fitted as its Step 3 says; Where things run: the db service publishes no port"},
+    {"check": ["line", "forge-work/security.md", "Verdict", "PASS"],
+     "why": "forge-build, Step 7: /forge-secure has run with no critical or high finding open"}
+  ],
+  "test": [
+    {"check": ["file", "forge-work/test-plan.md"],
+     "why": "forge-test, Output: test-plan.md with every result and the totals"},
+    {"check": ["doc", "forge-work/test-plan.md", "--template", "../forge-test/test-plan.md",
+               "--cases", "forge-work/bugs.md"],
+     "modes": ["clone", "idea"],
+     "why": "forge-test, Output: test-plan.md with every result and the totals; the template's legend: result pass, fail B003 (the bug in bugs.md) or skipped: why"},
+    {"check": ["doc", "forge-work/test-plan.md", "--template", "../forge-test/test-plan.md",
+               "--cases", "forge-work/bugs.md", "--specs", "e2e/**/*.spec.*", "--specs", "e2e/**/*.test.*",
+               "--specs", "playwright.config.*", "--specs", "*/playwright.config.*"],
+     "modes": ["improve", null],
+     "why": "forge-test, Step 3: improve mode adds the specs to the app's own Playwright setup (a playwright.config.*), or else to e2e/; Output: every result and the totals; the template's legend: result pass, fail B003 or skipped: why"},
+    {"check": ["work", "specs", "e2e/**/*.spec.*", "e2e/**/*.test.*"],
+     "modes": ["clone", "idea"],
+     "why": "forge-test, Step 3 and Output: one spec per flow in e2e/"},
+    {"check": ["run", "forge-test/bugs.py", "forge-work/bugs.md"],
+     "why": "forge-test, Output: bugs.md, on which bugs.py exits 0"}
+  ],
+  "diff": [
+    {"check": ["run", "forge-diff/parity.py", "forge-work/features.csv"],
+     "why": "forge-diff, Step 1: the gate for this phase stays shut until parity.py exits 0"},
+    {"check": ["file", "forge-work/parity.md"],
+     "why": "forge-diff, Step 4: parity.md, then by hand the behaviour differences, the verdict with the date and the top five things to build next"},
+    {"check": ["doc", "forge-work/parity.md", "--section", "Behaviour differences", "--section", "Verdict",
+               "--section", "Next to build"],
+     "why": "forge-diff, Step 4: parity.md, then by hand the behaviour differences, the verdict with the date and the top five things to build next"},
+    {"check": ["work", "compared", "forge-work/screens"],
+     "why": "forge-diff, Step 2: compare each key screen, at least every screen of the core flow"},
+    {"check": ["run", "forge-test/bugs.py", "forge-work/bugs.md"],
+     "why": "forge-diff, Step 4: no verdict until bugs.py runs, and an open critical or high bug is not shippable; Next: /forge-brand once it is shippable"}
+  ],
+  "brand": [
+    {"check": ["json", "forge-work/brand.json", "name", "avoid"],
+     "why": "forge-brand, Output: brand.json with a name and an avoid list"},
+    {"check": ["file", "forge-work/brand.md"],
+     "why": "forge-brand, Output: brand.md with the name checks, the palette, the logo brief, the voice and the sweep"},
+    {"check": ["doc", "forge-work/brand.md", "--section", "Name checks", "--section", "Palette",
+               "--section", "Logo brief", "--section", "Voice", "--section", "Sweep"],
+     "why": "forge-brand, Output: brand.md with the name checks, the palette, the logo brief, the voice and the sweep"},
+    {"check": ["run", "forge-design/contrast.py", "forge-work/design/tokens.json"],
+     "why": "forge-brand, Step 3: the new palette in tokens.json; fix until contrast.py exits 0"},
+    {"check": ["work", "named", "forge-work/brand.json"],
+     "why": "forge-brand, Step 6: replace the name everywhere: the app name setting, titles, the manifest, the README"},
+    {"check": ["run", "forge-brand/sweep.py", ".", "--config", "forge-work/brand.json"],
+     "why": "forge-brand, Step 6: sweep.py exits 0"}
+  ],
+  "launch": [
+    {"check": ["file", "forge-work/launch.md"], "why": "forge-launch, Output: launch.md from the template"},
+    {"check": ["doc", "forge-work/launch.md", "--template", "../forge-launch/launch.md", "--section", "Pricing",
+               "--section", "Privacy, cookies and SEO", "--section", "Legal pages", "--names", "OG image"],
+     "why": "forge-launch, Output: launch.md from the template; Step 4: tick the legal items you wrote; Step 5: an og:image of your own"}
+  ],
+  "secure": [
+    {"check": ["doc", "forge-work/security.md", "--section", "What was checked", "--section", "Findings",
+               "--section", "Not checked", "--section", "Accepted risks"],
+     "why": "forge-secure, Step 9 and Output: security.md in the format of its report"},
+    {"check": ["line", "forge-work/security.md", "Verdict", "PASS"],
+     "why": "forge-secure, The gate: the line is exactly Verdict: PASS or Verdict: FAIL"},
+    {"check": ["counts", "forge-work/security.md"],
+     "why": "forge-secure, The gate: any critical or high finding that is not fixed or accepted is a FAIL"},
+    {"check": ["scan", "forge-work/security.md", "forge-secure/codecheck.py", "."],
+     "why": "forge-secure, Step 3 and The gate: each codecheck finding is fixed, or the user accepts it under Accepted risks (a false positive: forge:allow on its line, with the user's OK)"},
+    {"check": ["run", "forge-secure/secretscan.py", "."],
+     "why": "forge-secure, The gate: secretscan.py must exit 0; its findings are fixed, not accepted"}
+  ],
+  "pack": [
+    {"check": ["file", "Dockerfile"], "why": "forge-pack, Output: Dockerfile, docker-compose.yml, .env.example, .dockerignore, RUN.md"},
+    {"check": ["file", "compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"],
+     "why": "forge-pack, Output: Dockerfile, docker-compose.yml, .env.example, .dockerignore, RUN.md"},
+    {"check": ["file", ".env.example"], "why": "forge-pack, Output: Dockerfile, docker-compose.yml, .env.example, .dockerignore, RUN.md"},
+    {"check": ["file", ".dockerignore"], "why": "forge-pack, Output: Dockerfile, docker-compose.yml, .env.example, .dockerignore, RUN.md"},
+    {"check": ["file", "RUN.md"], "why": "forge-pack, Output: Dockerfile, docker-compose.yml, .env.example, .dockerignore, RUN.md"},
+    {"check": ["doc", "RUN.md", "--template", "../forge-pack/templates/*/RUN.md", "--no-sections"],
+     "why": "forge-pack, Step 3: RUN.md: fill in every {{...}}"},
+    {"check": ["file", "nginx.conf"], "profiles": ["laravel", "static"],
+     "why": "forge-pack, Output: nginx.conf for laravel and static"},
+    {"check": ["run", "forge-pack/packcheck.py", "."], "why": "forge-pack, Step 4: packcheck.py must exit 0"},
+    {"check": ["run", "forge-secure/secretscan.py", "."],
+     "why": "forge-pack, Step 6: secretscan.py must exit 0 first (pack writes its files after secure)"}
+  ],
+  "audit": [
+    {"check": ["file", "forge-work/audit.md"], "why": "forge-audit, Output: forge-work/audit.md"}
+  ],
+  "inspect": [
+    {"check": ["file", "forge-work/inspect.md"], "why": "forge-inspect, Output: forge-work/inspect.md"}
+  ],
+  "improve": [
+    {"check": ["file", "forge-work/improve.md"], "why": "forge-improve, Output: forge-work/improve.md"},
+    {"check": ["run", "forge/gitguard.py", "."],
+     "why": "forge-improve, Step 6: gitguard.py must exit 0, still on the work branch"}
+  ]
+}

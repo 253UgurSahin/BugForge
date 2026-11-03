@@ -62,10 +62,12 @@ Run it with `python3` from the project root (rules.md, "Running the scripts"):
   later session still knows it; `status` shows it.
 - `python3 ../forge/gate.py status`: each phase as done, skipped, next or waiting, then the next
   step with the exact commands, full paths included.
-- `python3 ../forge/gate.py check <phase>`: the phase's exit checks (it runs
-  `../forge/phasecheck.py`). Exit 1 lists what is missing. A template that still has its `{{...}}`
-  placeholders fails, and so does a `security.md` older than the last go. build needs each
-  must-have in features.csv `yes`, or `partial` or `skip` with a note; test a result in every case.
+- `python3 ../forge/gate.py check <phase>`: the exit checks of the phase in this mode (it runs
+  `../forge/phasecheck.py`, whose table names the skill line each check rests on). Exit 1 lists
+  what is missing and why. It checks what the skill promises: its files, no placeholder of their
+  template left (code blocks too), text of its own in each section, its scripts passing. build: each
+  must-have `yes`, or `partial` or `skip` with a note. test: specs, a result in every case. secure:
+  a verdict its counts and codecheck back, in a `security.md` newer than the last go.
 - `python3 ../forge/gate.py done <phase> --approved '<the user's exact words>'`: runs the checks
   again, then records the words and the time. Refuses (exit 1) when a check fails, the words are
   missing, or an earlier phase is not done or skipped.
@@ -73,9 +75,9 @@ Run it with `python3` from the project root (rules.md, "Running the scripts"):
 
 Put the words in single quotes, exactly as the user typed them (a `'` inside becomes `'\''`), so
 the shell changes nothing. Exit 2: a phase that is not in this mode, or a damaged state.json; for
-status, done and skip also no state.json in this folder. check runs without one: it then only looks
-at the files, so in the wrong folder it says they are missing. Run status first. Show the user an
-exit 2 message as it is.
+status, done and skip also no state.json in this folder. check runs without one, in no mode: it then
+only looks at the files, so in the wrong folder it says they are missing. Run status first. Show the
+user an exit 2 message as it is.
 
 ## Step 1: mode and folder
 
