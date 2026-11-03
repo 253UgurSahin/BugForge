@@ -68,9 +68,10 @@ Checkpoint: show the five with their check results and wait for the user to pick
 New values for the token roles forge-design set up: the names stay, the values change. Take the
 accent from another colour family than the original's (idea mode: the closest competitor's): if
 theirs is blue, yours is not blue. Note the old values, write the new ones in tokens.json and run
-`python3 ../forge-design/contrast.py forge-work/design/tokens.json` until it exits 0. Copy them into
-the theme file named in components.md and every other copy of the old ones: the icons, and with
-`PWA: yes` the manifest's colours, the `theme-color` meta tag and the offline page's CSS. Then
+`python3 ../forge-design/contrast.py forge-work/design/tokens.json` until it exits 0. Write the theme
+file again with the `Command:` line under `## Theme` in components.md (theme.py writes it from tokens.json),
+then put the new values in every other copy of the old ones: the icons, and with `PWA: yes` the manifest's
+colours, the `theme-color` meta tag and `public/offline.css`, which repeats the theme's colours. Then
 `python3 ../forge-brand/sweep.py . --colors "<old value>,<old value>"`, with each old value gone from
 tokens.json, must exit 0 (it skips forge-work/ and cannot read PNG files: Step 4 draws the icons again).
 
