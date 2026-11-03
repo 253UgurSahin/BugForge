@@ -67,14 +67,12 @@ Checkpoint: show the five with their check results and wait for the user to pick
 
 New values for the token roles forge-design set up: the names stay, the values change. Take the
 accent from another colour family than the original's (idea mode: the closest competitor's): if
-theirs is blue, yours is not blue. Write them in `forge-work/design/tokens.json`, then:
-
-```bash
-python3 ../forge-design/contrast.py forge-work/design/tokens.json
-```
-
-Fix until it exits 0. Copy the values into the theme file named in components.md (with `PWA: yes`
-also the manifest's colours and the `theme-color` meta tag).
+theirs is blue, yours is not blue. Note the old values, write the new ones in tokens.json and run
+`python3 ../forge-design/contrast.py forge-work/design/tokens.json` until it exits 0. Copy them into
+the theme file named in components.md and every other copy of the old ones: the icons, and with
+`PWA: yes` the manifest's colours, the `theme-color` meta tag and the offline page's CSS. Then
+`python3 ../forge-brand/sweep.py . --colors "<the old values gone from tokens.json>"` must exit 0
+(it skips forge-work/ and cannot read PNG files: Step 4 draws the icons again).
 
 ## Step 4: the logo brief
 
@@ -87,7 +85,8 @@ Not a logo but a brief for the user, a designer, or an image tool whose terms gi
 - **Must not resemble the original's mark**: no shared shape, colour pair or letter trick. Put
   their logo next to the drafts and check.
 - A font in a wordmark has an open licence (SIL OFL) or one the user bought. Until the logo
-  exists, a plain wordmark in the app's own font holds its place.
+  exists, a plain wordmark in the app's own font holds its place, and the favicon and app icons
+  are the name's first letter in `on-accent` on `accent`, drawn as an SVG path: build's placeholders go.
 
 ## Step 5: the voice
 
@@ -99,11 +98,11 @@ has. All fresh, none echoing the original's phrasing.
 ## Step 6: rename and sweep
 
 1. Write `forge-work/brand.json` (below).
-   - `avoid`: the original's product and company names. Idea mode: the working name (plan.md's title)
-     unless the user keeps it, the closest competitors from compare.md, and what the scaffold shows
-     ("Create Next App" and Vercel, Vite's "Vite + React", Laravel's Laracasts). Never a framework name:
-     Laravel, Django, Next or Vite sit in every config file (`APP_NAME=Laravel` is fixed in item 2). A
-     working name that is a plain word for what the app holds (Notes, Bookings, Kapsalon) stays a word:
+   - `avoid`: the original's product and company names (idea mode: the closest competitors from
+     compare.md), the working name (plan.md's title) unless the user keeps it, and what the scaffold
+     shows ("Create Next App" and Vercel, Vite's "Vite + React", Laravel's Laracasts). Never a framework
+     name: Laravel, Django, Next or Vite sit in every config file (`APP_NAME=Laravel` is fixed in item 2).
+     A working name that is a plain word for what the app holds (Notes, Bookings, Kapsalon) stays a word:
      rename it where it is the name (titles, manifest, emails), leave it out of `avoid`, say why in brand.md.
    - `domains`: the original's (idea mode: the competitors'). `colors`: the signature colours under
      `## Original brand colours` in components.md, never white, black or greys (every app has them).
@@ -119,9 +118,13 @@ has. All fresh, none echoing the original's phrasing.
    wrong (the error says what), or the sweep is INCOMPLETE (a file not read, no text file found). A
    mention that must stay (an "Import from Calendly" button) gets `forge:allow` on its line, only with
    the user's OK for that line. If it flags your new name, that name holds the old one: back to step 1.
-4. The sweep cannot read images. Check by eye: the favicon, app icons, OG image, screenshots in the
-   README, the emails as they render, and the title in the browser tab.
-5. Run the project's unit and e2e tests again (a rename breaks imports and expected texts) until green.
+4. Rebuild the stack (`docker compose up -d --build --wait`), now and after every later change. The
+   sweep cannot read images: check by eye the favicon and app icons (the logo or Step 4's letter, no
+   shape of the original's mark), the OG image, README screenshots, the emails as they render, and the
+   title in the browser tab.
+5. Run the unit and e2e tests as `forge-work/test-plan.md` says until green (a rename breaks imports
+   and expected texts). A failure the rename did not cause is a bug: it goes into `forge-work/bugs.md`
+   and through the fix loop of /forge-test, a failing test first.
 6. `python3 ../forge-secure/secretscan.py .` and `python3 ../forge/gitguard.py` must exit 0 (gitguard
    exit 1: `git switch -c forge/brand`). Then commit: `brand: rename to <name>, new palette`.
 
@@ -130,13 +133,8 @@ has. All fresh, none echoing the original's phrasing.
 `forge-work/brand.json` (the gate checks it has a name and an avoid list, and that the sweep exits 0):
 
 ```json
-{
-  "name": "Slotwise",
-  "avoid": ["Calendly", "Calendly LLC"],
-  "domains": ["calendly.com"],
-  "colors": ["#006bff"],
-  "allow": []
-}
+{"name": "Slotwise", "avoid": ["Calendly", "Calendly LLC"], "domains": ["calendly.com"],
+ "colors": ["#006bff"], "allow": []}
 ```
 
 `forge-work/brand.md`:
