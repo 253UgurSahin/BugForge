@@ -67,7 +67,8 @@ Run it with `python3` from the project root (rules.md, "Running the scripts"):
   what is missing and why. It checks what the skill promises: its files, no placeholder of their
   template left (code blocks too), text of its own in each section, its scripts passing. build: each
   must-have `yes`, or `partial` or `skip` with a note. test: specs, a result in every case. secure:
-  a verdict its counts and codecheck back, in a `security.md` newer than the last go.
+  a verdict its counts and codecheck back. diff and secure: a report newer than the last go. Clone
+  mode (build, brand, launch): no run of 6+ words shared with the original's text that recon kept.
 - `python3 ../forge/gate.py done <phase> --approved '<the user's exact words>'`: runs the checks
   again, then records the words and the time. Refuses (exit 1) when a check fails, the words are
   missing, or an earlier phase is not done or skipped.
@@ -122,8 +123,7 @@ A go covers the phase you showed, never the ones after it. "Do it all without st
 gets every checkpoint: tell the user the gate needs their go per phase.
 
 secure always runs /forge-secure again in full, even when `check secure` would pass: the report
-forge-build's last step wrote is from before test, brand and launch changed the app. The gate
-refuses a `security.md` older than the last go.
+forge-build's last step wrote is from before test, brand and launch changed the app.
 
 ## When a later phase sends you back
 
