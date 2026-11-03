@@ -158,6 +158,7 @@ def explain(error):
 
 def main(argv=None):
     """Read the command line, load the page once, save it and return the exit code."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Load one web page passively and save its HTML.")
     parser.add_argument("url", help="http:// or https:// address of the page to load once")
     parser.add_argument("out", help="a new file for the HTML (an existing file is never replaced)")

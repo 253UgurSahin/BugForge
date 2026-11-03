@@ -16,7 +16,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import ROOT, load  # noqa: E402
+from _load import ROOT, load, run_cp1252  # noqa: E402
 
 phasecheck = load("forge", "phasecheck")
 HAS_GIT = shutil.which("git") is not None
@@ -337,8 +337,8 @@ class PhaseTests(Checks):
         self.finish("design")
         write(self.root, "forge-work/design/tokens.json",
               '{"color": {"bg": "#ffffff", "text": "#bbbbbb"}, "pairs": [["text", "bg"]]}')
-        out = self.assert_fails("design", "forge-work/design/tokens.json parses",
-                                "python3 ../forge-design/contrast.py forge-work/design/tokens.json exits 1")
+        shown = phasecheck.PYTHON + " ../forge-design/contrast.py forge-work/design/tokens.json"  # python3, or this Python on Windows
+        out = self.assert_fails("design", "forge-work/design/tokens.json parses", shown + " exits 1")
         self.assertIn("text", out.split("exits 1")[1])  # contrast.py's own words are shown
         write(self.root, "forge-work/design/tokens.json", '{"color": ')
         self.assert_fails("design", "forge-work/design/tokens.json cannot be read", "exits 2: it could not check")
@@ -505,6 +505,18 @@ class ScriptTests(Checks):
         hung = subprocess.TimeoutExpired(cmd="parity.py", timeout=phasecheck.TIMEOUT)
         with mock.patch.object(phasecheck.subprocess, "run", side_effect=hung):
             self.assert_fails("diff", "did not finish within %d seconds" % phasecheck.TIMEOUT)
+
+
+class ConsoleTests(Checks):
+    def test_the_scripts_it_runs_are_read_as_utf8_on_a_cp1252_pipe(self):
+        """phasecheck.py asks the scripts it runs for UTF-8 and reads them as UTF-8. Windows pipes are cp1252
+        otherwise, and the e of Caf\u00e9 came out as the Unicode replacement character."""
+        write(self.root, "forge-work/brand.json", '{"name": "Slotwise", "avoid": ["Caf\u00e9 Noir \u2192"]}')
+        write(self.root, "index.html", "<title>Caf\u00e9 Noir \u2192 booking</title>\n")
+        code, out, err = run_cp1252(os.path.join(ROOT, "forge", "phasecheck.py"), "brand", cwd=self.root)
+        self.assertEqual(code, 1, err)
+        self.assertIn("A name to avoid: Caf\u00e9 Noir \\u2192 (1 place)", out)
+        self.assertNotIn("\\ufffd", out)
 
 
 if __name__ == "__main__":

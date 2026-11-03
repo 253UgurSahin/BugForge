@@ -283,6 +283,7 @@ def format_human(result):
 
 def main(argv=None):
     """Run from the command line. Returns the exit code: 0, or 2 for a bad path."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Tell which stack a project uses and its forge profile.")
     parser.add_argument("path", help="the project folder")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")

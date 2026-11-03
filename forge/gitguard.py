@@ -212,7 +212,7 @@ def check(path, clean):
     code, out, err = git(path, "rev-parse", "--show-toplevel")
     if code != 0:
         raise GitError(explain(path, first_line(err)))
-    repo = out.strip()
+    repo = os.path.normpath(out.strip())  # git writes C:/x on Windows: shown as C:\x, as the other paths are
     git_dir = ask(path, "rev-parse", "--absolute-git-dir").strip()
     # The full name (refs/heads/main), never --short: a tag called main makes that heads/main.
     code, out, err = git(path, "symbolic-ref", "--quiet", "HEAD")
@@ -261,6 +261,7 @@ def format_human(result):
 
 def main(argv=None):
     """Run the check from the command line. Returns the exit code: 0, 1 or 2 (see the top)."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Check that forge may commit here: a git work "
                                                  "tree on a work branch, never on main.")
     parser.add_argument("path", nargs="?", default=".",

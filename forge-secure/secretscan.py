@@ -27,6 +27,7 @@ it; 2 bad usage, a missing path, or something under it could not be read (incomp
 
 import argparse
 import collections
+import errno
 import json
 import os
 import re
@@ -259,8 +260,7 @@ def format_human(findings, summary):
     counts = ", ".join("%d %s" % (summary[sev], sev) for sev in SEVERITIES if summary[sev])
     noun = "finding" if len(findings) == 1 else "findings"
     result = "%d %s: %s." % (len(findings), noun, counts) if findings else "No findings."
-    skipped = summary["files_skipped"]
-    skipped = ", skipped: %d (binary or over 1 MB)" % skipped if skipped else ""
+    skipped = ", skipped: %d (binary or over 1 MB)" % summary["files_skipped"] if summary["files_skipped"] else ""
     lines.append("Files checked: %d%s. %s" % (summary["files_checked"], skipped, result))
     if summary["unreadable"]:
         lines.append("INCOMPLETE, so not a pass. Could not read: " + ", ".join(summary["unreadable"]))
@@ -273,6 +273,7 @@ def format_human(findings, summary):
 
 def main(argv=None):
     """Run the scan from the command line. Returns the exit code: 0, 1 or 2 (see the top)."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Find secrets (keys, passwords, tokens) in files.")
     parser.add_argument("path", help="file or folder to scan")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
@@ -285,12 +286,13 @@ def main(argv=None):
     findings, stats = scan_path(args.path)
     too_bad = any(SEVERITIES.index(f["severity"]) <= SEVERITIES.index(args.fail_on) for f in findings)
     summary = {sev: len([f for f in findings if f["severity"] == sev]) for sev in SEVERITIES}
-    summary.update(stats, total=len(findings), fail_on=args.fail_on,
-                   failed=too_bad or bool(stats["unreadable"]))
+    summary.update(stats, total=len(findings), fail_on=args.fail_on, failed=too_bad or bool(stats["unreadable"]))
     try:
         print(json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
               else format_human(findings, summary), flush=True)
-    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+    except OSError as error:  # the reader stopped early (| head): end quietly, no traceback
+        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
+            raise
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 2 if stats["unreadable"] else 1 if too_bad else 0  # 2: some files were never read
 

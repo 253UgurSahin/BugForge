@@ -22,11 +22,13 @@ import datetime
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 
 TIMEOUT = 600  # seconds per script: a secret scan of a big project takes a while
 PACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")  # the forge skill pack
+PYTHON = shlex.quote(sys.executable) if os.name == "nt" and sys.executable else "python3"  # no python3 on Windows
 FEATURES_HEADER = ["feature", "area", "priority", "original", "clone", "notes"]
 VALUES = (("priority", 2, ("must", "should", "could")), ("original", 3, ("yes", "no", "")),
           ("clone", 4, ("yes", "partial", "no", "skip", "")))  # as parity.py reads them: empty is yes, no
@@ -185,10 +187,11 @@ def check_json(root, name, *keys):
 def check_run(root, script, *args):
     """Run another forge skill's script in ROOT. Passes when it exits 0 and printed its report; else shows
     its output. Every forge script prints what it checked, so no output means it checked nothing."""
-    shown = " ".join(["python3", "../" + script] + list(args))
-    try:
+    shown = " ".join([PYTHON, "../" + script] + list(args))
+    try:  # the script writes UTF-8 and is read as such, also where pipes are cp1252 (Windows)
         done = subprocess.run([sys.executable, os.path.join(PACK, script)] + list(args), cwd=root, timeout=TIMEOUT,
-                              stdin=subprocess.DEVNULL, capture_output=True, encoding="utf-8", errors="replace")
+                              stdin=subprocess.DEVNULL, capture_output=True, encoding="utf-8", errors="replace",
+                              env=dict(os.environ, PYTHONIOENCODING="utf-8"))
     except subprocess.TimeoutExpired:
         return False, "%s did not finish within %d seconds" % (shown, TIMEOUT)
     if done.returncode == 0 and done.stdout.strip():

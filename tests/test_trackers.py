@@ -18,7 +18,7 @@ from unittest import mock
 
 # Lets "python3 -m unittest tests.test_trackers" find _load too, not only "discover -s tests".
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _load import load  # noqa: E402
+from _load import load, run_cp1252, symlink  # noqa: E402
 
 mod = load("forge-secure", "trackers")
 
@@ -349,7 +349,7 @@ class WalkTests(TempFolder):
             self.assertEqual(result.returncode, code, path)
 
     def test_unreadable_file_is_reported_and_exit_2(self):
-        locked = write(self.dir, "open/locked.html", SNIPPETS["Hotjar"])
+        locked = os.path.normpath(write(self.dir, "open/locked.html", SNIPPETS["Hotjar"]))  # as the scan names it
         write(self.dir, "b.html", SNIPPETS["unpkg"])
         real_open = open
 
@@ -385,11 +385,8 @@ class WalkTests(TempFolder):
         outside = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, outside)
         write(outside, "tracker.js", SNIPPETS["Hotjar"])
-        try:
-            os.symlink(os.path.join(outside, "tracker.js"), os.path.join(self.dir, "link.js"))
-            os.symlink(outside, os.path.join(self.dir, "linked-folder"))
-        except (OSError, NotImplementedError):
-            self.skipTest("symlinks not supported here")
+        symlink(self, os.path.join(outside, "tracker.js"), os.path.join(self.dir, "link.js"))
+        symlink(self, outside, os.path.join(self.dir, "linked-folder"))
         self.assertEqual(self.found(), set())
 
     def test_this_script_does_not_list_itself(self):
@@ -540,6 +537,15 @@ class ConventionTests(unittest.TestCase):
         with open(mod.__file__, encoding="utf-8") as handle:
             for number, line in enumerate(handle, start=1):
                 self.assertLessEqual(len(line.rstrip("\n")), 100, "line %d" % number)
+
+
+class ConsoleTests(TempFolder):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        path = write(self.dir, "caf\u00e9 \u2192.html", SNIPPETS["Hotjar"])
+        code, out, err = run_cp1252(mod.__file__, self.dir)
+        self.assertEqual(code, 0, err)  # medium: under the default --fail-on high
+        self.assertIn("where: %s:1" % path.replace("\u2192", "\\u2192"), out)
 
 
 if __name__ == "__main__":

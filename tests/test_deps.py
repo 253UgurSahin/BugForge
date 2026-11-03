@@ -2,7 +2,8 @@
 
 The real auditors (npm, composer, pip-audit) are never run here. The parsers get canned JSON,
 the CLI tests swap deps.run_tool for a fake, and the run_tool tests put small fake auditors
-(Python scripts) first on PATH, so nothing touches the network.
+(Python scripts) first on PATH, so nothing touches the network. On Windows each fake is reached
+through a .cmd file, as npm.cmd is there: shutil.which() finds that, and cmd.exe runs it.
 """
 
 import contextlib
@@ -12,12 +13,14 @@ import os
 import re
 import shutil
 import subprocess
+import signal
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
-from _load import load
+from _load import load, run_cp1252, symlink
 
 mod = load("forge-secure", "deps")
 
@@ -103,17 +106,24 @@ PIP_REPORT = json.dumps({
 
 FAKE_AUDITOR = """#!%s
 # A stand-in for npm, composer or pip-audit: it logs what it saw and prints a canned report.
-import json, os, sys
+import json, os, subprocess, sys, time
 files = sorted(os.listdir("."))
-composer_json = open("composer.json").read() if "composer.json" in files else None
+composer_json = open("composer.json", encoding="utf-8").read() if "composer.json" in files else None
+child = None
+if os.environ.get("FORGE_FAKE_HANG"):  # hangs, with a child of its own (as npm.cmd runs node.exe)
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"]).pid
 with open(os.environ["FORGE_FAKE_LOG"], "a") as log:
-    log.write(json.dumps({"tool": os.path.basename(sys.argv[0]), "cwd": os.getcwd(),
-                          "files": files, "args": sys.argv[1:], "composer_json": composer_json})
-              + "\\n")
+    log.write(json.dumps({"tool": os.path.splitext(os.path.basename(sys.argv[0]))[0], "cwd": os.getcwd(),
+                          "files": files, "args": sys.argv[1:], "composer_json": composer_json,
+                          "child": child}) + "\\n")
+if child:
+    time.sleep(60)
 sys.stdout.write(os.environ.get("FORGE_FAKE_OUT", ""))
 sys.stderr.write(os.environ.get("FORGE_FAKE_ERR", ""))
 sys.exit(1)  # npm audit exits 1 when it finds something: never an error for deps.py
 """
+# On Windows a fake runs through a .cmd file, the way npm.cmd runs npm; %~dp0 is the .cmd file's folder.
+FAKE_CMD = '@echo off\n"%s" "%%~dp0..\\fakes\\%s.py" %%*\n'  # written in text mode: CRLF there
 
 
 def write(folder, relative_path, content="{}"):
@@ -412,19 +422,41 @@ class RunToolTests(unittest.TestCase):
         fake_run.assert_not_called()
 
     def test_timeout_and_no_input(self):
-        done = subprocess.CompletedProcess([], 1, stdout="out", stderr="err")
-        with mock.patch.object(mod.subprocess, "run", return_value=done) as fake_run:
+        with mock.patch.object(mod.subprocess, "Popen") as fake_popen:
+            process = fake_popen.return_value.__enter__.return_value
+            process.communicate.return_value = ("out", "err")
             self.assertEqual(mod.run_tool([sys.executable, "-V"], ".", []), ("out", "err"))
-        kwargs = fake_run.call_args[1]
-        self.assertEqual(kwargs["timeout"], mod.TIMEOUT)
-        self.assertEqual(kwargs["timeout"], 180)
+        kwargs = fake_popen.call_args[1]
+        self.assertEqual(process.communicate.call_args[1]["timeout"], mod.TIMEOUT)
+        self.assertEqual(mod.TIMEOUT, 180)
         self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
         self.assertNotIn("shell", kwargs)
+        self.assertEqual(kwargs["env"]["PYTHONIOENCODING"], "utf-8")  # pip-audit writes UTF-8 on Windows too
+
+    def test_a_batch_file_never_gets_characters_cmd_exe_acts_on(self):
+        """On Windows a .bat or .cmd file runs in cmd.exe: a folder named a&calc&b would start calc."""
+        tools = os.path.join(os.path.abspath(os.sep), "tools")  # C:\tools on Windows
+        for name, path, runs in [("pip-audit.BAT", "C:\\work\\a&calc&b\\requirements.txt", False),
+                                 ("pip-audit.cmd", "C:\\work\\shop (1)\\requirements.txt", False),
+                                 ("pip-audit.cmd", "C:\\Users\\RUNNER~1\\shop\\requirements.txt", True),
+                                 ("pip-audit.exe", "C:\\work\\a&b\\requirements.txt", True)]:
+            program = os.path.join(tools, name)
+            with self.subTest(program=program, path=path), \
+                    mock.patch.object(mod.shutil, "which", return_value=program), \
+                    mock.patch.object(mod.subprocess, "Popen") as fake_popen:
+                fake_popen.return_value.__enter__.return_value.communicate.return_value = ("{}", "")
+                if runs:
+                    self.assertEqual(mod.run_tool(mod.PIP_AUDIT + [path], ".", []), ("{}", ""))
+                else:
+                    with self.assertRaisesRegex(ValueError, "batch file"):
+                        mod.run_tool(mod.PIP_AUDIT + [path], ".", [])
+                    fake_popen.assert_not_called()
+        self.assertTrue(all(not mod.BATCH_UNSAFE.search(arg) for arg in mod.NPM + mod.COMPOSER))  # npm.cmd runs
 
 
-@unittest.skipUnless(os.name == "posix", "fake auditors are shell-less Python scripts")
 class SandboxTests(unittest.TestCase):
-    """deps.main with the real run_tool and fake auditors first on PATH."""
+    """deps.main with the real run_tool and fake auditors first on PATH: Python scripts with a
+    shebang, and on Windows a .cmd file for each (the way npm is npm.cmd there)."""
 
     def setUp(self):
         self.dir = tempfile.mkdtemp()
@@ -432,8 +464,11 @@ class SandboxTests(unittest.TestCase):
         self.bin = os.path.join(self.dir, "bin")
         self.log = os.path.join(self.dir, "log.jsonl")
         for tool in ("npm", "composer", "pip-audit"):
-            path = write(self.bin, tool, FAKE_AUDITOR % sys.executable)
-            os.chmod(path, 0o755)
+            if os.name == "nt":
+                write(os.path.join(self.dir, "fakes"), tool + ".py", FAKE_AUDITOR % sys.executable)
+                write(self.bin, tool + ".cmd", FAKE_CMD % (sys.executable, tool))
+            else:
+                os.chmod(write(self.bin, tool, FAKE_AUDITOR % sys.executable), 0o755)
         env = {"PATH": self.bin + os.pathsep + os.environ.get("PATH", ""),
                "FORGE_FAKE_LOG": self.log, "FORGE_FAKE_OUT": "", "FORGE_FAKE_ERR": ""}
         patcher = mock.patch.dict(os.environ, env)
@@ -504,6 +539,24 @@ class SandboxTests(unittest.TestCase):
         done.stderr.close()
         self.assertEqual(done.wait(timeout=60), 1)
         self.assertNotIn("Traceback", error)
+
+    def test_a_hung_auditor_is_stopped_with_what_it_started(self):
+        """On Windows npm.cmd's cmd.exe runs node.exe: a timeout stops both, so nothing keeps the pipes or
+        the sandbox open, and deps.py goes on at the time limit."""
+        write(self.project, "package.json", '{"name": "shop"}')
+        write(self.project, "package-lock.json", '{"lockfileVersion": 3}')
+        os.environ["FORGE_FAKE_HANG"] = "1"
+        started = time.monotonic()
+        with mock.patch.object(mod, "TIMEOUT", 3):
+            code, out = run(self.project, "--json")
+        took = time.monotonic() - started
+        [call] = self.calls()
+        with contextlib.suppress(OSError):  # stopped already, unless the fix is missing
+            os.kill(call["child"], signal.SIGTERM)
+        self.assertLess(took, 30)
+        [item] = json.loads(out)["not_checked"]
+        self.assertEqual(item["reason"], "npm could not check it (it took over 3 seconds: try again later)")
+        self.assertFalse(os.path.exists(call["cwd"]))  # the sandbox is gone: nothing runs in it any more
 
     def test_lockfile_without_package_json_is_not_checked(self):
         write(self.project, "package-lock.json", '{"lockfileVersion": 3}')
@@ -728,12 +781,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn(b"app\\udcff", raw.getvalue())
 
-    @unittest.skipUnless(hasattr(os, "symlink"), "needs symlinks")
     def test_symlinks_are_not_followed(self):
         target = write(self.dir, "elsewhere/package-lock.json")
         write(self.dir, "app/README.md", "hi")
-        os.symlink(target, os.path.join(self.dir, "app", "package-lock.json"))
-        os.symlink(os.path.join(self.dir, "elsewhere"), os.path.join(self.dir, "app", "linked"))
+        symlink(self, target, os.path.join(self.dir, "app", "package-lock.json"))
+        symlink(self, os.path.join(self.dir, "elsewhere"), os.path.join(self.dir, "app", "linked"))
         run(os.path.join(self.dir, "app"))
         self.assertEqual(self.calls, [])
 
@@ -761,8 +813,18 @@ class ScriptTests(unittest.TestCase):
         self.assertNotRegex(source, r"\b(eval|exec)\s*\(|\bpickle\b")
         imports = sorted(line.split()[1] for line in source.splitlines()
                          if line.startswith(("import ", "from ")))
-        self.assertEqual(imports, ["argparse", "fnmatch", "json", "os", "re", "shutil",
+        self.assertEqual(imports, ["argparse", "errno", "fnmatch", "json", "os", "re", "shutil",
                                    "subprocess", "sys", "tempfile", "textwrap"])
+
+
+class ConsoleTests(unittest.TestCase):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        with tempfile.TemporaryDirectory() as folder:
+            lock = write(folder, os.path.join("caf\u00e9 \u2192", "yarn.lock"), "")
+            code, out, err = run_cp1252(mod.__file__, folder)
+        self.assertEqual(code, 0, err)
+        self.assertIn("  - %s: Yarn is not run here" % lock.replace("\u2192", "\\u2192"), out)
 
 
 if __name__ == "__main__":

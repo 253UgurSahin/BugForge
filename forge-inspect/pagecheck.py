@@ -259,6 +259,7 @@ def format_human(findings, summary, intro):  # the intro, one block per finding,
 
 def main(argv=None):
     """Read the command line, read or load the page, print the report and return the exit code."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Passive check of one web page (SEO, accessibility, speed).")
     parser.add_argument("url", nargs="?", help="http:// or https:// address of the page to load once")
     parser.add_argument("--file", help="check a saved HTML file instead (no network)")

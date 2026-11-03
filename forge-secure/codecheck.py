@@ -16,6 +16,7 @@ it could not be read (an incomplete scan).
 """
 
 import argparse
+import errno
 import json
 import os
 import re
@@ -265,6 +266,7 @@ def format_human(findings, summary):
 
 def main(argv=None):
     """Check the path from the command line, print the report and return the exit code."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Quick first-pass check for risky code.")
     parser.add_argument("path", help="file or folder to check")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
@@ -283,7 +285,9 @@ def main(argv=None):
     try:
         print(json.dumps({"findings": findings, "summary": shown, "note": FOOTER}, indent=2)
               if args.json else format_human(findings, summary), flush=True)
-    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+    except OSError as error:  # the reader stopped early (| head): end quietly, no traceback
+        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
+            raise
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     if stats["unreadable"]:
         return 2  # some code was never read, so the result cannot be trusted

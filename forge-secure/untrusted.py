@@ -19,6 +19,7 @@ that is missing or unreadable (the other files are still reported).
 import argparse
 import bisect
 import collections
+import errno
 import html
 import json
 import os
@@ -221,8 +222,7 @@ def make_findings(hits, name):
     for number, rule, shown in sorted(hits, key=lambda hit: hit[0]):
         listed[rule] += 1
         if listed[rule] <= MAX_SAME:
-            findings.append(dict(rule._asdict(), where="%s:%d" % (name, number), excerpt=shown,
-                                 file=name, line=number))
+            findings.append(dict(rule._asdict(), where="%s:%d" % (name, number), excerpt=shown, file=name, line=number))
         if listed[rule] == MAX_SAME and total[rule] > MAX_SAME:
             findings[-1]["more"] = total[rule] - MAX_SAME
     return findings
@@ -264,8 +264,7 @@ def format_human(findings, summary):
 
 def main(argv=None):
     """Check the files, print the report, and return the exit code (see the top of this file)."""
-    if hasattr(sys.stdout, "reconfigure"):  # print \xe9 where the terminal cannot show a character
-        sys.stdout.reconfigure(errors="backslashreplace")
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Flag prompt-injection signs in fetched text.")
     parser.add_argument("files", nargs="+", metavar="FILE", help="file to check, - for stdin")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
@@ -291,7 +290,9 @@ def main(argv=None):
     report = {"findings": findings, "summary": summary, "note": FOOTER}
     try:
         print(json.dumps(report, indent=2) if args.json else format_human(findings, summary), flush=True)
-    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+    except OSError as error:  # the reader stopped early (| head): end quietly, no traceback
+        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
+            raise
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 2 if not_checked else (1 if failed else 0)  # 2: some files could not be checked
 

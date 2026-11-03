@@ -21,7 +21,7 @@ import urllib.error
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `python3 -m unittest tests.test_getpage` works
-from _load import load  # noqa: E402
+from _load import load, run_cp1252  # noqa: E402
 
 mod = load("forge-inspect", "getpage")
 
@@ -127,6 +127,13 @@ class GetPageTests(unittest.TestCase):
         with open(self.out, encoding="utf-8") as handle:
             self.assertEqual(handle.read(), PAGE)
         self.assertEqual(out, "Saved %s/ (HTTP 200, %.1f KB) in %s.\n" % (self.base, len(PAGE) / 1024.0, self.out))
+
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        out = os.path.join(self.dir, "caf\u00e9 \u2192.html")
+        code, stdout, err = run_cp1252(mod.__file__, self.base + "/", out)
+        self.assertEqual(code, 0, err)
+        self.assertIn(" in %s." % out.replace("\u2192", "\\u2192"), stdout)
 
     def test_json_output(self):
         code, out, err = run(self.base + "/", self.out, "--json")

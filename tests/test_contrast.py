@@ -12,7 +12,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import ROOT, load  # noqa: E402
+from _load import ROOT, load, run_cp1252  # noqa: E402
 
 contrast = load("forge-design", "contrast")
 TEMPLATE = os.path.join(ROOT, "forge-design", "tokens.json")
@@ -362,6 +362,19 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as caught:
             run()
         self.assertEqual(caught.exception.code, 2)
+
+
+class ConsoleTests(unittest.TestCase):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "tokens.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"color": {"bg": "#ffffff", "text-caf\u00e9-\u2192": "#000000"},
+                           "pairs": [["text-caf\u00e9-\u2192", "bg"]]}, handle)
+            code, out, err = run_cp1252(contrast.__file__, path)
+        self.assertEqual(code, 0, err)
+        self.assertIn("text-caf\u00e9-\\u2192 on bg", out)
 
 
 if __name__ == "__main__":

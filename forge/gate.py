@@ -43,6 +43,7 @@ MODES = {
 }
 PHASES = list(dict.fromkeys(phase for phases in MODES.values() for phase in phases))
 OPTIONAL = ("compare", "inspect")  # may be skipped with the user's reason; secure never
+PYTHON = shlex.quote(sys.executable) if os.name == "nt" and sys.executable else "python3"  # no python3 on Windows
 PLACEHOLDER = re.compile(r"^(<.*>|\{\{.*\}\}|TEXT)$", re.S)  # copied from the docs, not said by the user
 TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:[+-]\d\d:\d\d)?\Z")  # as this script writes it
 # What a terminal hides or acts on (control and format characters such as a zero-width space, line
@@ -155,7 +156,7 @@ def exit_checks(root, phase, state=None, as_json=False):
 
 def next_step(state):
     """The next step in plain words, with the commands to run."""
-    waiting, gate = still_open(state), "python3 " + shlex.quote(os.path.abspath(__file__))
+    waiting, gate = still_open(state), PYTHON + " " + shlex.quote(os.path.abspath(__file__))
     if not waiting:
         return "All phases are done. Tell the user what they have now, what is left, and that shipping is their step."
     text = ("Next: {0}. Run /forge-{0}, then {1} check {0}. Show the user a checkpoint (5 plain lines) and "

@@ -14,6 +14,7 @@ or with --strict anything not checked; 2 = PATH is not a folder that exists and 
 """
 
 import argparse
+import errno
 import fnmatch
 import json
 import os
@@ -28,6 +29,8 @@ SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
 SEVERITY_WORDS = {"critical": "critical", "high": "high", "moderate": "medium",
                   "medium": "medium", "low": "low", "info": "low"}  # npm's and Composer's words
 TIMEOUT = 180  # seconds per auditor run
+TASKKILL = os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "System32", "taskkill.exe")  # by full path
+BATCH_UNSAFE = re.compile(r'["%!^&|<>()\r\n]')  # what cmd.exe acts on in a .bat or .cmd file's arguments
 SKIP_FOLDERS = set(".git node_modules vendor venv .venv __pycache__ dist build .next .nuxt out"
                    " coverage storage/framework .cache .idea .vscode".split())
 NPM = ["npm", "audit", "--json", "--registry=https://registry.npmjs.org/"]
@@ -162,16 +165,24 @@ def run_tool(cmd, folder, copy):
     program = shutil.which(cmd[0])
     if program is None or os.path.dirname(os.path.abspath(program)) == os.getcwd():
         return None  # never a program in the current folder (Windows looks there first)
+    if program.lower().endswith((".bat", ".cmd")) and any(BATCH_UNSAFE.search(arg) for arg in cmd[1:]):
+        raise ValueError("it is a batch file, and cmd.exe would act on characters in the path: run it there by hand")
     with tempfile.TemporaryDirectory(prefix="forge-deps-") as sandbox:
         for name in copy:
             shutil.copyfile(os.path.join(folder, name), os.path.join(sandbox, name))
         if cmd[0] == "composer":
-            with open(os.path.join(sandbox, "composer.json"), "w") as handle:
+            with open(os.path.join(sandbox, "composer.json"), "w", encoding="utf-8") as handle:
                 handle.write("{}\n")
-        done = subprocess.run([os.path.abspath(program)] + cmd[1:], cwd=sandbox,
-                              timeout=TIMEOUT, stdin=subprocess.DEVNULL, capture_output=True,
-                              encoding="utf-8", errors="replace")
-    return done.stdout, done.stderr  # the exit code is ignored: npm exits 1 on findings
+        with subprocess.Popen([os.path.abspath(program)] + cmd[1:], cwd=sandbox, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", errors="replace",
+                              env=dict(os.environ, PYTHONIOENCODING="utf-8")) as process:  # pip-audit: UTF-8
+            try:
+                return process.communicate(timeout=TIMEOUT)  # the exit code is ignored: npm exits 1 on findings
+            except subprocess.TimeoutExpired:
+                if os.name == "nt":  # kill() stops npm.cmd's cmd.exe only, and its node.exe holds the sandbox
+                    subprocess.run([TASKKILL, "/F", "/T", "/PID", str(process.pid)], capture_output=True, timeout=60)
+                process.kill()
+                raise
 
 def read_lock(path):
     """The parsed lockfile, or {} when it cannot be read: then the advice is just less precise."""
@@ -249,6 +260,7 @@ def format_human(findings, not_checked, summary):
 
 def main(argv=None):
     """Read the arguments, check PATH, print the report and return the exit code."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Check dependencies for known security holes.")
     parser.add_argument("path", help="folder to check")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
@@ -271,7 +283,9 @@ def main(argv=None):
     try:
         print(json.dumps(report, indent=2) if args.json
               else format_human(findings, not_checked, summary), flush=True)
-    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+    except OSError as error:  # the reader stopped early (| head): end quietly, no traceback
+        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
+            raise
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 1 if failed else 0
 

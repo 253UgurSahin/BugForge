@@ -394,7 +394,7 @@ class Cli(TempFiles):
 class Output(unittest.TestCase):
     def test_say_survives_a_terminal_without_emoji(self):
         raw = io.BytesIO()
-        stream = io.TextIOWrapper(raw, encoding="ascii")
+        stream = io.TextIOWrapper(raw, encoding="ascii", newline="\n")  # \n, also on Windows: the escape counts here
         bugs.say("B001 Emoji " + chr(0x1F600) + " in the name", stream)
         stream.flush()
         self.assertEqual(raw.getvalue(), b"B001 Emoji " + b"\\" + b"U0001f600 in the name\n")

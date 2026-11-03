@@ -21,7 +21,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `python3 -m unittest tests.test_pagecheck` works
-from _load import load  # noqa: E402
+from _load import load, run_cp1252  # noqa: E402
 
 mod = load("forge-inspect", "pagecheck")
 
@@ -692,6 +692,15 @@ class ConventionTests(unittest.TestCase):
             self.assertIn(words["severity"], mod.SEVERITIES, rule)
             self.assertTrue(all(words.values()), rule)
             self.assertNotIn("\u2014", "".join(words.values()), rule)  # no em dashes
+
+class ConsoleTests(TempFolder):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        path = self.write(GOOD, name="caf\u00e9 \u2192.html")
+        code, out, err = run_cp1252(mod.__file__, "--file", path, "--url", HTTPS_URL)
+        self.assertEqual(code, 0, err)
+        self.assertIn("Checked %s (https://example.com/)" % path.replace("\u2192", "\\u2192"), out)
+
 
 if __name__ == "__main__":
     unittest.main()

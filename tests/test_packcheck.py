@@ -16,7 +16,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import ROOT, load  # noqa: E402
+from _load import ROOT, load, run_cp1252, symlink  # noqa: E402
 
 mod = load("forge-pack", "packcheck")
 compose = load("forge-pack", "composecheck")
@@ -436,11 +436,16 @@ class CommandLineTests(Project):
     def test_a_link_to_a_file_outside_the_folder(self):
         with tempfile.TemporaryDirectory() as outside:
             os.remove(os.path.join(self.dir, "Dockerfile"))
-            os.symlink(write(outside, "Dockerfile", GOOD_DOCKERFILE), os.path.join(self.dir, "Dockerfile"))
+            symlink(self, write(outside, "Dockerfile", GOOD_DOCKERFILE), os.path.join(self.dir, "Dockerfile"))
             self.assertEqual(run(self.dir)[0], 2)
+        os.remove(os.path.join(self.dir, "Dockerfile"))  # the pack's own template: on the Windows runners on D:,
+        template = os.path.join(ROOT, "forge-pack", "templates", "static", "Dockerfile")  # the temp folder on C:
+        symlink(self, template, os.path.join(self.dir, "Dockerfile"))
+        with self.assertRaisesRegex(ValueError, "^Dockerfile is a link to a file outside "):
+            mod.check_project(self.dir)
         os.remove(os.path.join(self.dir, "Dockerfile"))
         write(self.dir, "docker/Dockerfile", GOOD_DOCKERFILE)
-        os.symlink(os.path.join("docker", "Dockerfile"), os.path.join(self.dir, "Dockerfile"))
+        symlink(self, os.path.join("docker", "Dockerfile"), os.path.join(self.dir, "Dockerfile"))
         self.assertEqual(run(self.dir)[0], 0)  # a link inside the folder is fine
 
     def test_a_compose_file_it_cannot_read_is_an_error_not_a_pass(self):
@@ -456,6 +461,25 @@ class CommandLineTests(Project):
     def test_a_bare_arg_gives_no_traceback(self):
         write(self.dir, "Dockerfile", "FROM node:24-alpine\nARG\nUSER node\n")
         self.assertEqual(run(self.dir, "--json")[0], 0)
+
+
+class ConsoleTests(Project):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        write(self.dir, "docker-compose.yml", GOOD_COMPOSE + "  caf\u00e9-\u2192:\n    image: busybox:1.37\n"
+              "    privileged: true\n    restart: unless-stopped\n")
+        code, out, err = run_cp1252(mod.__file__, self.dir)
+        self.assertEqual(code, 1, err)
+        self.assertIn("Service caf\u00e9-\\u2192 runs privileged", out)  # composecheck's words, through packcheck
+
+    def test_composecheck_is_read_in_the_encoding_it_writes(self):
+        """packcheck.py asks composecheck.py for UTF-8 and reads it so: before, it read the pipe in its own
+        encoding, and composecheck's message in another one crashed it."""
+        write(self.dir, "docker-compose.yml", "services:\n  caf\u00e9: {image: busybox:1.37}\n")
+        code, out, err = run_cp1252(mod.__file__, self.dir)
+        self.assertEqual((code, out), (2, ""), err)
+        self.assertIn("error: could not read service caf\u00e9 in docker-compose.yml", err)
+        self.assertNotIn("Traceback", err)
 
 
 if __name__ == "__main__":

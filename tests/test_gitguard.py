@@ -15,7 +15,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import ROOT, load  # noqa: E402
+from _load import ROOT, load, run_cp1252  # noqa: E402
 
 gitguard = load("forge", "gitguard")
 SCRIPT = os.path.join(ROOT, "forge", "gitguard.py")
@@ -133,8 +133,9 @@ class Folder(unittest.TestCase):
     """A temporary folder. Git never looks above it for a repository."""
 
     def setUp(self):
-        self.base = os.path.realpath(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.base)
+        folder = tempfile.TemporaryDirectory()  # its cleanup also removes git's read-only files on Windows
+        self.addCleanup(folder.cleanup)
+        self.base = os.path.realpath(folder.name)
         patcher = mock.patch.dict(os.environ, {"GIT_CEILING_DIRECTORIES": self.base})
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -377,10 +378,9 @@ class Clean(Repo):
         self.assertIn("x<U+000A>PASS: all good (new file)", out)
         self.assertNotIn("\nPASS", out)
 
-    @unittest.skipIf(os.name == "nt", "the monitor command below needs a Unix shell")
     def test_the_repository_config_cannot_start_a_monitor_program(self):
-        marker = os.path.join(self.base, "marker")
-        self.git(self.repo, "config", "core.fsmonitor", "touch '%s'; false" % marker)
+        marker = os.path.join(self.base, "marker")  # git runs the command in its own sh, on Windows too
+        self.git(self.repo, "config", "core.fsmonitor", "touch '%s'; false" % marker.replace(os.sep, "/"))
         self.assertEqual(run(self.repo, "--clean")[0], 0)
         self.assertFalse(os.path.exists(marker), "gitguard let git start core.fsmonitor")
         self.git(self.repo, "status", "--porcelain")  # proof that plain git status starts it
@@ -540,6 +540,21 @@ class BadInput(Folder):
                 code, out, err = run(work)
                 self.assertEqual((code, out), (2, ""))
                 self.assertIn("git %s failed in %s: fatal: boom" % (subcommand, work), err)
+
+
+@unittest.skipUnless(HAS_GIT, "git is not installed")
+class ConsoleTests(Repo):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        self.commit()
+        self.branch("forge/caf\u00e9-\u2192")
+        self.write("caf\u00e9 \u2192 menu.txt")
+        code, out, err = run_cp1252(SCRIPT, self.repo, "--clean")
+        self.assertEqual(code, 1, err)
+        self.assertIn("caf\u00e9 \\u2192 menu.txt (new file)", out)
+        code, out, err = run_cp1252(SCRIPT, self.repo)
+        self.assertEqual(code, 0, err)
+        self.assertIn("PASS: work branch forge/caf\u00e9-\\u2192 in ", out)
 
 
 if __name__ == "__main__":

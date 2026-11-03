@@ -197,7 +197,9 @@ def is_ignored(patterns, name):
 def read(root, name):
     """The text of ROOT/NAME: a regular file of at most 1 MB inside ROOT. A BOM is dropped."""
     path, real_root = os.path.join(root, name), os.path.realpath(root)
-    if os.path.commonpath([os.path.realpath(path), real_root]) != real_root:
+    real = os.path.realpath(path)
+    elsewhere = os.path.splitdrive(real)[0] != os.path.splitdrive(real_root)[0]  # on another drive (Windows)
+    if elsewhere or os.path.commonpath([real, real_root]) != real_root:  # commonpath() fails across drives
         raise ValueError("%s is a link to a file outside %s" % (name, root))
     if not os.path.isfile(path) or os.path.getsize(path) > MAX_BYTES:
         raise ValueError("%s is not a regular file of at most 1 MB" % name)
@@ -208,7 +210,8 @@ def read(root, name):
 def check_compose(root):
     """composecheck.py's JSON report on ROOT. Raises ValueError when it could not check the files."""
     done = subprocess.run([sys.executable, COMPOSECHECK, root, "--json", "--fail-on", "critical"], timeout=TIMEOUT,
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+                          capture_output=True, encoding="utf-8", errors="replace",  # asked for UTF-8, read as
+                          env=dict(os.environ, PYTHONIOENCODING="utf-8"))  # such: Windows pipes are cp1252
     if done.returncode not in (0, 1) or not done.stdout.startswith("{"):
         lines = done.stderr.strip().splitlines() or ["composecheck.py gave no report"]
         raise ValueError(lines[-1].replace("error: ", "", 1))
@@ -269,6 +272,7 @@ def format_human(findings, summary):
 
 
 def main(argv=None):
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Check a project's container setup for unsafe settings.")
     parser.add_argument("path", help="the project folder")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")

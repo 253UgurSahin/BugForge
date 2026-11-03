@@ -16,6 +16,7 @@ Exit codes: 0 = nothing at or above --fail-on (default: high); 1 = a finding at 
 """
 
 import argparse
+import errno
 import http.client
 import json
 import os
@@ -150,16 +151,14 @@ def check_page(headers):
     found = [] if script_rule in csp else [hit("no_csp", where(headers, "Content-Security-Policy"))]
     nonce_or_hash = any(s.startswith(("'nonce-", "'sha")) for s in sources)  # then 'unsafe-inline' is ignored
     unsafe = [s for s in sources if s == "'unsafe-eval'" or (s == "'unsafe-inline'" and not nonce_or_hash)]
-    if unsafe:
-        found.append(hit("unsafe_csp", "Content-Security-Policy: %s %s" % (script_rule, " ".join(unsafe))))
+    found += [hit("unsafe_csp", "Content-Security-Policy: %s %s" % (script_rule, " ".join(unsafe)))] if unsafe else []
     frame_options = {value.strip().lower() for value in get(headers, "x-frame-options").split(",")}
     if "frame-ancestors" not in csp and not frame_options & {"deny", "sameorigin"}:  # browsers ignore ALLOW-FROM
         found.append(hit("no_frame", where(headers, "X-Frame-Options") + ", no CSP frame-ancestors"))
     if get(headers, "x-content-type-options").split(",")[0].strip().lower() != "nosniff":  # the first value counts
         found.append(hit("no_nosniff", where(headers, "X-Content-Type-Options")))
-    for name, rule in [("Referrer-Policy", "no_referrer"), ("Permissions-Policy", "no_permissions")]:
-        if not get(headers, name.lower()).strip():
-            found.append(hit(rule, name + " (missing)"))
+    found += [hit(rule, name + " (missing)") for name, rule in [("Referrer-Policy", "no_referrer"),
+              ("Permissions-Policy", "no_permissions")] if not get(headers, name.lower()).strip()]
     return found
 
 def check_cookie(cookie, https):
@@ -171,8 +170,7 @@ def check_cookie(cookie, https):
     found = [hit("no_secure", where)] if https and "secure" not in flags else []
     if "httponly" not in flags and not CSRF_NAME.search(name):
         found.append(hit("no_httponly", where, "medium" if SESSION_NAME.search(name) else "low"))
-    if "samesite" not in flags:
-        found.append(hit("no_samesite", where))
+    found += [hit("no_samesite", where)] if "samesite" not in flags else []
     return found
 
 def check(headers, url=None, status=None):
@@ -192,9 +190,8 @@ def check(headers, url=None, status=None):
         found.append(hit("short_hsts", where(headers, "Strict-Transport-Security")))
     for cookie in [value for key, value in headers if key == "set-cookie"]:
         found += check_cookie(cookie, https)
-    for name in ["Server", "X-Powered-By"]:
-        if VERSION.search(get(headers, name.lower())):
-            found.append(hit("version", where(headers, name)))
+    found += [hit("version", where(headers, name)) for name in ["Server", "X-Powered-By"]
+              if VERSION.search(get(headers, name.lower()))]
     return sorted(found, key=lambda f: SEVERITIES.index(f["severity"]))
 
 class KeepEveryAnswer(urllib.request.HTTPErrorProcessor):
@@ -255,6 +252,7 @@ def format_human(findings, summary, intro):
 
 def main(argv=None):
     """Read the command line, get the headers once, print the report and return the exit code."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Passive check of a site's HTTP security headers (one GET).")
     parser.add_argument("url", nargs="?", help="http:// or https:// address to load once and check")
     parser.add_argument("--file", help="check saved headers instead (no network)")
@@ -292,7 +290,9 @@ def main(argv=None):
     try:
         print(json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
               else format_human(findings, summary, intro), flush=True)
-    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+    except OSError as error:  # the reader stopped early (| head): end quietly, no traceback
+        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
+            raise
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 1 if failed else 0
 

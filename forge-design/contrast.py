@@ -260,6 +260,7 @@ def read_input(inputs):
 
 def main(argv=None):
     """Run the check from the command line. Returns the exit code: 0, 1 or 2 (see the top)."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Check the WCAG AA colour contrast of design tokens.")
     parser.add_argument("inputs", nargs="+", metavar="TOKENS_OR_COLOURS",
                         help="a tokens.json file, or two colours: text and background")

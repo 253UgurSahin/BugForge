@@ -13,7 +13,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # also lets "-m unittest tests.test_codecheck" work
-from _load import load  # noqa: E402
+from _load import load, run_cp1252, symlink  # noqa: E402
 
 codecheck = load("forge-secure", "codecheck")
 SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forge-secure", "codecheck.py")
@@ -375,11 +375,8 @@ class FolderTests(unittest.TestCase):
         outside = tempfile.TemporaryDirectory()
         self.addCleanup(outside.cleanup)
         make_tree(outside.name, {"evil.js": "eval(a)\n", "dir/inner.js": "eval(a)\n"})
-        try:
-            os.symlink(os.path.join(outside.name, "evil.js"), os.path.join(self.root, "link.js"))
-            os.symlink(os.path.join(outside.name, "dir"), os.path.join(self.root, "linkdir"))
-        except (OSError, NotImplementedError):
-            self.skipTest("symlinks not supported here")
+        symlink(self, os.path.join(outside.name, "evil.js"), os.path.join(self.root, "link.js"))
+        symlink(self, os.path.join(outside.name, "dir"), os.path.join(self.root, "linkdir"))
         self.assertEqual(self.wheres(self.root), [])
 
     def test_blade_vue_and_svelte_files_are_checked(self):
@@ -439,7 +436,8 @@ class FolderTests(unittest.TestCase):
         self.assertIn("Nothing was checked", out)
         self.assertIn("INCOMPLETE, so not a pass. Could not read: %s (Permission denied)" % self.root, out)
 
-    @unittest.skipUnless(hasattr(os, "geteuid") and os.geteuid() != 0, "needs a non-root user for chmod")
+    @unittest.skipUnless(hasattr(os, "geteuid") and os.geteuid() != 0,
+                         "needs POSIX permissions and a non-root user: chmod 0 locks no folder on Windows or for root")
     def test_unreadable_folder_for_real(self):
         make_tree(self.root, {"locked/a.php": "<?php eval($_GET['x']);\n", "b.py": "eval(x)\n"})
         locked = os.path.join(self.root, "locked")
@@ -531,9 +529,8 @@ class MainTests(unittest.TestCase):
         self.assertEqual((code, out), (2, ""))
         self.assertIn("does not exist", err)
 
-    @unittest.skipUnless(os.path.exists("/dev/null"), "needs /dev/null")
     def test_device_is_exit_2(self):
-        self.assertEqual(run_main("/dev/null")[0], 2)
+        self.assertEqual(run_main(os.devnull)[0], 2)  # /dev/null, or nul on Windows
 
     @unittest.skipUnless(hasattr(os, "mkfifo"), "needs named pipes")
     def test_named_pipe_is_exit_2_and_does_not_hang(self):
@@ -599,7 +596,8 @@ class ConventionTests(unittest.TestCase):
         self.assertLessEqual(len(self.source.splitlines()), 300)  # the spec's hard limit
         self.assertTrue(self.source.startswith("#!/usr/bin/env python3\n"))
         imports = sorted(line for line in self.source.splitlines() if line.startswith(("import ", "from ")))
-        self.assertEqual(imports, ["import argparse", "import json", "import os", "import re", "import sys"])
+        self.assertEqual(imports, ["import argparse", "import errno", "import json", "import os", "import re",
+                                   "import sys"])
 
     def test_runs_on_python_3_9(self):
         ast.parse(self.source, feature_version=(3, 9))
@@ -608,6 +606,16 @@ class ConventionTests(unittest.TestCase):
         for node in ast.walk(ast.parse(self.source)):
             if isinstance(node, ast.FunctionDef):
                 self.assertTrue(ast.get_docstring(node), node.name)
+
+
+class ConsoleTests(unittest.TestCase):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        with tempfile.TemporaryDirectory() as root:
+            make_tree(root, {"caf\u00e9 \u2192.py": "eval(x)\n"})
+            code, out, err = run_cp1252(SCRIPT, root)
+        self.assertEqual(code, 1, err)
+        self.assertIn("where: caf\u00e9 \\u2192.py:1", out)
 
 
 if __name__ == "__main__":

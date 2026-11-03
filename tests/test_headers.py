@@ -24,7 +24,7 @@ import urllib.error
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `python3 -m unittest tests.test_headers` works
-from _load import load  # noqa: E402
+from _load import load, run_cp1252  # noqa: E402
 
 mod = load("forge-secure", "headers")
 
@@ -705,12 +705,22 @@ class ConventionTests(unittest.TestCase):
             elif isinstance(node, ast.ImportFrom):
                 imported.add(node.module.split(".")[0])
         stdlib = getattr(sys, "stdlib_module_names",
-                         {"argparse", "http", "json", "os", "re", "socket", "ssl", "sys", "threading", "urllib"})
+                         {"argparse", "errno", "http", "json", "os", "re", "socket", "ssl", "sys", "threading",
+                          "urllib"})
         self.assertLessEqual(imported, set(stdlib))
 
     def test_the_get_uses_the_timeout(self):
         self.assertIn("timeout=TIMEOUT", self.source)
         self.assertIn("join(TIMEOUT)", self.source)
+
+
+class ConsoleTests(TempFolder):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        path = self.write("HTTP/1.1 200 OK\nServer: caf\u00e9 \u2192/1.2\n")
+        code, out, err = run_cp1252(mod.__file__, "--file", path, "--url", HTTPS_URL)
+        self.assertEqual(code, 0, err)  # only medium and low findings
+        self.assertIn("where: Server: caf\u00e9 \\u2192/1.2", out)
 
 
 if __name__ == "__main__":

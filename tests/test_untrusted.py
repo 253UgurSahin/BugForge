@@ -551,8 +551,9 @@ class ConventionTests(unittest.TestCase):
         self.assertLessEqual(len(source.splitlines()), 300)  # the spec's hard limit
         self.assertTrue(source.startswith("#!/usr/bin/env python3\n"))
         imports = sorted(line for line in source.splitlines() if line.startswith(("import ", "from ")))
-        self.assertEqual(imports, ["import argparse", "import bisect", "import collections", "import html",
-                                   "import json", "import os", "import re", "import sys", "import unicodedata"])
+        self.assertEqual(imports, ["import argparse", "import bisect", "import collections", "import errno",
+                                   "import html", "import json", "import os", "import re", "import sys",
+                                   "import unicodedata"])
 
     def test_scanner_source_has_no_hidden_characters(self):
         for path in (SCRIPT, os.path.abspath(__file__)):

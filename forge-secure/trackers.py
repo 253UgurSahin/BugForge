@@ -19,6 +19,7 @@ such path, or something not checked (unreadable, or a named file that is binary 
 
 import argparse
 import collections
+import errno
 import json
 import os
 import re
@@ -241,6 +242,8 @@ def format_human(report):
 
 def main(argv=None):
     """Run the scan from the command line. Returns the exit code: 0, 1 or 2 (see the top)."""
+    # What a cp1252 pipe (Windows) cannot show comes out as an escape, not a crash.
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")
     parser = argparse.ArgumentParser(description="List the third-party services in the code.")
     parser.add_argument("path", help="file or folder to check")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
@@ -254,7 +257,9 @@ def main(argv=None):
     report = make_report(places, checked, not_checked, args.fail_on)
     try:
         print(json.dumps(report, indent=2) if args.json else format_human(report), flush=True)
-    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+    except OSError as error:  # the reader stopped early (| head): end quietly, no traceback
+        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
+            raise
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     if not_checked:
         return 2  # part of the project was not checked, so the list may be incomplete

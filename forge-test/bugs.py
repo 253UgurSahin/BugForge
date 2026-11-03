@@ -35,6 +35,7 @@ Exit codes:
 
 import argparse
 import codecs
+import errno
 import json
 import os
 import re
@@ -245,7 +246,9 @@ def say(text, stream=None):
     try:
         print(text.encode(encoding, "backslashreplace").decode(encoding), file=stream)
         stream.flush()
-    except BrokenPipeError:  # send the rest to nowhere, so the exit code still tells the verdict
+    except OSError as error:  # the reader stopped: send the rest to nowhere, so the exit code still tells the verdict
+        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
+            raise
         try:
             os.dup2(os.open(os.devnull, os.O_WRONLY), stream.fileno())
         except (OSError, ValueError, AttributeError):

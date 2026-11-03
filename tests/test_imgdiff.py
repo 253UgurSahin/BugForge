@@ -16,7 +16,7 @@ import zlib
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import load  # noqa: E402
+from _load import load, run_cp1252, symlink  # noqa: E402
 
 imgdiff = load("forge-diff", "imgdiff")
 WHITE = (255, 255, 255)
@@ -380,7 +380,7 @@ class Cli(TempFolder):
         imgdiff.write_png(self.path("a.png"), *page())
         before = pixels(self.path("a.png"))
         os.link(self.path("a.png"), self.path("hard.png"))
-        os.symlink(self.path("a.png"), self.path("soft.png"))
+        symlink(self, self.path("a.png"), self.path("soft.png"))
         for out in ("a.png", "hard.png", "soft.png", os.path.join(self.folder, ".", "a.png")):
             with self.subTest(out=out), contextlib.redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit) as caught:
@@ -407,6 +407,17 @@ class Cli(TempFolder):
         code, out, err = self.run_main(self.path("w.png"), self.path("w.png"))
         self.assertEqual((code, out), (2, ""))
         self.assertIn("nothing to compare", err)
+
+
+class ConsoleTests(TempFolder):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        original, clone = self.path("caf\u00e9 \u2192 a.png"), self.path("caf\u00e9 \u2192 b.png")
+        imgdiff.write_png(original, *page())
+        imgdiff.write_png(clone, *page())
+        code, out, err = run_cp1252(imgdiff.__file__, original, clone)
+        self.assertEqual(code, 0, err)
+        self.assertIn(original.replace("\u2192", "\\u2192") + " vs ", out)
 
 
 if __name__ == "__main__":

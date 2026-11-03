@@ -17,7 +17,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import load  # noqa: E402
+from _load import load, run_cp1252, symlink  # noqa: E402
 
 mod = load("forge-secure", "secretscan")
 
@@ -66,8 +66,9 @@ def titles(text):
 
 class TempFolder(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.dir)
+        folder = tempfile.TemporaryDirectory()  # its cleanup also removes git's read-only files on Windows
+        self.addCleanup(folder.cleanup)
+        self.dir = folder.name
 
 
 class RuleTests(unittest.TestCase):
@@ -374,13 +375,12 @@ class WalkTests(TempFolder):
         self.assertEqual((stats["files_checked"], stats["files_skipped"]), (0, 2))
         self.assertIn("Files checked: 0, skipped: 2 (binary or over 1 MB). No findings.", run(self.dir)[1])
 
-    @unittest.skipUnless(hasattr(os, "symlink"), "needs symlinks")
     def test_symlinks_are_not_followed(self):
         outside = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, outside)
         write(outside, "leak.txt", "key = " + STRIPE_LIVE + "\n")
-        os.symlink(os.path.join(outside, "leak.txt"), os.path.join(self.dir, "link.txt"))
-        os.symlink(outside, os.path.join(self.dir, "linked_folder"))
+        symlink(self, os.path.join(outside, "leak.txt"), os.path.join(self.dir, "link.txt"))
+        symlink(self, outside, os.path.join(self.dir, "linked_folder"))
         self.assertEqual(mod.scan_path(self.dir),
                          ([], {"files_checked": 0, "files_skipped": 0, "unreadable": []}))
 
@@ -545,6 +545,15 @@ class ConventionTests(unittest.TestCase):
     def test_this_test_file_and_the_script_have_no_secrets(self):
         for path in [__file__, mod.__file__]:
             self.assertEqual(mod.scan_path(path)[0], [], path)
+
+
+class ConsoleTests(TempFolder):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        path = write(self.dir, "caf\u00e9 \u2192.php", "$key = '" + STRIPE_LIVE + "';\n")
+        code, out, err = run_cp1252(mod.__file__, self.dir)
+        self.assertEqual(code, 1, err)
+        self.assertIn("where: %s:1" % path.replace("\u2192", "\\u2192"), out)
 
 
 if __name__ == "__main__":

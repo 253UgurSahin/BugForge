@@ -106,3 +106,6 @@ form `../forge-secure/scope.py`. Claude Code tells you each skill's base
 directory; turn the path into an absolute one from there. Run every script
 from the root of the user's project, so `.` and `forge-work/` mean the
 project, not the skill pack.
+
+Where there is no `python3` (Windows), run the same command with `py -3`
+or `python`.

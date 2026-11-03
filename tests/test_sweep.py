@@ -14,7 +14,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import ROOT, load  # noqa: E402
+from _load import ROOT, load, symlink  # noqa: E402
 
 sweep = load("forge-brand", "sweep")
 SCRIPT = os.path.join(ROOT, "forge-brand", "sweep.py")
@@ -138,17 +138,13 @@ class Skips(Project):
         self.assertEqual(summary["files_skipped"], 1)  # logo.png
         self.assertNotIn(os.path.join("public", "logo.png"), {f["file"] for f in findings})
 
-    @unittest.skipUnless(hasattr(os, "symlink"), "needs symlinks")
     def test_symlinks_are_not_followed_but_their_names_are_checked(self):
         outside = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, outside)
         put(outside, "secret.txt", "calendly\n")
-        try:
-            os.symlink(os.path.join(outside, "secret.txt"), os.path.join(self.root, "src", "plain-link"))
-            os.symlink(outside, os.path.join(self.root, "src", "folder-link"))
-            os.symlink(outside, os.path.join(self.root, "src", "calendly-link"))
-        except OSError:
-            self.skipTest("symlinks are not allowed here")
+        symlink(self, os.path.join(outside, "secret.txt"), os.path.join(self.root, "src", "plain-link"))
+        symlink(self, outside, os.path.join(self.root, "src", "folder-link"))
+        symlink(self, outside, os.path.join(self.root, "src", "calendly-link"))
         files = {f["file"] for f in self.findings()}
         self.assertNotIn(os.path.join("src", "plain-link"), files)
         self.assertFalse(any("folder-link" in f or "secret.txt" in f for f in files))

@@ -13,7 +13,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import ROOT, load  # noqa: E402
+from _load import ROOT, load, run_cp1252  # noqa: E402
 
 parity = load("forge-diff", "parity")
 SCRIPT = os.path.join(ROOT, "forge-diff", "parity.py")
@@ -343,6 +343,16 @@ class Visual(TempFolder):
             self.assertEqual(imgdiff.main([picture, picture, "--json"]), 0)
         report = write(self.folder, "S01.diff.json", out.getvalue())
         self.assertEqual(parity.visual_scores([report]), [{"file": picture, "score": 100.0}])
+
+
+class ConsoleTests(TempFolder):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        path = write(self.folder, "arrow.csv", "feature,area,priority,original,clone,notes\n"
+                     "Boek \u2192 betaal,caf\u00e9,must,yes,no,\nPick a time slot,booking page,must,yes,yes,\n")
+        code, out, err = run_cp1252(SCRIPT, path)
+        self.assertEqual(code, 1, err)  # a must-have is not built
+        self.assertIn("- [must] caf\u00e9: Boek \\u2192 betaal (not built)", out)
 
 
 if __name__ == "__main__":

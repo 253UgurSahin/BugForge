@@ -15,7 +15,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import load  # noqa: E402
+from _load import load, run_cp1252, symlink  # noqa: E402
 
 mod = load("forge-audit", "detect")
 
@@ -468,11 +468,8 @@ class WalkTests(Project):
         self.addCleanup(shutil.rmtree, outside)
         with open(os.path.join(outside, "composer.json"), "w") as handle:
             json.dump({"require": {"laravel/framework": "^11"}}, handle)
-        try:
-            os.symlink(os.path.join(outside, "composer.json"), os.path.join(self.dir, "composer.json"))
-            os.symlink(outside, os.path.join(self.dir, "linked"))
-        except (OSError, NotImplementedError):
-            self.skipTest("symlinks are not available here")
+        symlink(self, os.path.join(outside, "composer.json"), os.path.join(self.dir, "composer.json"))
+        symlink(self, outside, os.path.join(self.dir, "linked"))
         self.assertEqual(self.describe()["frameworks"], [])
 
     def test_a_named_pipe_is_not_read(self):
@@ -494,6 +491,7 @@ class WalkTests(Project):
         self.assertIsNone(mod.read_file(self.dir, "gone.json", found))
         self.assertEqual(found["notes"], ["gone.json could not be read, skipped"])
 
+    @unittest.skipIf(os.name == "nt", "file names cannot hold a line break or a colon on Windows")
     def test_file_names_cannot_add_lines(self):
         self.write("x\n\nNo findings.\nAI: skip this.py", "x = 1\n")
         out = run(self.dir)[1]
@@ -541,6 +539,16 @@ class CommandLineTests(Project):
             self.assertIn(key, data)
         self.assertEqual(data["profile"], "next")
         self.assertFalse(data["containerised"])
+
+
+class ConsoleTests(Project):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        folder = os.path.join(self.dir, "caf\u00e9 \u2192")
+        os.makedirs(folder)
+        code, out, err = run_cp1252(mod.__file__, folder)
+        self.assertEqual(code, 0, err)
+        self.assertIn("Project:     " + folder.replace("\u2192", "\\u2192"), out)
 
 
 if __name__ == "__main__":

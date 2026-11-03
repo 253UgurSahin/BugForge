@@ -272,6 +272,7 @@ def render_text(report, name_a, name_b):
 
 def main(argv=None):
     """Compare from the command line. Returns the exit code: 0 or 2 (see the top)."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Compare the layout of two screenshots of one screen.")
     parser.add_argument("original", help="screenshot of the original app (PNG)")
     parser.add_argument("clone", help="the same screen in your clone, same viewport and state (PNG)")

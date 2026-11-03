@@ -29,6 +29,7 @@ Exit codes:
 """
 
 import argparse
+import errno
 import ipaddress
 import json
 import os
@@ -219,6 +220,8 @@ def format_human(result):
 
 def main(argv=None):
     """Read the arguments, decide, and print the verdict. Returns the exit code."""
+    # What a cp1252 pipe (Windows) cannot show comes out as an escape, not a crash.
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")
     parser = argparse.ArgumentParser(description="May active tests run against a target?")
     parser.add_argument("target", help="URL, host, host:port or IP address")
     parser.add_argument("--scope", help="scope file (default: forge-work/scope.json here)")
@@ -242,7 +245,9 @@ def main(argv=None):
                   scope_file_found=found, own_domains=own_domains)
     try:
         print(json.dumps(result, indent=2) if args.json else format_human(result), flush=True)
-    except BrokenPipeError:  # the reader stopped early (| head): end quietly, no traceback
+    except OSError as error:  # the reader stopped early (| head): end quietly, no traceback
+        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
+            raise
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 0 if result["allowed"] else 1
 

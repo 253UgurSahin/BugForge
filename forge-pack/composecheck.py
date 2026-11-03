@@ -217,7 +217,9 @@ def check_compose(text, path, main=None):
 def read(root, name):
     """The text of ROOT/NAME: a regular file of at most 1 MB inside ROOT. A BOM is dropped."""
     path, real_root = os.path.join(root, name), os.path.realpath(root)
-    if os.path.commonpath([os.path.realpath(path), real_root]) != real_root:
+    real = os.path.realpath(path)
+    elsewhere = os.path.splitdrive(real)[0] != os.path.splitdrive(real_root)[0]  # on another drive (Windows)
+    if elsewhere or os.path.commonpath([real, real_root]) != real_root:  # commonpath() fails across drives
         raise ValueError("%s is a link to a file outside %s" % (name, root))
     if not os.path.isfile(path) or os.path.getsize(path) > MAX_BYTES:
         raise ValueError("%s is not a regular file of at most 1 MB" % name)
@@ -259,6 +261,7 @@ def format_human(findings, summary):
 
 
 def main(argv=None):
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Check docker-compose files for unsafe settings.")
     parser.add_argument("path", help="the project folder")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")

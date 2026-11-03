@@ -262,6 +262,7 @@ def render(result, markdown=False):
 
 def main(argv=None):
     """Run the score from the command line. Returns the exit code: 0, 1 or 2 (see the top)."""
+    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
     parser = argparse.ArgumentParser(description="Feature parity score from forge-work/features.csv.")
     parser.add_argument("matrix", help="the feature matrix, normally forge-work/features.csv")
     parser.add_argument("--visual", nargs="+", default=[], metavar="JSON",

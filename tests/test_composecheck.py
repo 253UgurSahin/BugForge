@@ -14,7 +14,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import load  # noqa: E402
+from _load import ROOT, load, run_cp1252, symlink  # noqa: E402
 
 mod = load("forge-pack", "composecheck")
 
@@ -214,6 +214,14 @@ class CommandLineTests(unittest.TestCase):
         with open(os.path.join(self.dir, name), "w", encoding=encoding) as handle:
             handle.write(content)
 
+    def test_a_link_to_a_file_outside_the_folder(self):
+        """Also one on another drive (Windows: the runners have the checkout on D: and the temp folder on C:)."""
+        template = os.path.join(ROOT, "forge-pack", "templates", "static", "docker-compose.yml")
+        symlink(self, template, os.path.join(self.dir, "docker-compose.yml"))
+        with self.assertRaisesRegex(ValueError, "^docker-compose.yml is a link to a file outside "):
+            mod.check_folder(self.dir)
+        self.assertEqual(run(self.dir)[0], 2)
+
     def test_exit_codes_json_and_summary(self):
         build = "build:\n      context: .\n      target: app"
         self.write("docker-compose.yml", GOOD_COMPOSE.replace("build: .", build))
@@ -266,6 +274,17 @@ class CommandLineTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as raised:
             run(self.dir, "--fail-on", "nope")
         self.assertEqual(raised.exception.code, 2)
+
+
+class ConsoleTests(unittest.TestCase):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        with tempfile.TemporaryDirectory() as folder:
+            with open(os.path.join(folder, "docker-compose.yml"), "w", encoding="utf-8") as handle:
+                handle.write(service("    privileged: true\n", name="caf\u00e9-\u2192"))
+            code, out, err = run_cp1252(mod.__file__, folder)
+        self.assertEqual(code, 1, err)
+        self.assertIn("Service caf\u00e9-\\u2192 runs privileged", out)
 
 
 if __name__ == "__main__":

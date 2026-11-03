@@ -8,6 +8,8 @@ import contextlib
 import io
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -417,8 +419,20 @@ class StatusTests(Project):
         self.assertIn('approved: "go"', lines[2])
         self.assertIn('reason: "nothing to compare"', lines[3])
         self.assertIn("/forge-plan", lines[4])
-        self.assertIn("Next: plan. Run /forge-plan, then python3 ", out)
+        self.assertIn("Next: plan. Run /forge-plan, then %s " % gate.PYTHON, out)
         self.assertIn("done plan --approved '<their exact words>'", out)
+
+    def test_the_printed_commands_run_on_this_machine(self):
+        """python3 on macOS and Linux. Windows has no python3 (only python and py): there the commands
+        start with this Python's own path, quoted for Git Bash, the shell Claude Code uses there."""
+        self.gate("init", "--mode", "improve")
+        _, out, _ = self.gate("status")
+        command = shlex.split(re.search(r"then (.+?) check audit\.", out).group(1))
+        self.assertEqual(command, [sys.executable if os.name == "nt" else "python3", SCRIPT])
+        done = subprocess.run(command + ["status"], cwd=self.root, timeout=120, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, universal_newlines=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("forge, improve mode", done.stdout)
 
     def test_status_offers_skip_only_for_optional_phases(self):
         self.gate("init", "--mode", "improve")
@@ -533,7 +547,7 @@ class DamagedStateTests(Project):
                 with self.subTest(state=str(state)[:120], args=args):
                     code, out, err = self.gate(*args)
                     self.assertEqual((code, out), (2, ""))
-                    self.assertIn("forge-work/state.json is damaged", err)
+                    self.assertIn(os.path.join("forge-work", "state.json") + " is damaged", err)
                     self.assertIn("Do not guess", err)
                     self.assertIn("--force", err)
 

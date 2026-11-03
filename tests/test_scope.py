@@ -17,7 +17,7 @@ import unittest
 
 # Lets "python3 -m unittest tests.test_scope" find _load too, not only "discover -s tests".
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _load import load  # noqa: E402
+from _load import load, run_cp1252  # noqa: E402
 
 mod = load("forge-secure", "scope")
 SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forge-secure", "scope.py")
@@ -402,6 +402,15 @@ class OutputTests(TempFolderTest):
         self.assertLessEqual(max(len(line) for line in source.splitlines()), 100)
         for words in ("Usage", "Exit codes", "own_domains"):
             self.assertIn(words, mod.__doc__)
+
+
+class ConsoleTests(TempFolderTest):
+    def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
+        """Windows pipes are cp1252 (no arrow): the arrow prints as \\u2192, no crash."""
+        scope = self.write({"own_domains": ["example.com"]}, name=os.path.join("caf\u00e9 \u2192", "scope.json"))
+        code, out, err = run_cp1252(SCRIPT, "localhost", "--scope", scope)
+        self.assertEqual(code, 0, err)
+        self.assertIn("scope file: %s (own domains: 1)" % scope.replace("\u2192", "\\u2192"), out)
 
 
 if __name__ == "__main__":
