@@ -124,7 +124,8 @@ has. All fresh, none echoing the original's phrasing.
    title in the browser tab.
 5. Run the unit and e2e tests as `forge-work/test-plan.md` says until green (a rename breaks imports
    and expected texts). A failure the rename did not cause is a bug: it goes into `forge-work/bugs.md`
-   and through the fix loop of /forge-test, a failing test first.
+   and through the fix loop of /forge-test, a failing test first; a missing or partial must-have goes
+   back to /forge-build.
 6. `python3 ../forge-secure/secretscan.py .` and `python3 ../forge/gitguard.py` must exit 0 (gitguard
    exit 1: `git switch -c forge/brand`). Then commit: `brand: rename to <name>, new palette`.
 
