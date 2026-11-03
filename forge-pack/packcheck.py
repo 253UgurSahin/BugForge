@@ -2,9 +2,10 @@
 """Check a project's container setup for settings that make it unsafe or fragile.
 
 Reads the Dockerfile(s) and the ignore file each one uses (Dockerfile.dockerignore before
-.dockerignore, as BuildKit does), looks for .env.example and runs composecheck.py, next to this
-script, on the compose file. Plain line checks, no YAML library. Each finding says what, where, why
-and how to fix it: see RULES below. A real .env file in the project is secretscan.py's job.
+.dockerignore, as BuildKit does), checks that the files their COPY and ADD lines take from the
+project are there and let in, looks for .env.example and runs composecheck.py, next to this script,
+on the compose file. Plain line checks, no YAML library. Each finding says what, where, why and how
+to fix it, in the words of rules.json next to this script. A real .env file is secretscan.py's job.
 
 Usage:
     python3 packcheck.py .                     check the project in the current folder
@@ -14,7 +15,9 @@ Usage:
 Opt-out: a `# forge:allow` line in a Dockerfile skips the findings of the instruction below it
 (above FROM or USER: the root check of that stage); in a compose file, a forge:allow comment on the line.
 Limits: only regular files of at most 1 MB in PATH itself are read; heredoc bodies (RUN <<EOF) are
-skipped. composecheck.py lists its own limits.
+skipped. COPY sources are looked up in PATH (build: .), but not the app's package files (forge-pack
+checks they are committed) or those with a variable, a wildcard or a URL, and a file in a folder
+only by its folder's ignore line. composecheck.py has its own limits.
 
 Exit codes:
     0  nothing at or above --fail-on (default: high)
@@ -26,6 +29,7 @@ import argparse
 import fnmatch
 import json
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -33,6 +37,8 @@ import sys
 SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
 MAX_BYTES = 1024 * 1024
 COMPOSECHECK = os.path.dirname(os.path.abspath(__file__)) + "/../forge-pack/composecheck.py"
+with open(os.path.join(os.path.dirname(COMPOSECHECK), "rules.json"), encoding="utf-8") as rules_file:
+    RULES = json.load(rules_file)  # rule: {"severity", "title", "why", "fix"}; {0} {1} {2}: filled in per finding
 TIMEOUT = 60  # seconds for composecheck.py
 DOCKERFILE = re.compile(r"^(?:Dockerfile|Containerfile)(?:\.(?!dockerignore$)[\w-]+)?$"  # Dockerfile.prod
                         r"|^[\w.-]+\.[Dd]ockerfile$")  # app.Dockerfile
@@ -47,37 +53,16 @@ FALLBACK = re.compile(r"\$\{\w+:?-([^$}][^}]*)\}")  # ${DB_PASSWORD:-hunter2}: h
 FILE_PATH = re.compile(r"^\.?/[\w.-]+(?:/[\w.-]+)+$")  # /run/secrets/db says where a secret is
 HEREDOC = re.compile(r"""(?:^|\s)\d*<<-?(["']?)([A-Za-z_][\w-]*)\1""")  # RUN <<EOF, COPY <<'EOF' /x
 KEEP_OUT = ((".env", ".env"), (".git", ".git"), ("forge-work", "forge-work/"))  # (name, as shown)
-
-# rule: (severity, title, why, fix). {0} and {1} are filled in per finding.
-RULES = {
-    "env_secret": ("critical", "{0} {1} has a secret written in the Dockerfile", "it is stored in the image, "
-                   "for anyone who can pull it", "remove the value: the app gets it at run time from env_file: "
-                   ".env; a secret the build needs goes in with RUN --mount=type=secret"),
-    "root": ("high", "The image runs as root", "if someone breaks into the app, they are root in the container",
-             "end this stage with a USER line for an unprivileged user, for example USER www-data"),
-    "copy_all": ("high", "{0} copies the whole folder and there is no .dockerignore",
-                 "the image gets .env, .git and forge-work/ too",
-                 "add a .dockerignore that lists .env, .git and forge-work/"),
-    "ignore": ("high", "{1} does not keep out {0}",
-               "a COPY of the folder puts it in the image, for anyone who has the image to read",
-               "add a line {0} to {1}"),
-    "tag": ("medium", "Base image {0} is not pinned to a version",
-            "the image can change under you and break a build that worked",
-            "pin a version, at least major.minor, for example node:24-alpine"),
-    "no_example": ("medium", "No .env.example", "whoever runs the app cannot tell which settings it needs",
-                   "add .env.example with every name from .env and fake values"),
-    "no_health": ("low", "No healthcheck",
-                  "nobody sees that the app is stuck, and depends_on cannot wait until it is ready",
-                  "add a healthcheck: to the app service that requests its health URL"),
-}
+NOT_LOOKED_UP = re.compile(r"[$*?\[]|^<<|://|^git@")  # a variable, a wildcard, a heredoc or a URL
+# The app's own package files, which a template on its own lacks: forge-pack checks they are committed.
+APP_FILES = {"package.json", "package-lock.json", "composer.json", "composer.lock", "requirements.txt"}
 
 
 def finding(rule, path, line, *words):
-    """One finding. LINE is 0 when it is about a whole file or the project."""
-    severity, title, why, fix = RULES[rule]
-    where = "%s:%d" % (path, line) if line else path
-    return {"severity": severity, "title": title.format(*words), "where": where, "why": why,
-            "fix": fix.format(*words), "rule": rule, "file": path, "line": line}
+    """One finding: RULE's words with WORDS filled in. LINE 0: about a whole file or the project."""
+    found = {key: text.format(*words) for key, text in RULES[rule].items()}  # severity, title, why, fix
+    found.update(where="%s:%d" % (path, line) if line else path, rule=rule, file=path, line=line)
+    return found
 
 
 def unquote(text):
@@ -136,20 +121,23 @@ def env_pairs(args):
     return re.findall(r"([\w.-]+)=(\"[^\"]*\"|'[^']*'|\S*)", args)
 
 
+def copy_sources(args):
+    """The sources of COPY or ADD ARGS: each word but the options and the destination (the last)."""
+    args = re.sub(r"^(?:--\S+\s+)+", "", args)  # --chown=node --link
+    words = re.findall(r'"([^"]*)"', args) if args.startswith("[") else args.split()
+    return words[:-1]
+
+
 def copies_everything(args):
     """True when the sources of COPY or ADD ARGS are the whole build folder: . ./ / * ./* .*"""
-    sources = re.findall(r'"([^"]*)"', args) if args.startswith("[") else args.split()
-    for source in sources[:-1]:  # the last one is the destination
-        bare = re.sub(r"^(?:\.?/)+", "", source).rstrip("/")  # ./. -> .   ./* -> *   / -> ''
-        if bare in ("", ".") or ("*" in bare and fnmatch.fnmatchcase(".env", bare)):
-            return True
-    return False
+    bare = [re.sub(r"^(?:\.?/)+", "", source).rstrip("/") for source in copy_sources(args)]  # ./* -> *
+    return any(name in ("", ".") or ("*" in name and fnmatch.fnmatchcase(".env", name)) for name in bare)
 
 
 def check_dockerfile(text, path, targets=(), has_ignore=True):
-    """(findings, has a HEALTHCHECK) for one Dockerfile. TARGETS: the stages compose builds.
-    The last stage and each target must end with a USER that is not root."""
-    findings, stages, healthcheck = [], [], False
+    """(findings, has a HEALTHCHECK, [(line, COPY or ADD, source)]) for one Dockerfile. TARGETS: the
+    stages compose builds. The last stage and each target must end with a USER that is not root."""
+    findings, stages, healthcheck, sources = [], [], False, []
     for line, instruction, args, allowed in instructions(text):
         if instruction == "FROM":
             words = [word for word in args.split() if not word.startswith("--")] + ["", "", ""]
@@ -166,8 +154,9 @@ def check_dockerfile(text, path, targets=(), has_ignore=True):
         elif instruction in ("ENV", "ARG") and not allowed:
             findings += [finding("env_secret", path, line, instruction, name)
                          for name, value in env_pairs(args) if is_written_secret(name, value)]
-        elif instruction in ("COPY", "ADD") and not (allowed or has_ignore or "--from" in args):
-            if copies_everything(args):
+        elif instruction in ("COPY", "ADD") and not (allowed or "--from" in args):
+            sources += [(line, instruction, source) for source in copy_sources(args)]
+            if not has_ignore and copies_everything(args):
                 findings.append(finding("copy_all", path, line, instruction))
         elif instruction == "HEALTHCHECK" and not args.upper().startswith("NONE"):
             healthcheck = True
@@ -175,7 +164,7 @@ def check_dockerfile(text, path, targets=(), has_ignore=True):
         final = index == len(stages) - 1 or stage["name"] in targets
         if final and not stage["allowed"] and stage["user"].split(":")[0] in ("", "root", "0"):
             findings.append(finding("root", path, stage["line"]))
-    return findings, healthcheck
+    return findings, healthcheck, sources
 
 
 def is_ignored(patterns, name):
@@ -222,7 +211,7 @@ def check_project(root):
     """(findings sorted most severe first, files checked). Raises OSError or ValueError when a file
     cannot be read or checked, or when there is nothing to check."""
     names = sorted(os.listdir(root))
-    findings, checked, ignore_files = [], [], set()
+    findings, checked, ignores = [], [], {}  # ignores: {ignore file: its patterns}
     targets, healthcheck = set(), False
     if any(COMPOSE_FILE.match(name) for name in names):
         report = check_compose(root)
@@ -234,18 +223,26 @@ def check_project(root):
         ignore = name + ".dockerignore"  # BuildKit uses this one instead of .dockerignore
         if ignore not in names:
             ignore = ".dockerignore" if ".dockerignore" in names else None
-        found, has_check = check_dockerfile(read(root, name), name, targets, ignore is not None)
+        if ignore and ignore not in ignores:
+            ignores[ignore] = [line.strip() for line in read(root, ignore).splitlines()
+                               if line.strip() and not line.strip().startswith("#")]
+        found, has_check, sources = check_dockerfile(read(root, name), name, targets, ignore is not None)
         findings += found
+        for line, word, source in sources:  # word: COPY or ADD. Must reach the build, or it stops there.
+            path = posixpath.normpath(source).lstrip("/")  # ./a -> a, /a -> a, a/../../b -> ../b
+            if NOT_LOOKED_UP.search(source) or path in ("", ".") or path in APP_FILES:
+                continue
+            if path.split("/")[0] == ".." or not os.path.exists(os.path.join(root, path)):  # .. is outside
+                findings.append(finding("missing", name, line, word, source, ignore))
+            elif is_ignored(ignores.get(ignore, []), path.split("/")[0]):  # a folder by the folder's line
+                findings.append(finding("kept_out", name, line, word, source, ignore))
         healthcheck = healthcheck or has_check
-        ignore_files |= {ignore} if ignore else set()
         checked.append(name)
     if not checked:
         raise ValueError("nothing to check: no Dockerfile or compose file in " + root)
-    for ignore in sorted(ignore_files):
-        patterns = [line.strip() for line in read(root, ignore).splitlines()
-                    if line.strip() and not line.strip().startswith("#")]
+    for ignore in sorted(ignores):
         findings += [finding("ignore", ignore, 0, shown, ignore) for name, shown in KEEP_OUT
-                     if not is_ignored(patterns, name)]
+                     if not is_ignored(ignores[ignore], name)]
         checked.append(ignore)
     if not healthcheck:
         findings.append(finding("no_health", "the Dockerfile and the compose file", 0))

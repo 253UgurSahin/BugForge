@@ -64,6 +64,14 @@ def in_final_stage(line):
     return "FROM node:24-alpine\n%s\nUSER node\n" % line
 
 
+def install(profile, folder):
+    """PROFILE's templates in FOLDER as forge-pack installs them: the dotfiles get their dot."""
+    source = os.path.join(TEMPLATES, profile)
+    names = {"dockerignore": ".dockerignore", "env.example": ".env.example"}
+    for name in os.listdir(source):
+        shutil.copy(os.path.join(source, name), os.path.join(folder, names.get(name, name)))
+
+
 class Project(unittest.TestCase):
     """A temporary project folder with a clean container setup, which tests then break."""
 
@@ -83,15 +91,25 @@ class TemplateTests(unittest.TestCase):
     """Every profile's templates, and the promises SKILL.md makes about them."""
 
     def test_each_profile_is_clean_once_installed(self):
+        """Without the app, as the CI templates job checks them: each file the Dockerfile copies is
+        there, but for the app's package files (forge-pack Step 3 checks those are committed)."""
         for profile in PROFILES:
             with self.subTest(profile=profile), tempfile.TemporaryDirectory() as folder:
-                source = os.path.join(TEMPLATES, profile)
-                names = {"dockerignore": ".dockerignore", "env.example": ".env.example"}
-                for name in os.listdir(source):
-                    shutil.copy(os.path.join(source, name), os.path.join(folder, names.get(name, name)))
+                install(profile, folder)
                 code, out = run(folder, "--fail-on", "low")
                 self.assertEqual(code, 0, out)
                 self.assertIn("No findings.", out)
+
+    def test_a_missing_nginx_conf_fails(self):
+        """Dogfood: the pack gate passed with nginx.conf deleted, so the image could not be built."""
+        for profile in ("laravel", "static"):
+            with self.subTest(profile=profile), tempfile.TemporaryDirectory() as folder:
+                install(profile, folder)
+                os.remove(os.path.join(folder, "nginx.conf"))
+                code, out = run(folder)
+                self.assertEqual(code, 1, out)
+                self.assertIn("HIGH      The image build needs nginx.conf, which is not in the project folder", out)
+                self.assertRegex(out, r"where: Dockerfile:\d+\n")
 
     def test_each_profile_has_its_files(self):
         expected = {"Dockerfile", "docker-compose.yml", "dockerignore", "env.example", "RUN.md"}
@@ -278,6 +296,84 @@ class ProjectTests(Project):
         write(self.dir, ".dockerignore", "﻿" + GOOD_IGNORE)
         write(self.dir, "docker-compose.yml", "﻿" + GOOD_COMPOSE + "    privileged: true\n")
         self.assertEqual(rules(self.check()[0]), ["privileged", "root"])
+
+
+class CopySourceTests(Project):
+    """Each COPY and ADD source must reach the image build: in the project folder, let in by the
+    ignore file. Otherwise docker compose build stops at that line."""
+
+    def found(self):
+        return [(f["rule"], f["title"], f["where"]) for f in self.check()[0]]
+
+    def test_a_missing_file(self):
+        write(self.dir, "Dockerfile", in_final_stage("COPY nginx.conf /etc/nginx/conf.d/default.conf"))
+        self.assertEqual(self.found(), [("missing", "The image build needs nginx.conf, which is not in the "
+                                                    "project folder", "Dockerfile:2")])
+        write(self.dir, "nginx.conf", "server {}\n")
+        self.assertEqual(self.found(), [])
+
+    def test_each_source_of_each_form(self):
+        write(self.dir, "Dockerfile", in_final_stage("COPY app.ini app.conf ./"))
+        write(self.dir, "app.ini", "x")
+        self.assertEqual([title for _, title, _ in self.found()],
+                         ["The image build needs app.conf, which is not in the project folder"])
+        for line in ('COPY ["conf/app.ini", "/etc/app/"]', 'COPY --chown=node ["conf/app.ini", "/etc/app/"]',
+                     "COPY --chown=node --chmod=644 conf/app.ini /etc/app/", "COPY ./conf/app.ini /etc/",
+                     "COPY /conf/app.ini /etc/", "ADD conf /etc/app", "COPY conf/ /etc/app/",
+                     "COPY --link conf/app.ini \\\n    /etc/app/"):
+            with self.subTest(line=line):
+                write(self.dir, "Dockerfile", in_final_stage(line))
+                self.assertEqual(rules(self.check()[0]), ["missing"])
+                write(self.dir, "conf/app.ini", "x")
+                self.assertEqual(self.check()[0], [])
+                shutil.rmtree(os.path.join(self.dir, "conf"))
+
+    def test_a_source_the_ignore_file_keeps_out(self):
+        write(self.dir, "nginx.conf", "server {}\n")
+        write(self.dir, "Dockerfile", in_final_stage("COPY nginx.conf /etc/nginx/conf.d/default.conf"))
+        write(self.dir, ".dockerignore", GOOD_IGNORE + "*.conf\n")
+        self.assertEqual(self.found(), [("kept_out", "The image build needs nginx.conf, which .dockerignore "
+                                                     "keeps out", "Dockerfile:2")])
+        write(self.dir, ".dockerignore", GOOD_IGNORE + "*.conf\n!nginx.conf\n")
+        self.assertEqual(self.found(), [])
+        write(self.dir, "Dockerfile.dockerignore", GOOD_IGNORE + "nginx.conf\n")  # BuildKit uses this one
+        self.assertEqual(self.found()[0][1], "The image build needs nginx.conf, which Dockerfile.dockerignore keeps out")
+
+    def test_a_file_in_a_folder_the_ignore_file_keeps_out(self):
+        write(self.dir, "docker/app.ini", "x")
+        write(self.dir, "Dockerfile", in_final_stage("COPY docker/app.ini /etc/"))
+        write(self.dir, ".dockerignore", GOOD_IGNORE + "docker/\n")
+        self.assertEqual(rules(self.check()[0]), ["kept_out"])
+        write(self.dir, ".dockerignore", GOOD_IGNORE + "docker/\n!docker/app.ini\n")
+        self.assertEqual(self.check()[0], [])
+        write(self.dir, ".dockerignore", GOOD_IGNORE + "*.ini\n")  # in Docker, * stays in one folder
+        self.assertEqual(self.check()[0], [])
+
+    def test_a_source_outside_the_project_folder(self):
+        """It is on disk, but docker builds only from the project folder."""
+        write(self.dir, "Dockerfile", in_final_stage("COPY ../%s/Dockerfile /etc/" % os.path.basename(self.dir)))
+        self.assertEqual(rules(self.check()[0]), ["missing"])
+
+    def test_the_app_package_files_are_left_to_forge_pack(self):
+        """A template on its own has none; forge-pack Step 3 checks they are committed. Any other file
+        is the app's or the container setup's, and is looked up."""
+        write(self.dir, "Dockerfile", in_final_stage("COPY package.json package-lock.json composer.json "
+                                                     "composer.lock requirements.txt ./"))
+        self.assertEqual(self.check()[0], [])
+        for line in ("COPY yarn.lock ./", "COPY web/package.json web/", "COPY src ./src"):
+            with self.subTest(line=line):
+                write(self.dir, "Dockerfile", in_final_stage(line))
+                self.assertEqual(rules(self.check()[0]), ["missing"])
+
+    def test_what_cannot_be_looked_up_is_left_alone(self):
+        for line in ("COPY --from=build /app/dist /usr/share/nginx/html", "COPY --from=composer:2.10 /usr/bin/composer /bin/",
+                     "ADD https://example.com/app.tar.gz /tmp/", "ADD git@example.com:me/app.git /src",
+                     "COPY $CONF /etc/", "COPY ${CONF:-app.ini} /etc/", "COPY *.ini /etc/", "COPY conf/?.ini /etc/",
+                     "COPY . .", "COPY ./ /app/", "COPY <<EOF /etc/app.ini\nkey=1\nEOF", "ONBUILD COPY app.ini /etc/",
+                     "# forge:allow the CI job builds dist/ first\nCOPY dist/ /usr/share/nginx/html/"):
+            with self.subTest(line=line):
+                write(self.dir, "Dockerfile", in_final_stage(line))
+                self.assertEqual(self.check()[0], [])
 
 
 class DockerfileTests(unittest.TestCase):

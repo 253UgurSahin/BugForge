@@ -1,0 +1,56 @@
+{
+  "env_secret": {
+    "severity": "critical",
+    "title": "{0} {1} has a secret written in the Dockerfile",
+    "why": "it is stored in the image, for anyone who can pull it",
+    "fix": "remove the value: the app gets it at run time from env_file: .env; a secret the build needs goes in with RUN --mount=type=secret"
+  },
+  "root": {
+    "severity": "high",
+    "title": "The image runs as root",
+    "why": "if someone breaks into the app, they are root in the container",
+    "fix": "end this stage with a USER line for an unprivileged user, for example USER www-data"
+  },
+  "copy_all": {
+    "severity": "high",
+    "title": "{0} copies the whole folder and there is no .dockerignore",
+    "why": "the image gets .env, .git and forge-work/ too",
+    "fix": "add a .dockerignore that lists .env, .git and forge-work/"
+  },
+  "ignore": {
+    "severity": "high",
+    "title": "{1} does not keep out {0}",
+    "why": "a COPY of the folder puts it in the image, for anyone who has the image to read",
+    "fix": "add a line {0} to {1}"
+  },
+  "missing": {
+    "severity": "high",
+    "title": "The image build needs {1}, which is not in the project folder",
+    "why": "docker compose build stops at this {0} line, so the app cannot be built or started",
+    "fix": "add {1}, or correct the path; a file made during the build comes from a build stage (COPY --from=)"
+  },
+  "kept_out": {
+    "severity": "high",
+    "title": "The image build needs {1}, which {2} keeps out",
+    "why": "docker compose build stops at this {0} line: the file never reaches the build",
+    "fix": "let it in with a line !{1} at the end of {2}, or copy another file"
+  },
+  "tag": {
+    "severity": "medium",
+    "title": "Base image {0} is not pinned to a version",
+    "why": "the image can change under you and break a build that worked",
+    "fix": "pin a version, at least major.minor, for example node:24-alpine"
+  },
+  "no_example": {
+    "severity": "medium",
+    "title": "No .env.example",
+    "why": "whoever runs the app cannot tell which settings it needs",
+    "fix": "add .env.example with every name from .env and fake values"
+  },
+  "no_health": {
+    "severity": "low",
+    "title": "No healthcheck",
+    "why": "nobody sees that the app is stuck, and depends_on cannot wait until it is ready",
+    "fix": "add a healthcheck: to the app service that requests its health URL"
+  }
+}
