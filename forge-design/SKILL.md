@@ -40,16 +40,22 @@ From the original you never take (rules.md section 4):
 - a font it pays for (an open font, self-hosted: Step 4);
 - its copy: every label and empty state is written fresh in forge-build;
 - its files: no CSS, SVG or images from its pages, nothing loaded from its domain or CDN;
-- its brand colour: `accent` keeps the template's grey placeholder until forge-brand picks yours.
-  The signature colour plus the signature layout is trade dress.
+- its brand colours. `accent` keeps the template's grey placeholder until forge-brand picks yours.
+  Every other role their colour fills (green text, a cream page, a second brand colour as `highlight`
+  and `on-highlight`) takes the neutral grey of the same lightness, which keeps every contrast:
+  `python3 ../forge-design/eyedropper.py --grey "#1e4d3b"`. List all their colours under `## Original
+  brand colours`. The signature colour plus the signature layout is trade dress.
 
 ## Step 1: measure, do not guess
 
-Clone mode: hex values read off a scaled screenshot by eye are guesses. Ask the user to read the
-main colours on the original with an eyedropper (DevTools colour picker, Digital Color Meter on
-macOS, PowerToys Color Picker on Windows) and paste them; sizes come from screenshots at 100% zoom.
-List each value you estimate yourself under `_notes` in tokens.json. Idea mode: from plan.md; ask
-the user for two or three apps whose look they like, then design fresh.
+Clone mode: hex values read off a screenshot by eye are guesses; read the pixels instead. recon's
+shots are at 100% zoom, so `python3 ../forge-design/eyedropper.py forge-work/screens/S05.png` lists
+the colours used most and where, `--box x,y,w,h` those in one part (a button, a heading) and `x,y`
+one pixel. A state with no shot (hover, focus ring) gets one the same way. No screenshots: ask the
+user to read the colours with an eyedropper (DevTools colour picker, Digital Color Meter on macOS
+set to sRGB, PowerToys Color Picker on Windows) and paste them. Sizes come from the shots too. List
+each value you estimate yourself under `_notes` in tokens.json. Idea mode: from plan.md; ask the
+user for two or three apps whose look they like, then design fresh.
 
 - **Colour roles**, not colours: bg, surface, border, border-input, text, text-muted, accent,
   on-accent, danger, success, warning. Count the greys the app really uses: usually 5 to 7.

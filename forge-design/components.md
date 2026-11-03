@@ -62,7 +62,8 @@ Animations sit inside `@media (prefers-reduced-motion: no-preference)`.
 
 ## Original brand colours
 
-Clone mode only. Never used; listed for forge-brand's sweep.
+Clone mode only (idea mode: write none). Never used; listed for forge-brand's sweep: their accent,
+a second brand colour, and the tinted colours their text, lines or backgrounds had.
 
 - <#hex> (their accent)
 
