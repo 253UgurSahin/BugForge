@@ -151,12 +151,17 @@ class TemplateTests(unittest.TestCase):
 
     def test_env_example_promises(self):
         """The port, the seed password forge-build and forge-test use, and Stripe lines that say
-        they can go."""
+        they can go. No build values (VITE_, NEXT_PUBLIC_): .dockerignore keeps .env out of the image
+        build, so they go in .env.production (dogfood: the static one had VITE_APP_NAME)."""
         for profile in PROFILES:
             with self.subTest(profile=profile):
                 text = read(os.path.join(TEMPLATES, profile, "env.example"))
+                settings = [line for line in text.splitlines() if line.strip() and not line.startswith("#")]
+                self.assertEqual([line for line in settings if re.match(r"(?:VITE|NEXT_PUBLIC)_", line)], [])
                 if profile == "static":  # needs no .env to run
                     self.assertIn("\n# APP_PORT=8080\n", text)
+                    self.assertEqual(settings, [])
+                    self.assertIn(".env.production", text)
                     continue
                 for line in ("APP_PORT=8080", "SEED_PASSWORD=change-me", "# MAILPIT_PORT=8025",
                              "# Delete these lines if the app takes no payments."):

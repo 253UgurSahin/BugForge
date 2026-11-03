@@ -71,9 +71,10 @@ in `.env`), and a RUN.md for that profile.
    - The health URL from the table exists and answers 200 without a login.
    - `composer.lock` and `package-lock.json` (or `requirements.txt` with pinned versions) are
      committed: the images install from them.
-   - Every environment variable the app reads is in `.env.example` with a fake value, and every
-     name in `.env.example` is one the app or `docker-compose.yml` reads (`APP_PORT`). No payments
-     in plan.md: delete the Stripe lines. Secrets never go in the Dockerfile or the compose file.
+   - Every environment variable the app reads at run time is in `.env.example` with a fake value,
+     and every name in it is one the app or `docker-compose.yml` reads (`APP_PORT`). Build values
+     (static `VITE_`, next `NEXT_PUBLIC_`) go in `.env.production`. No payments in plan.md: delete
+     the Stripe lines. Secrets never go in the Dockerfile or the compose file.
    - laravel: `DB_CONNECTION=mariadb`; behind a proxy the app trusts it (`trustProxies` in
      `bootstrap/app.php`); the CSP in `nginx.conf` allows what the app loads, nothing more.
    - django: the `config.wsgi` module in the Dockerfile is the project's; settings.py reads the
