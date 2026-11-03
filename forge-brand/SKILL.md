@@ -94,8 +94,8 @@ Not a logo but a brief for the user, a designer, or an image tool whose terms gi
 Three words for how it sounds, each with what it does not mean ("direct, not blunt"). Five do and
 don't pairs. Then rewrite the 10 most-seen strings (sign up, the main button, the empty states, the
 confirmation, the main error, the welcome email subject) in that voice, in every language the app
-has. All fresh, none echoing the original's phrasing. In clone mode
-`python3 ../forge-build/copycheck.py --words 4` lists every run of 4 or more words the app shares with it.
+has. All fresh, none echoing the original's phrasing. In clone mode, list the runs of 4 or more words they
+share with it: `python3 ../forge-build/copycheck.py forge-work/brand.md --words 4`.
 
 ## Step 6: rename and sweep
 
