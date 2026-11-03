@@ -147,6 +147,22 @@ test('offline, a page not opened yet shows the offline page', async ({ page, con
   await context.setOffline(true);
   await page.goto('/a-page-not-opened-yet');
   await expect(page.getByRole('heading', { level: 1 })).toContainText(/offline/i);
+  // Styled too: /offline.css comes from the worker's cache. A sheet that did not load has no rules.
+  expect(await page.evaluate(() => [...document.styleSheets].some((sheet) => {
+    try { return Boolean(sheet.href?.endsWith('/offline.css') && sheet.cssRules.length); } catch { return false; }
+  }))).toBe(true);
+});
+
+// Working offline (static, when plan.md says so): after one online visit every page opens offline,
+// also those not opened yet. List each page with words from its own h1.
+test('offline, every page opens after one online visit', async ({ page, context }) => {
+  await page.goto('/');
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await context.setOffline(true);
+  for (const [path, heading] of [['/', /your plants/i], ['/about/', /about/i]] as const) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(heading);
+  }
 });
 
 // An app with accounts: the two groups below. Delete them when it has none.
