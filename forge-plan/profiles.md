@@ -14,8 +14,9 @@ Ask only what the user has not already told you, one question at a time:
    does not move an app to another stack. It names `none` (Rails, Flask, ...): stop and tell the user.
 2. Does whoever maintains it know PHP, Python or TypeScript already? Prefer that one.
 3. Does it need accounts, a database, payments or emails? If not: static.
-4. Should people install it on their phone or use it offline? Then `PWA: yes`. A native app-store
-   app is outside forge: offer a PWA instead.
+4. Should people install it on their phone or use it offline? Then `PWA: yes`. Offline, the server
+   profiles show an offline page; only a static app keeps working (PWA toggle, "Working offline").
+   A native app-store app is outside forge: offer a PWA instead.
 
 | kind of app | default | why |
 | --- | --- | --- |
@@ -269,6 +270,11 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   non-GET requests, other domains (Stripe): those go straight to the network. Pages for logged-in
   users also carry `Cache-Control: no-store` or `private, no-cache` against the browser's own cache
   (Laravel and dynamic Next.js pages do this by default; Django: `@never_cache`).
+- **Working offline**, static only and when plan.md says so: its built pages hold no personal data
+  and are the same for every visitor, so the worker may store them too. It precaches the pages and
+  their hashed assets on install and answers them cache first; updates work as below. Only a
+  generated worker knows the hashed names (vite-plugin-pwa, below), not the minimal worker below.
+  API responses and other domains still go to the network.
 - **Leaving the app to pay**: after Stripe Checkout or the bank app, the customer often lands in the
   normal browser, and on iOS that shares no cookies or storage with the installed app. So the return
   page works without the app's session: it finds the order by a random token in the URL and shows
