@@ -1,9 +1,10 @@
-// Example Playwright spec for forge-test, with how to set up e2e/ at the top. It holds two flows
-// to show the patterns; your app gets one spec per flow (e2e/f01-sign-in.spec.ts,
-// e2e/f02-items.spec.ts, ...), with the shared part below exported from e2e/helpers.ts. Change
-// the paths, labels, button names and the seed record to match your app. The case IDs (F01-N1)
-// come from forge-work/test-plan.md. It works for every profile: it only talks to the app over
-// HTTP.
+// Example Playwright spec for forge-test, with how to set up e2e/ at the top. It shows the patterns
+// on two flows of an app with accounts (F01 sign in, F02 items), and F02 again for an app without
+// accounts that keeps its data in the browser: keep the groups that fit. Your app gets one spec per
+// flow (e2e/f01-sign-in.spec.ts, ...), with the shared part below exported from e2e/helpers.ts.
+// Change the paths, labels, button names and the seed record to match your app. The case IDs
+// (F01-N1) come from forge-work/test-plan.md. It works for every profile: it only talks to the app
+// over HTTP.
 //
 // Set up e2e/ once, from the project root:
 //   mkdir -p e2e && cd e2e && npm init -y && npm pkg set scripts.test="playwright test"
@@ -14,11 +15,15 @@
 // [...configDefaults.exclude, 'e2e/**'] in the Vitest config's test block, or Vitest runs them.
 //
 // Every sign-in counts against the app's rate limit, so the seed users sign in once per run, in a
-// setup project, and the specs reuse their cookies. e2e/playwright.config.ts:
+// setup project, and the specs reuse their cookies. e2e/playwright.config.ts (no accounts: leave
+// out the setup project, its dependency and auth.setup.ts):
 //   import { defineConfig } from '@playwright/test';
 //   export default defineConfig({
 //     workers: 1,
-//     use: { baseURL: process.env.FORGE_BASE_URL || 'http://localhost:8080' },
+//     use: {
+//       baseURL: process.env.FORGE_BASE_URL || 'http://localhost:8080',
+//       viewport: { width: 1440, height: 900 }, // the desktop size of forge-recon's screenshots
+//     },
 //     projects: [
 //       { name: 'setup', testMatch: /auth\.setup\.ts/ },
 //       { name: 'chromium', testMatch: /\.spec\.ts$/, dependencies: ['setup'] },
@@ -49,7 +54,7 @@
 // skip in test-plan.md.
 //
 // Selectors use roles and labels, never CSS classes, so they survive restyling and the rebrand.
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 // The app under test. The default is the port the forge compose stack publishes.
@@ -110,6 +115,23 @@ async function signIn(page: Page, email: string, password = PASSWORD) {
   await page.getByRole('button', { name: /log in|sign in/i }).click();
 }
 
+// A double click that fails when its second click would miss the button. A first click that
+// scrolls the page or moves the form sends the second one elsewhere, and the test would then pass
+// without testing anything (Locator.dblclick() does not check this): use a viewport where the form
+// stays put. The second click has clickCount 2, as in a real double click (`event.detail` is 2).
+async function doubleClick(page: Page, button: Locator) {
+  await button.scrollIntoViewIfNeeded();
+  const element = await button.elementHandle(); // still this button when its label changes
+  const box = (await element.boundingBox())!;
+  const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.click(at.x, at.y);
+  const stillThere = await element.evaluate(
+    (node, point) => node.contains(document.elementFromPoint(point.x, point.y)), at);
+  expect(stillThere, 'the first click moved the button, so the second would miss it').toBe(true);
+  await page.mouse.down({ clickCount: 2 });
+  await page.mouse.up({ clickCount: 2 });
+}
+
 // Works for every app, the static profile too.
 test('home page loads without errors and passes the accessibility scan', async ({ page }) => {
   await page.goto('/');
@@ -117,7 +139,17 @@ test('home page loads without errors and passes the accessibility scan', async (
   await expectAccessible(page);
 });
 
-// Delete the groups below when your app has no accounts.
+// PWA: yes only. Registering the service worker needs the network: going offline before it is
+// ready makes Chromium log a failed fetch of the worker as a console error, so wait for it.
+test('offline, a page not opened yet shows the offline page', async ({ page, context }) => {
+  await page.goto('/');
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await context.setOffline(true);
+  await page.goto('/a-page-not-opened-yet');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/offline/i);
+});
+
+// An app with accounts: the two groups below. Delete them when it has none.
 test.describe('F01 sign in', () => {
   test.skip(!PASSWORD, 'set E2E_PASSWORD to the password of the seed users');
 
@@ -160,9 +192,10 @@ test.describe('F02 items', () => {
     // A double click on a slow connection: send the filled-in form twice at the same moment, with
     // this user's cookies and the form's hidden fields (such as the CSRF token). Two clicks in the
     // browser are not reliable for a classic form: the browser often drops the first request.
-    // A Next.js Server Action cannot be called this way (it needs Next's own action header): there,
-    // replace the lines from `const form` to the `for` loop with
-    // `await page.getByRole('button', { name: /save/i }).dblclick()` and wait for the list.
+    // A form the page's own script sends (a Next.js Server Action, Livewire's wire:submit) cannot
+    // be posted this way: there, replace the lines from `const form` to the `for` loop with
+    // `await doubleClick(page, page.getByRole('button', { name: /save/i }))`, wait for the save,
+    // and check that no field is in error, as the last test below does, before you open the list.
     const form = page.locator('form', { has: page.getByRole('button', { name: /save/i }) });
     const fields = await form.evaluate((element) =>
       Object.fromEntries(new FormData(element as HTMLFormElement)) as Record<string, string>);
@@ -173,5 +206,38 @@ test.describe('F02 items', () => {
     for (const response of responses) expect(response.status()).toBeLessThan(500);
     await page.goto('/items');
     await expect(page.getByText(name)).toHaveCount(1);
+  });
+});
+
+// No accounts, the data in the browser (localStorage): no seed users, no E2E_PASSWORD. Every test
+// starts in a fresh, empty browser context, so it seeds its own data under the app's storage key,
+// in the shape the app saves, then reloads. Delete this group when the data lives on a server.
+test.describe('F02 items, kept in the browser', () => {
+  const KEY = 'items'; // the key your app keeps its data under
+  const ITEM = { id: 'seed-1', name: 'First seeded item' };
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/items');
+    await page.evaluate(([key, value]) => localStorage.setItem(key, value),
+      [KEY, JSON.stringify([ITEM])]);
+    await page.reload();
+  });
+
+  test('F02-E1 a second browser sees none of the first one\'s items', async ({ page, browser }) => {
+    // First this browser: the app read the seed back and lists it.
+    await expect(page.getByRole('listitem').filter({ hasText: ITEM.name })).toHaveCount(1);
+    const other = await browser.newContext({ baseURL: BASE_URL });
+    const second = await other.newPage();
+    await second.goto('/items');
+    await expect(second.getByText(ITEM.name)).toHaveCount(0);
+    await other.close();
+  });
+
+  test('F02-E2 a double click on Save adds one item and no error', async ({ page }) => {
+    await page.getByLabel('Name').fill('Double clicked');
+    await doubleClick(page, page.getByRole('button', { name: /save/i }));
+    await expect(page.getByRole('listitem').filter({ hasText: 'Double clicked' })).toHaveCount(1);
+    // No field in error: the second click did not send the form again, emptied by the first.
+    await expect(page.locator('[aria-invalid="true"]')).toHaveCount(0);
   });
 });

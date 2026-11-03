@@ -48,11 +48,10 @@ case (F01-H1 happy, F01-E3 edge, F01-N2 negative) and mark it `e2e`, `unit` or `
 - **Edge cases** that apply. Go down this list for every flow: empty input, very long input (a 60
   character name), emoji and accents, two tabs at once, double click on submit, back button
   mid-flow, refresh mid-flow, slow network, offline, expired session, a second user's data (must be
-  invisible: 403 or 404), time zones and daylight saving, mobile width (390px), keyboard only,
-  screen reader labels.
-- **Negative cases**: wrong password, too many login attempts, card declined (Stripe test card
-  `4000 0000 0000 0002`), the iDEAL test page's **Fail** button, the same webhook event twice,
-  permission denied, a deleted record.
+  invisible: 403 or 404; no accounts: a second browser sees none of it), time zones and daylight
+  saving, mobile width (390px), keyboard only, screen reader labels.
+- **Negative cases**: wrong password, too many login attempts, card `4000 0000 0000 0002` declined,
+  **Fail** on the iDEAL test page, a webhook event sent twice, permission denied, a deleted record.
 - `PWA: yes`: install, the offline page, and no signed-in page from the cache after logging out.
 
 ## Step 2: the stack, seed data and unit tests
@@ -61,12 +60,11 @@ case (F01-H1 happy, F01-E3 edge, F01-N2 negative) and mark it `e2e`, `unit` or `
 and write the base URL (normally `http://localhost:8080`) and the commit at the top of
 test-plan.md. Improve mode without a compose file: start the app the way its README says.
 
-The images leave out dev packages, so the seed and the unit tests run on the host (`composer
-install`, a virtualenv with the dev requirements, `npm ci`), on the port the override in "Where
-things run" of `../forge-build/SKILL.md` publishes: `127.0.0.1:3307` (MariaDB) or `127.0.0.1:5433`
-(PostgreSQL). next: `TEST_DATABASE_URL=postgres://app:<DB_PASSWORD>@127.0.0.1:5433/app_test`, made
-once with `docker compose exec db createdb -U app app_test`; the tests migrate it first and refuse
-a name without `_test`.
+The images have no dev packages, so seed and unit tests run on the host (`composer install`, a venv
+with the dev requirements, `npm ci`), on the override's port ("Where things run" in
+`../forge-build/SKILL.md`): `127.0.0.1:3307` (MariaDB) or `127.0.0.1:5433` (PostgreSQL). next:
+`TEST_DATABASE_URL=postgres://app:<DB_PASSWORD>@127.0.0.1:5433/app_test`, made once by `docker
+compose exec db createdb -U app app_test`; the tests migrate it and refuse a name without `_test`.
 
 Seed and unit tests: laravel `php artisan db:seed`, `php artisan test`; django `python manage.py
 seed`, `pytest` (or `manage.py test`); next `npm run seed`, `npx vitest run`; static `npx vitest
@@ -74,8 +72,9 @@ run`. The seeder is forge-build's (see build-log.md or the README); its users' p
 `SEED_PASSWORD`, is Step 3's `E2E_PASSWORD`. Improve mode without a seeder: write one in
 `forge-work/` (out of git), or after the user's go commit one as `test: add a seed command`, with
 fake `@example.test` users sharing `SEED_PASSWORD`, a record per edge case (a draft, a past item, a
-nearly full one), on a database that may be emptied (unsure: ask). Run the unit tests; add some for
-the cases marked `unit`: logic, a second user's access, money in cents, time zones.
+nearly full one), on a database that may be emptied (unsure: ask). No accounts, data in the browser:
+no seeder or `E2E_PASSWORD`, each test seeds its own data (see the example). Run the unit tests; add
+some for the cases marked `unit`: logic, a second user's access, money in cents, time zones.
 
 ## Step 3: end to end with Playwright
 
@@ -132,15 +131,16 @@ fixed in: -
 | low | cosmetic |
 
 Status is `open`, `fixed` or `wontfix`. Only report what you reproduced; "might be an issue" goes
-under `## To check`. Never paste a secret or a real person's data into a bug.
+under `## To check`. Never paste a secret or a real person's data into a bug. A must-have that is
+missing or half built is no bug: it goes back to /forge-build (say so at the checkpoint).
 
 ## Step 6: the fix loop
 
 1. `python3 ../forge/gitguard.py` must exit 0: fixes are commits on the work branch, never on main.
 2. Critical and high first. Per bug: write a test that fails, fix the smallest thing that makes it
    pass, keep the test. Touch nothing unrelated.
-3. Run the whole suite, then `python3 ../forge-secure/secretscan.py .` (must exit 0), then one
-   commit: `fix(B001): booking accepts names with accents`.
+3. Rebuild the stack (Step 2), run the whole suite, then `python3 ../forge-secure/secretscan.py .`
+   (must exit 0), then one commit: `fix(B001): booking accepts names with accents`.
 4. Change the heading to `[fixed]` and fill in `fixed in:` with the commit.
 5. `python3 ../forge-test/bugs.py forge-work/bugs.md`. Exit 1: an open critical or high bug is
    left, back to 2. Exit 2: a line is not in the right form (the output names it). Repeat until it

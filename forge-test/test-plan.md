@@ -6,10 +6,12 @@ Runs against: {{http://localhost:8080}}, the local compose stack with seed data.
 ## How to run
 
 - Unit and integration tests, on the host (forge-test Step 2): `{{php artisan test | pytest | npx vitest run}}`
-- End to end: `cd e2e && FORGE_BASE_URL=http://localhost:8080 E2E_PASSWORD=<the seed password> npx playwright test`.
-  Without `E2E_PASSWORD` every signed-in test is skipped: Playwright still exits 0, so read the
-  skipped count and write each skip in the result column. Between two runs, reset the app's rate
-  limits: `{{docker compose exec app php artisan cache:clear | docker compose restart app}}`.
+- End to end, on the stack as it is now (after any change to the app, first
+  `docker compose up -d --build --wait`), {{on the host | in Playwright's image (../forge-test/e2e.example.spec.ts)}}:
+  `cd e2e && FORGE_BASE_URL=http://localhost:8080 E2E_PASSWORD=<the seed password> npx playwright test`.
+  Without `E2E_PASSWORD` every signed-in test is skipped (an app without accounts has none):
+  Playwright still exits 0, so read the skipped count and write each skip in the result column.
+  Between two runs, reset the app's rate limits: `{{docker compose exec app php artisan cache:clear | docker compose restart app}}`.
 
 ## Cases
 
@@ -19,6 +21,7 @@ Runs against: {{http://localhost:8080}}, the local compose stack with seed data.
 | F01-E1 | | edge: slot taken while the guest fills in the form | | clear message, pick another slot, no double booking | e2e | |
 | F01-E2 | | edge: guest in another time zone | | times shown in the guest's zone, stored in UTC | e2e | |
 | F01-E3 | | edge: a second user opens the first user's booking | | 403 or 404, never the data | e2e | |
+| F01-E4 | | edge: double click on Confirm | | one booking, no error message | e2e | |
 | F01-N1 | | negative: card declined (4000 0000 0000 0002) | | error shown, no booking created | manual | |
 | F01-N2 | | negative: iDEAL test payment, Fail | | order stays unpaid, plain message, no email | manual | |
 
@@ -27,7 +30,7 @@ browser tool). result: `pass`, `fail B003` (the bug in bugs.md) or `skipped: why
 
 ## Not tested
 
-- {{what, and why: for example "sign in with Google: needs the user's own test account"}}
+- {{what and why, for example "Google sign-in: needs the user's own test account"}}
 
 ## Result
 
