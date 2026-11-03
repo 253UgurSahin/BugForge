@@ -33,7 +33,6 @@ Read `../forge/rules.md` once per session. In short:
 - Stop at every checkpoint and wait for the user's go.
 
 Also for this skill:
-
 - **No fake proof**: no invented testimonials, reviews, ratings, user counts or press logos, and no quotes from
   compare's reviews, not even without a name. A real user's words only with their written OK, noted in launch.md.
 - No names, logos or screenshots of competitors or the original on the site. No fake countdowns or pre-ticked boxes.
@@ -41,8 +40,9 @@ Also for this skill:
   detail: write `TO-FILL` until the user gives it. Stripe stays in test mode.
 - The stack runs production images (code copied in, routes cached): run `docker compose up -d --build --wait` after
   each change, before you open a page, run pagecheck or run the end-to-end tests.
-- Commit after each step that changed the app (`launch: pricing and checkout`) once all tests pass and both
-  `python3 ../forge-brand/sweep.py .` and `python3 ../forge-secure/secretscan.py .` exit 0 (forge-build Step 6).
+- Commit after each step that changed the app (`launch: pricing and checkout`) once all tests pass and
+  `python3 ../forge-secure/secretscan.py .` (forge-build Step 6), `python3 ../forge-brand/sweep.py .` and, in
+  clone mode, `python3 ../forge-build/copycheck.py` exit 0.
 
 ## Step 1: read, ask, branch
 
