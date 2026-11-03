@@ -95,10 +95,9 @@ Each failed check is a finding in the plain format. Default severity in brackets
 - Card data never touches the server or database: use Stripe Checkout or Elements (critical).
 - Prices and amounts are computed on the server, never taken from the browser (critical).
 
-## AVG/GDPR checklist
+## AVG/GDPR checklist (not legal advice)
 
-This is a checklist, not legal advice. What the code cannot show (DPAs, storage, breach plan) goes
-under "Not checked" as a question, never a guess.
+What code cannot show (DPAs, storage, breach plan) goes under "Not checked" as a question, never a guess.
 
 - [ ] The privacy policy lists every processor trackers.py found.
 - [ ] No non-essential cookie or tracker loads before the visitor says yes.
@@ -140,14 +139,15 @@ None.
 
 ## The gate
 
-- Any critical or high finding that is not fixed or accepted (below) = FAIL, else PASS. Medium and low
-  are listed but do not block. The line is exactly `Verdict: PASS` or `Verdict: FAIL`: the gate reads it.
-- secretscan.py must exit 0, now and when the forge gate runs it again: its findings are fixed, not
-  accepted. Exit 2 (an incomplete scan) is a FAIL.
-- On FAIL the work does not move on. Fix with the user's go, run the full check again and rewrite the
-  report, keeping the "Accepted risks" section. After the build (the secure phase, or from forge-pack)
-  a finding in the app's code is a bug: it goes into `forge-work/bugs.md` and through forge-test's fix
-  loop, a failing test first.
+- Any critical or high finding that is not fixed or accepted (below) = FAIL, else PASS. Medium and low are
+  listed but do not block. The line is exactly `Verdict: PASS` or `Verdict: FAIL`: the gate reads it, and
+  the Counts line: with PASS, 0 critical and 0 high unless those are accepted.
+- secretscan.py must exit 0, now and when the forge gate runs it again with codecheck.py: its findings are
+  fixed, not accepted. Exit 2 (an incomplete scan) is a FAIL. A critical or high codecheck finding passes
+  only as a risk accepted below (a false positive: `forge:allow` on its line, with the user's OK).
+- On FAIL nothing moves on. Fix with the user's go, run the full check again and rewrite the report,
+  keeping "Accepted risks". After the build (the secure phase, or from forge-pack), a finding in the app's
+  code is a bug: it goes into `forge-work/bugs.md` and through forge-test's fix loop, a failing test first.
 - The only other way through: the user explicitly accepts one specific risk. Write their exact words,
   the finding and the date under "Accepted risks". A general "fine, ship it" covers nothing: ask which one.
 - Never accept a risk on the user's behalf, and never lower a severity to get a PASS.
