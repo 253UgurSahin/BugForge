@@ -30,7 +30,9 @@ def symlink(test, target, link):
 
 def run_cp1252(script, *args, cwd=None):
     """Run SCRIPT as Windows does before Python 3.15 when Claude Code reads it: its output goes into a
-    pipe in cp1252, which has no arrow (U+2192) or emoji. Returns (exit code, stdout, stderr) as text."""
+    pipe in cp1252, which has no arrow (U+2192) or emoji. Returns (exit code, stdout, stderr) as text,
+    with Windows' \\r\\n line ends read as \\n, the way text mode reads them."""
     done = subprocess.run([sys.executable, script] + list(args), cwd=cwd, timeout=120, stdin=subprocess.DEVNULL,
                           capture_output=True, env=dict(os.environ, PYTHONIOENCODING="cp1252"))
-    return done.returncode, done.stdout.decode("cp1252"), done.stderr.decode("cp1252")
+    text = [stream.decode("cp1252").replace("\r\n", "\n") for stream in (done.stdout, done.stderr)]
+    return done.returncode, text[0], text[1]
