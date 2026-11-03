@@ -211,6 +211,20 @@ class CheckTests(Project):
         self.assertEqual(code, 0, out)
         self.assertIn("Exit checks for test (improve mode):", out)
 
+    def test_only_clone_mode_runs_the_copy_check(self):
+        """copycheck.py compares the clone with the original's text that forge-recon kept (N18). Without a
+        state the mode is not known, so check runs no copy check; with a clone state it does."""
+        self.finish("build")
+        write(self.root, "forge-work/original-text/source-1.txt", "zo zie je elke dag wat er moet gebeuren\n")
+        write(self.root, "index.html", "<p>Zo zie je elke dag wat er moet gebeuren.</p>\n")
+        code, out, _ = self.gate("check", "build")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("copycheck", out)
+        self.gate("init", "--mode", "clone")
+        code, out, _ = self.gate("check", "build")
+        self.assertEqual(code, 1, out)
+        self.assertIn("copycheck.py exits 1: it found problems", out)
+
     def test_with_a_state_an_old_security_report_fails(self):
         self.gate("init", "--mode", "idea")
         self.approve("compare")

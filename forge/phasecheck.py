@@ -192,7 +192,7 @@ def check_fresh(root, name, since):
 
 def load_table(path):
     """{phase: [entry]} from phasecheck.json. An entry's check names a function here (check_ + the name)
-    and its arguments; 'modes' and 'profiles' limit where it runs; 'why' is the skill line it rests on."""
+    and its arguments; 'modes', 'profiles' and 'when' limit where it runs; 'why' is the skill line it rests on."""
     with open(path, encoding="utf-8") as handle:
         table = json.load(handle)
     return {phase: [dict(entry, run=globals()["check_" + entry["check"][0]], args=entry["check"][1:])
@@ -220,7 +220,8 @@ def profile_of(root):
 
 def run_checks(root, phase, since=None, mode=None):
     """Every exit check of PHASE in ROOT for MODE (None: not known) and plan.md's profile, plus the age of
-    its report when SINCE is given: a list of {"ok", "what", "output"}. A missing file is named once."""
+    its report when SINCE is given: a list of {"ok", "what", "output"}. A missing file is named once. A
+    check with 'when' runs only when that path is there; else its line says it was skipped."""
     profile = profile_of(root)
     entries = [entry for entry in CHECKS[phase] if mode in entry.get("modes", [mode])
                and profile in entry.get("profiles", [profile])]
@@ -228,7 +229,10 @@ def run_checks(root, phase, since=None, mode=None):
     results = []
     for entry in entries + fresh:
         try:
-            answers = entry["run"](root, *entry["args"])
+            if "when" in entry and not os.path.exists(os.path.join(root, entry["when"])):
+                answers = True, "%s skipped: no %s" % (" ".join(entry["args"]), entry["when"])
+            else:
+                answers = entry["run"](root, *entry["args"])
         except FileNotFoundError:
             answers = False, "%s is missing" % entry["args"][0]
         except (OSError, ValueError, RecursionError) as error:  # a folder, or not UTF-8 or JSON

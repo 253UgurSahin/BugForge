@@ -230,6 +230,12 @@ class TableTests(unittest.TestCase):
                 for profile in entry.get("profiles", []):
                     self.assertIn(profile, phasecheck.PROFILES)
 
+    def test_when_is_a_path_in_the_project(self):
+        for phase, checks in phasecheck.CHECKS.items():
+            for entry in [entry for entry in checks if "when" in entry]:
+                with self.subTest(phase=phase, check=entry["check"]):
+                    self.assertFalse(os.path.isabs(entry["when"]) or ".." in entry["when"].split("/"), entry["when"])
+
     def test_every_fresh_report_is_a_file_its_phase_checks(self):
         for phase, name in phasecheck.FRESH.items():
             self.assertIn(name, [entry["args"][0] for entry in phasecheck.CHECKS[phase]])
@@ -593,6 +599,34 @@ class FindingTests(Checks):
                           "why: forge-build, Step 7: /forge-secure has run")
         write(self.root, "forge-work/build-log.md", BUILD_LOG.split("| S01")[0])
         self.assert_fails("build", "build-log.md has no table with the columns status and what and a row")
+
+    def test_n18_a_clone_that_shares_a_sentence_with_the_original(self):
+        """The clone shared runs of words with the original and every gate passed. In clone mode build, brand
+        and launch run copycheck.py when forge-recon kept the original's text in forge-work/original-text/: a
+        shared run of 6+ words fails until it is rewritten or, with the user's OK, in copy-allow.txt. Without
+        the kept text the line says it skipped; idea mode, which has no original, never runs it."""
+        sentence = "<main>\n<p>Zo zie je elke dag wat er moet gebeuren.</p>\n</main>\n"
+        for phase in ("build", "brand", "launch"):
+            with self.subTest(phase=phase):
+                shutil.rmtree(self.root, ignore_errors=True)
+                os.makedirs(self.root)
+                self.finish(phase)
+                write(self.root, "src/home.html", sentence)
+                out = self.assert_passes(phase, "--mode", "clone")
+                self.assertIn("ok    forge-build/copycheck.py skipped: no forge-work/original-text/", out)
+                write(self.root, "forge-work/original-text/source-1.txt",
+                      "# kept by pagetext.py\nzo zie je elke dag wat er moet gebeuren met je planten\n")
+                self.assert_fails(phase, "copycheck.py exits 1: it found problems",
+                                  '9 words in a row from the original: "zo zie je elke dag wat er moet gebeuren"',
+                                  "where: %s:2" % os.path.join("src", "home.html"), "why: forge-build, ",
+                                  args=("--mode", "clone"))
+                for mode in ("idea", None):
+                    self.assertNotIn("copycheck", self.assert_passes(phase, *(["--mode", mode] if mode else [])))
+                write(self.root, "forge-work/copy-allow.txt", "# OK from the user\nZo zie je elke dag wat er moet gebeuren\n")
+                self.assertIn("copycheck.py exits 0", self.assert_passes(phase, "--mode", "clone"))
+        write(self.root, "forge-work/original-text/source-1.txt", "# kept by pagetext.py: nothing\n")
+        self.assert_fails("launch", "copycheck.py exits 2: it could not check", "holds no text of the original",
+                          args=("--mode", "clone"))
 
     def test_n25_a_test_phase_with_no_tests(self):
         self.finish("test")

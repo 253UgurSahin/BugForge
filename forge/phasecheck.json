@@ -1,5 +1,5 @@
 {
-  "_about": "The exit checks of each phase, run by phasecheck.py in the project root. Each check: the function (check_ + its name in phasecheck.py) and its arguments; a ../ path is a file of the skill pack. 'modes' runs it only in those modes (null: no mode known), 'profiles' only for those Profile: values of plan.md. 'why' is the line of the phase's skill it rests on: the gate checks only what the skill promises, and shows the line under a failure.",
+  "_about": "The exit checks of each phase, run by phasecheck.py in the project root. Each check: the function (check_ + its name in phasecheck.py) and its arguments; a ../ path is a file of the skill pack. 'modes' runs it only in those modes (null: no mode known), 'profiles' only for those Profile: values of plan.md, 'when' only when that path is there (else a line says it was skipped). 'why' is the line of the phase's skill it rests on: the gate checks only what the skill promises, and shows the line under a failure.",
   "recon": [
     {"check": ["file", "forge-work/recon.md"],
      "why": "forge-recon, Output: recon.md from the template, every section filled in or marked \"none seen\""},
@@ -54,7 +54,9 @@
     {"check": ["run", "forge-pack/composecheck.py", "."],
      "why": "forge-build, Step 1: forge-pack's templates, fitted as its Step 3 says; Where things run: the db service publishes no port"},
     {"check": ["line", "forge-work/security.md", "Verdict", "PASS"],
-     "why": "forge-build, Step 7: /forge-secure has run with no critical or high finding open"}
+     "why": "forge-build, Step 7: /forge-secure has run with no critical or high finding open"},
+    {"check": ["run", "forge-build/copycheck.py"], "modes": ["clone"], "when": "forge-work/original-text/",
+     "why": "forge-build, Step 7: copycheck.py exits 0 (clone mode); Clean room and your own words: rewrite each run of 6+ words the project's files share with the original's text, or with the user's OK add it to forge-work/copy-allow.txt"}
   ],
   "test": [
     {"check": ["file", "forge-work/test-plan.md"],
@@ -100,13 +102,17 @@
     {"check": ["work", "named", "forge-work/brand.json"],
      "why": "forge-brand, Step 6: replace the name everywhere: the app name setting, titles, the manifest, the README"},
     {"check": ["run", "forge-brand/sweep.py", ".", "--config", "forge-work/brand.json"],
-     "why": "forge-brand, Step 6: sweep.py exits 0"}
+     "why": "forge-brand, Step 6: sweep.py exits 0"},
+    {"check": ["run", "forge-build/copycheck.py"], "modes": ["clone"], "when": "forge-work/original-text/",
+     "why": "forge-build, Clean room and your own words: matching its sentence is copying; in clone mode copycheck.py lists each run of 6+ words the project's files share with the original's text. Rewrite it, or with the user's OK add it to forge-work/copy-allow.txt"}
   ],
   "launch": [
     {"check": ["file", "forge-work/launch.md"], "why": "forge-launch, Output: launch.md from the template"},
     {"check": ["doc", "forge-work/launch.md", "--template", "../forge-launch/launch.md", "--section", "Pricing",
                "--section", "Privacy, cookies and SEO", "--section", "Legal pages", "--names", "OG image"],
-     "why": "forge-launch, Output: launch.md from the template; Step 4: tick the legal items you wrote; Step 5: an og:image of your own"}
+     "why": "forge-launch, Output: launch.md from the template; Step 4: tick the legal items you wrote; Step 5: an og:image of your own"},
+    {"check": ["run", "forge-build/copycheck.py"], "modes": ["clone"], "when": "forge-work/original-text/",
+     "why": "forge-build, Clean room and your own words: matching its sentence is copying; in clone mode copycheck.py lists each run of 6+ words the project's files share with the original's text. Rewrite it, or with the user's OK add it to forge-work/copy-allow.txt"}
   ],
   "secure": [
     {"check": ["doc", "forge-work/security.md", "--section", "What was checked", "--section", "Findings",
