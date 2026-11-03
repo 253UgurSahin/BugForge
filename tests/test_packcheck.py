@@ -149,6 +149,16 @@ class TemplateTests(unittest.TestCase):
                 self.assertIn("expires -1;", manifest.group(1))  # checked for a new version, like sw.js
                 self.assertNotIn("types {", text)  # a types block would replace all of mime.types
 
+    def test_static_nginx_names_the_multi_page_variants(self):
+        """forge-launch Step 2 points at the multi-page try_files line here (/pricing gets pricing.html,
+        an unknown path a 404, its own 404 page if it has one) and at the /app/ location for a
+        single-page app in app.html. The default stays the single-page app's fallback."""
+        text = read(os.path.join(TEMPLATES, "static", "nginx.conf"))
+        self.assertIn("\n        try_files $uri $uri/ /index.html;\n", text)
+        for variant in ("`try_files $uri $uri/ $uri.html =404;`", "`error_page 404 /404.html;`",
+                        "`location /app/ { expires -1; try_files $uri /app.html; }`"):
+            self.assertIn(variant, text)
+
     def test_dockerignore_promises(self):
         for profile in PROFILES:
             with self.subTest(profile=profile):
