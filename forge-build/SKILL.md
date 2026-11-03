@@ -51,12 +51,12 @@ Read `../forge/rules.md` once per session. In short:
 ## Where things run
 
 - The stack runs production images: code is copied in when an image is built. After a code or `.env` change,
-  `docker compose up -d --build --wait` before you look at it in the browser.
+  `docker compose up -d --build --wait` before you look at it in the browser or take a screenshot.
 - Installers, generators (`php artisan make:*`, `manage.py makemigrations`, `drizzle-kit generate`) and tests run on
   this machine: laravel needs PHP 8.3+ with pdo_mysql, Composer and Node, django Python 3.12+ in a `.venv`, next and
   static Node 24. Missing: tell the user what to install (laravel: php.new) and wait. Or run one command in the
-  tool's image: `docker run --rm -u "$(id -u)" -e HOME=/tmp -v "$PWD":/app -w /app node:24-alpine npm install`.
-  Composer's image has a newer PHP (Symfony 8 needs 8.4): fit its lock to this machine with
+  tool's image: `MSYS_NO_PATHCONV=1 docker run --rm -u "$(id -u)" -e HOME=/tmp -v "$PWD":/app -w /app node:24-alpine
+  npm install`. Composer's image has a newer PHP (Symfony 8 needs 8.4): fit its lock to this machine with
   `composer config platform.php <this machine's PHP version> && composer update`.
 - Tests use the real database engine. The db service publishes no port, so a git-ignored
   `docker-compose.override.yml` publishes it on this machine only (`ports: ["127.0.0.1:3307:3306"]`, PostgreSQL
@@ -97,7 +97,7 @@ Read `../forge/rules.md` once per session. In short:
 - The basic components components.md lists (button, input, dialog) in every state, on `/design` (404 outside dev).
 - A seed script (the names forge-test Step 2 uses) with fake users `alice@example.test` and `bob@example.test`,
   password from `SEED_PASSWORD`, made only in dev and tests (laravel `app()->environment('local', 'testing')`,
-  django `DEBUG`, next `NODE_ENV !== "production"`). Reference data goes in a migration.
+  django `DEBUG`, next `NODE_ENV !== "production"`). Reference data goes in a migration. Static: none, no accounts.
 - `PWA: yes`: the manifest, service worker and offline page from profiles.md, placeholder icons until forge-brand.
 
 ## Step 3: the vertical slice
@@ -115,8 +115,9 @@ the basic components with real data through the data access layer. Done when:
 - [ ] every state it lists works, plus empty, loading, error and no permission; a 60 character name fits
 - [ ] it works at 390px and 1440px wide and by keyboard only: semantic HTML, labels, visible focus, alt text
 - [ ] no console errors, no copy of the original (copycheck.py), tests for the main path and the access check
-- [ ] clone mode: a screenshot in the reference's viewport and state, under its name in `forge-work/clone-screens/`
-      (`npx playwright screenshot --viewport-size=1440,900 <url> <file>`, or 390,844; logged in: `--load-storage`)
+- [ ] clone mode: each reference shot of it in `forge-work/screens/` has one under its name in `clone-screens/`, in
+      the state recon.md gives: `npx playwright screenshot --viewport-size=1440,900 <url> <file>` (or 390,844;
+      logged in: `--load-storage`), or a short Playwright script that clicks there first, at deviceScaleFactor 1
 
 ## Step 5: the backend and its tests, as the screens need them
 
