@@ -29,9 +29,9 @@ does one phase. Each script is standard-library Python 3.9+ with tests.
    - `/forge a booking app for my hair salon` (idea mode)
    - `/forge improve this app` (improve mode)
 
-Claude asks a few questions, runs the first phase, shows you a summary of at most 5 lines and
-waits. Say "go" to continue, or ask for changes first. Say "where were we" in a new session to pick
-up where you left off.
+Claude asks a few questions, runs the first phase, shows you a checkpoint of at most 5 lines plus
+the gate's result, and waits. Say "go" to continue, or ask for changes first. Say "where were we"
+in a new session to pick up where you left off.
 
 ## How /forge works
 
@@ -56,10 +56,12 @@ skill on its own.
 
 1. `gate.py status` names the next phase.
 2. Claude runs that phase's skill.
-3. `gate.py check <phase>` runs the phase's exit checks (`forge/phasecheck.py`): the phase's files
-   exist, no template placeholders are left, and the phase's own script passes (contrast, bugs,
-   parity, brand sweep, secret scan, packcheck).
-4. Claude shows you the summary and stops.
+3. `gate.py check <phase>` runs the phase's exit checks (`forge/phasecheck.py`), in your project's
+   mode: what the phase's skill promises is there. Its files, with no placeholder of their template
+   left (code blocks too) and text of its own in each section; the phase's scripts pass (contrast,
+   bugs, parity, brand sweep, codecheck, secret scan, packcheck, and in clone mode the copy check);
+   and the reports of diff and secure are newer than the go before them.
+4. Claude shows you the skill's checkpoint plus one line with the gate's result, and stops.
 5. Only after your go: `gate.py done <phase> --approved '<your exact words>'`. It refuses when a
    check fails, the words are missing, or an earlier phase is still open.
 
@@ -115,7 +117,7 @@ it out of git and out of every image.
 | `/forge-compare` | Puts 2 to 5 competitors side by side and ranks what their users complain about and miss. |
 | `/forge-plan` | Picks the stack profile and PWA with you; writes the schema, routes, payments and build order. |
 | `/forge-design` | Design tokens and component specs, open fonts and icons, WCAG AA contrast checked. |
-| `/forge-build` | Scaffolds with the official installer, then builds screen by screen: auth, data access, Stripe with iDEAL, email, jobs. |
+| `/forge-build` | Scaffolds with the official installer, then builds screen by screen: auth, data access, Stripe with iDEAL, email, jobs. In clone mode it checks that no text is copied from the original. |
 | `/forge-test` | Test plan, unit and Playwright tests against the local stack, a bug list and a fix loop. |
 | `/forge-diff` | Scores the clone against the original: features, layout and behaviour. |
 | `/forge-brand` | Your own name, palette, logo brief and voice, plus the trademark checks to run; sweeps out the original's name. |
@@ -137,7 +139,9 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 | usage | what it does |
 | --- | --- |
 | `gate.py {init,status,check,done,skip} ...` | the gate (above); 1 = refused |
-| `phasecheck.py PHASE [--since TIME] [--json]` | the exit checks of one phase; gate.py runs it |
+| `phasecheck.py PHASE [--since TIME] [--mode MODE] [--json]` | the exit checks of one phase, from `phasecheck.json`; gate.py runs it |
+| `doccheck.py FILE [--template T] [--section S] [--cases BUGS] [--specs P] [--rows A,B] [--names L] [--json]` | is a report filled in: no placeholder of its template left, text of its own in each section, the test cases, a file a line names; phasecheck runs it |
+| `workcheck.py {features,built,tokens,specs,compared,named} ... [--json]` | a phase's work files: the feature list, the design tokens, the end-to-end specs, the compared screenshots, the app's new name; phasecheck runs it |
 | `gitguard.py [PATH] [--clean] [--json]` | 0 only on a work branch, never main, master, trunk or production; `--clean`: nothing uncommitted |
 
 **forge-secure/**
@@ -166,17 +170,21 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 | `getpage.py URL OUT [--json]` | loads one page passively and saves its HTML in a new file; 0 or 2 |
 | `pagecheck.py URL [--json] [--fail-on L] [--no-pwa]` or `--file FILE [--url URL]` | SEO, accessibility, speed, PWA and mixed-content basics of one page |
 
-**forge-compare/**, **forge-design/**, **forge-diff/**, **forge-brand/**, **forge-test/**, **forge-pack/**
+**forge-compare/**, **forge-design/**, **forge-build/**, **forge-diff/**, **forge-brand/**, **forge-test/**, **forge-pack/**
 
 | usage | what it does |
 | --- | --- |
 | `reviews.py REVIEWS [--themes F] [--months N] [--today DATE] [--out F] [--json]` | ranks what users hate and ask for, from collected reviews; 0 or 2 |
 | `contrast.py TOKENS.json [--json]` or `contrast.py FG BG` | WCAG AA contrast of design tokens; 1 = a pair fails |
+| `eyedropper.py IMAGE [X,Y...] [--box X,Y,W,H] [--top N] [--json]` or `eyedropper.py --grey COLOUR...` | exact colours off a 100% screenshot, each with its grey of the same lightness; 0 or 2 |
+| `theme.py TOKENS.json --tailwind 4\|3\|no [--write FILE]` | the theme CSS from the design tokens, as components.md maps them; 0 or 2 |
+| `pagetext.py PAGE...` | keeps the visible text of the original's saved pages in `forge-work/original-text/`; 0 or 2 |
+| `copycheck.py [PATH...] [--words N] [--json]` | runs of 6 or more words the clone shares with the original's kept text; 1 = a run found |
 | `parity.py FEATURES.csv [--visual JSON...] [--json \| --markdown] [--fail-under N]` | feature parity score; 1 = a must-have is missing |
 | `imgdiff.py ORIGINAL.png CLONE.png [--out DIFF.png] [--json]` | layout score of two screenshots, colour ignored; 0 or 2 |
 | `sweep.py [PATH] [--config F] [--avoid A] [--domains D] [--colors C] [--json]` | the original's names, domains and colours left in the code; 1 = leftovers |
 | `bugs.py BUGS.md [--json] [--fail-on L]` | open bugs in forge-work/bugs.md; 1 = one at or above `--fail-on` |
-| `packcheck.py PATH [--json] [--fail-on L]` | Dockerfile, compose file, .dockerignore and .env.example |
+| `packcheck.py PATH [--json] [--fail-on L]` | Dockerfile and the files it copies, compose file, .dockerignore and .env.example |
 | `composecheck.py PATH [--json] [--fail-on L]` | the compose part of packcheck, on its own |
 
 Try a few from the root of this repo:
@@ -265,7 +273,8 @@ python3 -m unittest discover -s tests -v
 CI (`.github/workflows/test.yml`) runs on every push and pull request:
 
 - the full test suite on Linux, macOS and Windows, each with Python 3.9 and 3.13, then the repo's
-  own secret scan;
+  own secret scan. `tests/test_plan.py` runs the sample service worker (`forge-plan/sw.example.js`)
+  in a fake browser with Node; without Node those tests are skipped;
 - per stack profile: the container templates installed in a scratch folder, checked with
   `docker compose config -q` and `packcheck.py --fail-on low`.
 
