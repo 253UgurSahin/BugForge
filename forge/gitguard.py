@@ -12,6 +12,7 @@ work. A new repository without commits passes once its branch is not main.
 It runs only read-only git commands (rev-parse, symbolic-ref, for-each-ref, status), with
 core.fsmonitor off so the repository's config cannot start a monitor program. git status may
 still run the filter programs that the repository's own config names, as any git status does.
+A git that does not answer is stopped, on Windows with taskkill, with all the programs it started.
 GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE and GIT_COMMON_DIR are ignored: PATH picks the repository.
 A gate like scope.py, not a scanner: every finding blocks, so each one is high.
 
@@ -30,6 +31,7 @@ Exit codes (the output says what to do in each case):
 """
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -38,6 +40,7 @@ import sys
 
 GIT = "git"  # the git command; tests point it elsewhere to act as if git is missing
 TIMEOUT = 60  # seconds per git command
+TASKKILL = os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "System32", "taskkill.exe")  # by full path
 PROTECTED = ("main", "master", "trunk", "production")
 REPO_VARIABLES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR")
 NEW_BRANCH = "git switch -c forge/<name>"
@@ -68,15 +71,24 @@ def git(path, *args):
         env.pop(name, None)
     command = [GIT, "-C", path, "-c", "core.fsmonitor=false"] + list(args)
     try:
-        done = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+        with subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, env=env, encoding="utf-8",
-                              errors="replace", timeout=TIMEOUT)
+                              errors="replace") as process:
+            try:
+                out, err = process.communicate(timeout=TIMEOUT)
+            except subprocess.TimeoutExpired:
+                if os.name == "nt":  # git.exe is a launcher: kill() stops it, not the git that holds the pipes
+                    with contextlib.suppress(OSError, subprocess.SubprocessError):  # kill() still follows
+                        subprocess.run([TASKKILL, "/F", "/T", "/PID", str(process.pid)],
+                                       capture_output=True, timeout=60)
+                process.kill()
+                raise
     except OSError as error:  # not installed, or cannot be started
         raise GitError("cannot run git (%s). Install git, then run gitguard.py again."
                        % (error.strerror or error))
     except subprocess.TimeoutExpired:
         raise GitError("git did not answer within %d seconds in %s" % (TIMEOUT, path))
-    return done.returncode, done.stdout, done.stderr
+    return process.returncode, out, err
 
 
 def ask(path, *args):

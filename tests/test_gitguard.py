@@ -6,11 +6,14 @@ The repository tests use real git in temporary folders."""
 import contextlib
 import io
 import json
+import ntpath
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -21,9 +24,18 @@ gitguard = load("forge", "gitguard")
 SCRIPT = os.path.join(ROOT, "forge", "gitguard.py")
 HAS_GIT = shutil.which("git") is not None
 REAL_RUN = subprocess.run
+REAL_POPEN = subprocess.Popen
 REAL_GIT = gitguard.git
 IS_ROOT = getattr(os, "geteuid", lambda: -1)() == 0
 REBASE = ("rebase", "git rebase --continue or git rebase --abort")
+# A git that hangs: it starts a child that keeps the pipes open, writes the child's PID, and waits.
+HUNG_GIT = """#!%s
+import os, subprocess, sys, time
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+with open(os.environ["FORGE_FAKE_CHILD"], "w") as handle:
+    handle.write(str(child.pid))
+time.sleep(60)
+"""
 
 
 def run(*args):
@@ -427,10 +439,10 @@ class Clean(Repo):
 
         def spy(cmd, **kwargs):
             calls.append((cmd, kwargs["env"]))
-            return REAL_RUN(cmd, **kwargs)
+            return REAL_POPEN(cmd, **kwargs)
 
         self.write("notes.txt")
-        with mock.patch.object(gitguard.subprocess, "run", side_effect=spy):
+        with mock.patch.object(gitguard.subprocess, "Popen", side_effect=spy):
             self.assertEqual(run(self.repo, "--clean")[0], 1)
         self.assertEqual([cmd[5] for cmd, _ in calls],
                          ["rev-parse", "rev-parse", "symbolic-ref", "for-each-ref", "status"])
@@ -467,11 +479,75 @@ class BadInput(Folder):
         self.assertIn("cannot run git", done.stderr)
 
     def test_git_does_not_answer(self):
-        timeout = subprocess.TimeoutExpired(cmd="git", timeout=gitguard.TIMEOUT)
-        with mock.patch.object(gitguard.subprocess, "run", side_effect=timeout):
+        process = mock.MagicMock(pid=4242)
+        process.communicate.side_effect = subprocess.TimeoutExpired(cmd="git", timeout=gitguard.TIMEOUT)
+        with mock.patch.object(gitguard.subprocess, "Popen") as popen, mock.patch.object(gitguard.subprocess, "run"):
+            popen.return_value.__enter__.return_value = process
             code, _, err = run(self.base)
         self.assertEqual(code, 2)
         self.assertIn("did not answer", err)
+        self.assertEqual(process.communicate.call_args[1], {"timeout": gitguard.TIMEOUT})
+        process.kill.assert_called_once_with()
+
+    def test_a_timeout_on_windows_stops_git_and_what_it_started(self):
+        """Git for Windows' git.exe is a launcher: kill() stopped it but not the git.exe it started, which
+        kept the pipes open, so gitguard waited for git after all. taskkill /T stops the whole tree."""
+        for system, before_kill in (("nt", [[gitguard.TASKKILL, "/F", "/T", "/PID", "4242"]]), ("posix", [])):
+            events = []
+            process = mock.MagicMock(pid=4242)
+            process.communicate.side_effect = subprocess.TimeoutExpired(cmd="git", timeout=gitguard.TIMEOUT)
+            process.kill.side_effect = lambda: events.append("kill")
+            with self.subTest(system=system), mock.patch.object(gitguard.subprocess, "Popen") as popen, \
+                    mock.patch.object(gitguard.subprocess, "run", side_effect=lambda cmd, **_: events.append(cmd)), \
+                    mock.patch.object(gitguard.os, "name", system):
+                popen.return_value.__enter__.return_value = process
+                with self.assertRaisesRegex(gitguard.GitError, "did not answer"):
+                    gitguard.git(self.base, "status")
+                self.assertEqual(events, before_kill + ["kill"])
+        self.assertTrue(ntpath.isabs(gitguard.TASKKILL))  # by full path: Windows looks in the current folder first
+        self.assertTrue(gitguard.TASKKILL.lower().endswith("taskkill.exe"))
+
+    def test_taskkill_that_fails_still_ends_in_kill(self):
+        process = mock.MagicMock(pid=4242)
+        process.communicate.side_effect = subprocess.TimeoutExpired(cmd="git", timeout=gitguard.TIMEOUT)
+        for failure in (OSError("no taskkill here"), subprocess.TimeoutExpired(cmd="taskkill", timeout=60)):
+            process.kill.reset_mock()
+            with self.subTest(failure=failure), mock.patch.object(gitguard.subprocess, "Popen") as popen, \
+                    mock.patch.object(gitguard.subprocess, "run", side_effect=failure), \
+                    mock.patch.object(gitguard.os, "name", "nt"):
+                popen.return_value.__enter__.return_value = process
+                with self.assertRaisesRegex(gitguard.GitError, "did not answer"):
+                    gitguard.git(self.base, "status")
+                process.kill.assert_called_once_with()
+
+    def test_a_hung_git_is_stopped_with_what_it_started(self):
+        """Real processes, on every system: a git that hangs with a child that holds the pipes, as git.exe
+        does under Git for Windows' launcher. gitguard gives up at its time limit, not when they end."""
+        fakes = self.make("fakes")
+        child_file = os.path.join(self.base, "child.pid")
+        script = HUNG_GIT % sys.executable
+        if os.name == "nt":  # a .cmd file, the way a launcher runs the real program
+            with open(os.path.join(fakes, "git.py"), "w", encoding="utf-8") as handle:
+                handle.write(script)
+            fake = os.path.join(fakes, "git.cmd")
+            with open(fake, "w") as handle:  # text mode: CRLF, as cmd.exe expects
+                handle.write('@echo off\n"%FORGE_FAKE_PYTHON%" "%~dp0git.py" %*\n')
+        else:
+            fake = os.path.join(fakes, "git")
+            with open(fake, "w", encoding="utf-8") as handle:
+                handle.write(script)
+            os.chmod(fake, 0o755)
+        env = {"FORGE_FAKE_CHILD": child_file, "FORGE_FAKE_PYTHON": sys.executable}
+        started = time.monotonic()
+        with mock.patch.object(gitguard, "GIT", fake), mock.patch.object(gitguard, "TIMEOUT", 3), \
+                mock.patch.dict(os.environ, env):
+            with self.assertRaisesRegex(gitguard.GitError, "did not answer within 3 seconds"):
+                gitguard.git(self.base, "status")
+        took = time.monotonic() - started
+        if os.path.exists(child_file):
+            with open(child_file, encoding="utf-8") as handle, contextlib.suppress(OSError, ValueError):
+                os.kill(int(handle.read()), signal.SIGTERM)  # still there unless the whole tree was stopped
+        self.assertLess(took, 30)
 
     @unittest.skipUnless(HAS_GIT, "git is not installed")
     def test_a_folder_without_a_repository(self):
