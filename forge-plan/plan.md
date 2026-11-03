@@ -1,4 +1,4 @@
-# Plan: {{app name}}
+# Plan: {{the user's name for the app, or a working name: never the original's}}
 
 Profile: {{laravel | django | next | static}}
 PWA: {{yes | no}}
@@ -55,7 +55,7 @@ recon's last ID. Idea mode: every screen and flow.}}
 | {{bookings}} | {{user_id}} | {{...}} | {{the user deletes their account}} |
 
 ```sql
-{{the first migration, as SQL or in the profile's syntax}}
+{{the first migration, as SQL or in the profile's syntax; static: the stored shape}}
 ```
 
 Rules the database enforces:
@@ -71,7 +71,7 @@ Rules the database enforces:
 
 ## Auth and roles
 
-- Who may create an account: {{anyone (public sign-up) | only staff (no sign-up page; accounts made by a command)}}
+- Who may create an account: {{anyone (public sign-up) | only staff (made by a command) | nobody (no accounts)}}
 - Sign up, log in, email verification, password reset: {{how, per the profile}}
 - Roles: {{none | owner, admin, member}}. Access check: {{the one function or policy}}
 - Account deletion and data export: {{how}}

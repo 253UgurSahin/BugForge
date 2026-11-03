@@ -17,9 +17,8 @@ description: >-
 # forge-plan
 
 Reads `forge-work/recon.md` (clone mode), `forge-work/features.csv` and, when it exists,
-`forge-work/compare.md`. Writes `forge-work/plan.md` from the template `../forge-plan/plan.md`, and
-in idea mode adds the user's features to features.csv. Everything about the stacks is in
-`../forge-plan/profiles.md`: read it before Step 2.
+`forge-work/compare.md`. Writes `forge-work/plan.md` from `../forge-plan/plan.md` and, in idea mode,
+the user's features in features.csv. The stacks: `../forge-plan/profiles.md`, read it before Step 2.
 
 ## Ground rules
 
@@ -31,9 +30,9 @@ Read `../forge/rules.md` once per session. In short:
 - Never print, paste or commit secrets. Never touch a server: forge only builds containers.
 - Stop at every checkpoint and wait for the user's go.
 
-Also for this skill: one app, one database, all of it in the user's compose stack (profiles.md). Only
-official public APIs with the user's own keys, never the original's private endpoints, bundles or
-OAuth clients.
+Also for this skill: one app, at most one database, all in the user's compose stack (profiles.md).
+Only official public APIs with the user's own keys, never the original's private endpoints, bundles
+or OAuth clients.
 
 ## Step 1: read what there is
 
@@ -55,10 +54,11 @@ Follow "How to pick a profile" in profiles.md: at most four questions, then one 
 one line of why, and the user chooses. Stop and say forge has no profile for it when detect.py names
 `none` for an existing codebase, or when the user wants a native app-store app (offer a PWA).
 
-No plan.md yet: copy the template to `forge-work/plan.md`. Fill in `Profile:` with exactly one of
-laravel, django, next or static and `PWA:` with yes or no, each at the start of its own line: the
-gate checks those two lines. Versions and image tags come from profiles.md, following its rule on the
-check date. Never write a version you did not see.
+No plan.md yet: copy the template to `forge-work/plan.md`. Its title is the user's own name for the
+app, or else a working name that forge-brand replaces; never the original's. Fill in `Profile:` with
+exactly one of laravel, django, next or static and `PWA:` with yes or no, each at the start of its
+own line: the gate checks both. Versions and image tags come from profiles.md, following its rule on
+the check date. Never write a version you did not see.
 
 ## Step 3: screens and flows
 
@@ -84,17 +84,19 @@ not only the UI: no double booking, one active subscription per user, unique inv
 each method from "Rules the database enforces" in profiles.md and write it down. On MariaDB a unique
 index on the start time is not enough: bookings of different lengths still overlap.
 
+Static (no database): no tables or migration. Write instead the data the browser keeps: its storage
+key, its shape with a version number, the limits the code checks on save and on load.
+
 ## Step 5: routes and API
 
-One row per page, form handler, API endpoint and webhook, grouped by flow: method, path, what it
-does, who may call it, input, output, flow. "Who may call it" is never empty: name the role and
-whether it is limited to the caller's own rows.
+One row per page, form handler, API endpoint and webhook, grouped by flow, in the template's columns.
+"Who may call it" is never empty: name the role and whether it is limited to the caller's own rows.
 
 ## Step 6: auth, payments, emails, jobs
 
-- **Auth and roles**: the profile's auth. Ask who may create an account: anyone, or only staff (then
-  no public sign-up). The roles, and the one function that answers "may this user do this to this
-  record?". Account deletion and data export are part of the plan. Log each answer.
+- **Auth and roles**: the profile's auth. Ask who may create an account: anyone, only staff (then
+  no public sign-up) or nobody (no accounts). The roles, and the one function that answers "may this
+  user do this to this record?". Plan account deletion and data export. Log each answer.
 - **Payments**: ask these, and log each answer in the decisions log:
   0. Does the app take money at all? No: write None under Payments and skip 1 to 4.
   1. Who receives the money: the user's own business, or other businesses (salons, sellers,
