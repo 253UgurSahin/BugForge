@@ -139,8 +139,10 @@ in `.env`), and a RUN.md for that profile.
      than 0. Then delete the file. Backups go outside the project, never into git or an image.
    - `docker compose down` when done. It keeps the data; `down -v` would delete it.
 
-   A failure here is a bug to fix in the app or the files. Never make the setup weaker to get it
-   running: no root user, no published database port, no secret in the compose file.
+   A failure in the container files is fixed here. One in the app is a bug: it goes into
+   `forge-work/bugs.md` and through forge-test's fix loop (a failing test first), then back here.
+   Never make the setup weaker to get it running: no root user, no published database port, no
+   secret in the compose file.
 6. **Commit.** Only on the work branch: `python3 ../forge/gitguard.py .` must exit 0.
    `python3 ../forge-secure/secretscan.py .` must exit 0 first (the git-ignored `.env` is only a
    low note; a high one means git does not ignore it: fix `.gitignore`). Commit
