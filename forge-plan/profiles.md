@@ -258,7 +258,8 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   `"purpose": "maskable"` with the logo inside the middle 80%, and a 180x180 apple-touch-icon.
 - **Service worker** at the site root (`/sw.js`), so its scope is the whole app, served with
   `Cache-Control: no-cache` so updates arrive. **Offline page** `offline.html`: plain, no personal
-  data, cached when the worker installs.
+  data, stored with its CSS when the worker installs. The CSP blocks inline styles, so it links
+  `/offline.css` from the root, with system fonts and the theme's colours (change them with it).
 - **Where**: these files go in `public/` (django: served at the root with `WHITENOISE_ROOT`; next:
   or the manifest as `app/manifest.ts`). Hashed assets are under `/build/assets/` (laravel),
   `/static/` (django, with WhiteNoise's `CompressedManifestStaticFilesStorage`), `/_next/static/`
@@ -276,25 +277,8 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   posts `SKIP_WAITING` to `registration.waiting`, then reloads once on `controllerchange`. Bump
   `VERSION` in sw.js with every release; the old cache is deleted on activate.
 
-A minimal `sw.js` that follows these rules, with `ASSETS` set to the profile's hashed assets path:
-
-```js
-const VERSION = "v1", CACHE = "app-" + VERSION, OFFLINE = "/offline.html", ASSETS = "/build/assets/";
-self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.add(OFFLINE))));
-self.addEventListener("activate", (e) => e.waitUntil(caches.keys().then((keys) =>
-  Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))));
-self.addEventListener("message", (e) => { if (e.data === "SKIP_WAITING") self.skipWaiting(); });
-self.addEventListener("fetch", (e) => {
-  const req = e.request, url = new URL(req.url);
-  if (req.method !== "GET" || url.origin !== self.location.origin) return; // network only
-  if (req.mode === "navigate") return e.respondWith(fetch(req).catch(() => caches.match(OFFLINE)));
-  if (!url.pathname.startsWith(ASSETS)) return; // the browser fetches it, nothing is stored
-  e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-    if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
-    return res;
-  })));
-});
-```
+A minimal worker that follows these rules is `../forge-plan/sw.example.js`: copy it to
+`public/sw.js` and set its `ASSETS` to the profile's hashed assets path.
 
 Plugins can generate a worker instead: vite-plugin-pwa 2.0 (static, and Laravel's Vite build) and
 Serwist 9.5 (Next.js). Check what they generate against the caching rules above.
