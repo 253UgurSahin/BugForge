@@ -20,7 +20,7 @@ jobs:
           - {os: ubuntu-24.04, python-version: "3.9"}  # setup-python has no 3.9 for Ubuntu 26.04 (ubuntu-latest)
           - {os: ubuntu-latest, python-version: "3.13"}
           - {os: macos-26-intel, python-version: "3.9"}  # an Intel Mac; on Apple silicon setup-python stops at 3.9.13
-          - {os: macos-latest, python-version: "3.13"}  # Apple silicon
+          - {os: macos-15, python-version: "3.13"}  # Apple silicon; macOS 26 runs in the Intel job
           - {os: windows-latest, python-version: "3.9"}
           - {os: windows-latest, python-version: "3.13"}
     defaults:
