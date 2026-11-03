@@ -16,9 +16,8 @@ description: >-
 
 # forge-diff
 
-Reads `forge-work/features.csv`, `forge-work/recon.md` and the original's screenshots in
-`forge-work/screens/`, and takes the clone's again in `forge-work/clone-screens/`. Writes
-`forge-work/parity.md`, and diff images and scores next to the original's screenshots.
+Reads `forge-work/features.csv`, `recon.md` and the original's screenshots in `screens/`, takes the
+clone's again in `clone-screens/`, writes `parity.md`, and diff images and scores in `screens/`.
 
 ## Ground rules
 
@@ -90,16 +89,17 @@ Reading the result:
 
 ## Step 3: behaviour diff
 
-Walk each flow from `forge-work/recon.md` (F01..) in both apps: the original passively, as any visitor
-would (rule 3; the user logs in to their own account themselves), the clone in the compose stack.
-Compare what the scores cannot see: clicks to finish the flow (fewer than the original is a win),
-errors, empty input and empty lists, what is remembered between visits, and which emails arrive and
-what they say (Mailpit in development).
-
-Write each difference as: flow, original does, clone does, fix or keep. A bug goes into
-`forge-work/bugs.md` in forge-test's format (`## B014 [high] [open] Reschedule link opens a
-not-found page`) and is fixed in forge-test's fix loop, a failing test first. A must-have that is
-missing or half built is no bug: it goes back to /forge-build.
+Walk each flow from `forge-work/recon.md` (F01..) in both apps: the original passively, as any
+visitor would (rule 3; the user logs in to their own account themselves), the clone in the compose
+stack. As forge-recon says, never send the original's company a contact, sign-up or checkout form,
+and make no items on it, except where its own pages say the data stays in the browser: there, with
+the user's OK, a few ordinary items in a fresh browser profile you throw away after. Compare what
+the scores cannot see: clicks to finish the flow (fewer than the original is a win), errors, empty
+input and empty lists, what is remembered between visits, and which emails arrive and what they say
+(Mailpit in development). Write each difference as: flow, original does, clone does, fix or keep. A
+bug goes into `forge-work/bugs.md` in forge-test's format (`## B014 [high] [open] Reschedule link
+opens a not-found page`) and is fixed in forge-test's fix loop, a failing test first. A must-have
+that is missing or half built is no bug: it goes back to /forge-build.
 
 ## Step 4: the report
 
