@@ -99,7 +99,7 @@ in `.env`), and a RUN.md for that profile.
    - static: Vite builds to `dist/`. A multi-page site without a router: the `try_files` line
      in `nginx.conf` has a comment with the version to use.
    - `PWA: yes`: the files go where `../forge-plan/profiles.md` says. The laravel and static
-     `nginx.conf` already serve `/sw.js` without caching.
+     `nginx.conf` already serve `/sw.js` and the manifest uncached, the manifest with its type.
    - Background jobs from plan.md: a service with the same build, a `command:`, `env_file: .env`
      and `restart: unless-stopped`, like the laravel `worker`.
    - RUN.md: fill in every `{{...}}`: the app's name; `{{app}}`, a short lowercase name for its

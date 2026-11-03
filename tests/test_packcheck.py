@@ -117,6 +117,20 @@ class TemplateTests(unittest.TestCase):
                     if name in ("app", "worker"):
                         self.assertIn("env_file: .env", texts, name)
 
+    def test_nginx_promises(self):
+        """Dogfood: behind the user's HTTPS proxy, nginx's redirect from /planner to /planner/ named its
+        own address (http://<host>:8080/planner/), and the PWA manifest went out as octet-stream."""
+        for profile in ("laravel", "static"):
+            with self.subTest(profile=profile):
+                text = read(os.path.join(TEMPLATES, profile, "nginx.conf"))
+                server_level = text[:text.index("    location ")]  # before the first location block
+                self.assertIn("\n    absolute_redirect off;\n", server_level)
+                manifest = re.search(r"\n    location = /manifest\.webmanifest \{\n(.*?)\n    \}", text, re.S)
+                self.assertIsNotNone(manifest)
+                self.assertIn("default_type application/manifest+json;", manifest.group(1))
+                self.assertIn("expires -1;", manifest.group(1))  # checked for a new version, like sw.js
+                self.assertNotIn("types {", text)  # a types block would replace all of mime.types
+
     def test_dockerignore_promises(self):
         for profile in PROFILES:
             with self.subTest(profile=profile):
