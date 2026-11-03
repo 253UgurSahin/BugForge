@@ -7,12 +7,25 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15  # a hung test stops here instead of after six hours
+    # Linux, macOS and Windows, each with the oldest and the newest Python we support. The steps
+    # run in bash, which every runner has: on Windows that is Git Bash, the shell Claude Code's
+    # Bash tool uses there. PYTHONUTF8 and PYTHONIOENCODING stay unset on purpose: Windows pipes
+    # then use cp1252, as on users' machines, so an encoding bug fails here first.
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20  # a hung test stops here instead of after six hours
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.13"]
+        include:
+          - {os: ubuntu-24.04, python-version: "3.9"}  # setup-python has no 3.9 for Ubuntu 26.04 (ubuntu-latest)
+          - {os: ubuntu-latest, python-version: "3.13"}
+          - {os: macos-latest, python-version: "3.9"}
+          - {os: macos-latest, python-version: "3.13"}
+          - {os: windows-latest, python-version: "3.9"}
+          - {os: windows-latest, python-version: "3.13"}
+    defaults:
+      run:
+        shell: bash
     steps:
       # Get the code. The tests need no git token, so none is left on disk.
       - uses: actions/checkout@v4
