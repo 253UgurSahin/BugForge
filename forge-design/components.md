@@ -7,11 +7,11 @@ Icons: <Lucide (ISC) | Heroicons (MIT) | Tabler Icons (MIT)>, as <package | SVG 
 ## Theme
 
 File: <the theme file for the profile, from forge-design Step 3>
+Command: python3 ../forge-design/theme.py forge-work/design/tokens.json --tailwind <4|3|no> --write <the file above>
 
 Values live only in `forge-work/design/tokens.json`. forge-build writes the file above from it with
-this command, which follows the mapping below (names only, so it never goes stale):
-`python3 ../forge-design/theme.py forge-work/design/tokens.json --tailwind <4|3|no> --write <the file above>`.
-After any change to tokens.json, run it again, then `python3 ../forge-design/contrast.py
+the command above, which follows the mapping below (names only, so it never goes stale). After any
+change to tokens.json, run it again, then `python3 ../forge-design/contrast.py
 forge-work/design/tokens.json`. Components use these variables, never raw hex or px.
 
 ```css

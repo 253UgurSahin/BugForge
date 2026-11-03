@@ -102,8 +102,9 @@ class PlaceholderTests(Report):
         (`--color-<role>`) and stays as it is (N21); a spec quotes <button> in code."""
         path = self.template("forge-design", "components.md")
         theme = read(path).split("## Theme")[1].split("## Fonts")[0]
+        theme = theme.replace("<the theme file for the profile, from forge-design Step 3>", "app/globals.css")
         done = "Profile: next. Tailwind: 4.\nFont: Inter (SIL OFL).\n\n## Theme\n" + theme.replace(
-            "<the theme file for the profile, from forge-design Step 3>", "app/globals.css") + \
+            "<4|3|no>", "4").replace("<the file above>", "app/globals.css") + \
             "\nA `<name>` in code, and `--breakpoint-<name>: <value>px;`.\n```\nButton\n  a11y  real <button>\n```\n"
         code, checks, out = self.check(done, "--template", path, "--no-sections")
         self.assertEqual(code, 0, out)

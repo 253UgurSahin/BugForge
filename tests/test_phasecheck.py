@@ -531,7 +531,8 @@ class FindingTests(Checks):
     def test_n2_a_recon_with_no_sections(self):
         self.finish("recon")
         write(self.root, "forge-work/recon.md", "# Recon: x (web)\n")
-        out = self.assert_fails("recon", "forge-work/recon.md has no ## Sources, ## Core loop, ## Screens, ## Flows")
+        out = self.assert_fails("recon", "forge-work/recon.md has no ## Sources, ## Core loop, ## Screens, "
+                                         "## Reference screenshots, ## Flows")
         self.assertIn("why: forge-recon, Output: recon.md from the template, every section filled in", out)
         recon = filled("forge-recon/recon-map.md")
         only_the_example = recon.replace("## Components\n\nSlotwise: written for this app.", "## Components")
@@ -545,14 +546,14 @@ class FindingTests(Checks):
         self.assert_passes("recon")
 
     def test_n12_a_design_from_the_untouched_templates(self):
-        """Only the five <a|b> choices of components.md replaced, tokens.json as the template: it passed."""
+        """Only the <a|b> choices of components.md replaced, tokens.json as the template: it passed."""
         self.finish("design")
         components = template("forge-design", "components.md")
         for choice in re.findall(r"<[^<>\n]*\|[^<>\n]*>", components):
             components = components.replace(choice, choice[1:-1].split("|")[0].strip())
         write(self.root, "forge-work/design/components.md", components)
-        out = self.assert_fails("design", "<name>", "<licence>", "<the theme file for the profile", "<path>",
-                                "<#hex>", "no text of its own under ## Theme, ## Fonts and icons, ## Original brand "
+        out = self.assert_fails("design", "<name>", "<licence>", "<the theme file for the profile", "<the file above>",
+                                "<path>", "<#hex>", "no text of its own under ## Fonts and icons, ## Original brand "
                                 "colours, ## Components", args=("--mode", "clone"))
         self.assertNotIn("<role>", out)  # the Theme block maps tokens by name: its <role> stays (N21)
         self.finish("design")
@@ -571,6 +572,15 @@ class FindingTests(Checks):
         write(self.root, "forge-work/design/components.md", components)
         self.assert_fails("design", "no text of its own under ## Original brand colours", args=("--mode", "clone"))
         self.assert_passes("design", "--mode", "idea")  # idea mode has no original
+
+    def test_n12_the_theme_command_is_filled_in(self):
+        """forge-design Step 3 fills in the theme.py command that forge-build and forge-brand run."""
+        self.finish("design")
+        command = next(line for line in template("forge-design", "components.md").split("\n")
+                       if line.startswith("Command:"))
+        components = re.sub(r"(?m)^Command:.*$", lambda _: command, filled("forge-design/components.md"))
+        write(self.root, "forge-work/design/components.md", components)
+        self.assert_fails("design", "<the file above>", "<4|3|no>")
 
     def test_n16_a_build_with_no_app(self):
         self.finish("build")
