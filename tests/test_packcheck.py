@@ -296,6 +296,25 @@ class ProjectTests(Project):
         self.assertEqual(sorted(f["title"] for f in findings), [".dockerignore does not keep out .env",
                          ".dockerignore does not keep out .git", ".dockerignore does not keep out forge-work/"])
 
+    def test_a_file_of_secrets_in_the_folder_must_be_kept_out(self):
+        """Review: a line !.env.local let the file back in, and nothing said so. Not for the files a
+        profile decides on: .env.production (next and static let in its public build values) and
+        npm's and Yarn's logins (only the laravel and django images take the whole folder)."""
+        for name in (".env.local", ".env.production.local", "auth.json", "oauth-private.key", "app.p12", "app.pfx",
+                     ".env.example", ".env.production", ".npmrc", ".yarnrc.yml", "ca.pem", "monkey"):
+            write(self.dir, name, "x")
+        static = ".env\n.env.*\n!.env.example\n!.env.production\n.git\nforge-work/\n"  # as in the templates
+        write(self.dir, ".dockerignore", static + "!.env.local\n")
+        self.assertEqual([f["title"] for f in self.check()[0]], [
+            ".dockerignore does not keep out .env.local", ".dockerignore does not keep out app.p12",
+            ".dockerignore does not keep out app.pfx", ".dockerignore does not keep out auth.json",
+            ".dockerignore does not keep out oauth-private.key"])
+        write(self.dir, ".dockerignore", static + "auth.json\n*.key\n*.p12\n*.pfx\n")
+        self.assertEqual(self.check()[0], [])
+        write(self.dir, ".env", "x")  # .env is checked once, also when it is in the folder
+        write(self.dir, ".dockerignore", static.replace(".env\n", "", 1) + "auth.json\n*.key\n*.p12\n*.pfx\n")
+        self.assertEqual([f["title"] for f in self.check()[0]], [".dockerignore does not keep out .env"])
+
     def test_other_dockerfile_names_are_checked(self):
         write(self.dir, "Dockerfile.worker", "FROM python\n")
         write(self.dir, "api.Dockerfile", "FROM python:3.14-slim\nUSER app\n")
@@ -367,6 +386,34 @@ class CopySourceTests(Project):
         self.assertEqual(self.found(), [])
         write(self.dir, "Dockerfile.dockerignore", GOOD_IGNORE + "nginx.conf\n")  # BuildKit uses this one
         self.assertEqual(self.found()[0][1], "The image build needs nginx.conf, which Dockerfile.dockerignore keeps out")
+
+    def test_a_file_of_secrets_is_never_let_in(self):
+        """Review: for auth.json or .env.local too, the fix said to let it in with a ! line, and then
+        packcheck passed with the secrets in the image. The app reads its secrets at run time, and a
+        build gets one through RUN --mount=type=secret."""
+        write(self.dir, ".dockerignore", GOOD_IGNORE + ".env.*\n!.env.example\nauth.json\n.npmrc\n.yarnrc.yml\n"
+                                                       "*.key\n*.p12\n*.pfx\ndocker/\n")
+        for source in (".env", ".env.local", ".env.production", "./auth.json", ".npmrc", ".yarnrc.yml",
+                       "oauth-private.key", "app.p12", "app.pfx", "docker/.env.prod"):
+            with self.subTest(source=source):
+                write(self.dir, source, "x")
+                write(self.dir, "Dockerfile", in_final_stage("COPY %s /app/" % source))
+                findings = self.check()[0]
+                self.assertEqual(self.found(), [("kept_secret", "The image build copies %s, a file of secrets that "
+                                                 ".dockerignore keeps out" % source, "Dockerfile:2")])
+                self.assertNotIn("!", findings[0]["fix"])
+                self.assertIn("RUN --mount=type=secret", findings[0]["fix"])
+
+    def test_a_kept_out_file_that_holds_no_secret_may_be_let_in(self):
+        """A CA certificate (.pem) is public; .env.example holds fake values only."""
+        write(self.dir, ".dockerignore", GOOD_IGNORE + ".env*\n*.pem\n")
+        for source in (".env.example", "ca.pem"):
+            with self.subTest(source=source):
+                write(self.dir, source, "x")
+                write(self.dir, "Dockerfile", in_final_stage("COPY %s /app/" % source))
+                findings = self.check()[0]
+                self.assertEqual(rules(findings), ["kept_out"])
+                self.assertIn("let it in with a line !%s at the end of .dockerignore" % source, findings[0]["fix"])
 
     def test_a_file_in_a_folder_the_ignore_file_keeps_out(self):
         write(self.dir, "docker/app.ini", "x")

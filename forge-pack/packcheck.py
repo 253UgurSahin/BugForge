@@ -53,6 +53,10 @@ FALLBACK = re.compile(r"\$\{\w+:?-([^$}][^}]*)\}")  # ${DB_PASSWORD:-hunter2}: h
 FILE_PATH = re.compile(r"^\.?/[\w.-]+(?:/[\w.-]+)+$")  # /run/secrets/db says where a secret is
 HEREDOC = re.compile(r"""(?:^|\s)\d*<<-?(["']?)([A-Za-z_][\w-]*)\1""")  # RUN <<EOF, COPY <<'EOF' /x
 KEEP_OUT = ((".env", ".env"), (".git", ".git"), ("forge-work", "forge-work/"))  # (name, as shown)
+# Files of secrets: never let in, and kept out when they are in PATH. BY_PROFILE is the profile's call: next and
+# static let in .env.production (public build values); only laravel's and django's images take all of PATH.
+SECRET_FILE = re.compile(r"^(?:\.env(?:\.(?!example$).+)?|auth\.json|\.npmrc|\.yarnrc\.yml|.*\.(?i:key|p12|pfx))$")
+BY_PROFILE = {".env.production", ".npmrc", ".yarnrc.yml"}
 NOT_LOOKED_UP = re.compile(r"[$*?\[]|^<<|://|^git@")  # a variable, a wildcard, a heredoc or a URL
 # The app's own package files, which a template on its own lacks: forge-pack checks they are committed.
 APP_FILES = {"package.json", "package-lock.json", "composer.json", "composer.lock", "requirements.txt"}
@@ -61,8 +65,7 @@ APP_FILES = {"package.json", "package-lock.json", "composer.json", "composer.loc
 def finding(rule, path, line, *words):
     """One finding: RULE's words with WORDS filled in. LINE 0: about a whole file or the project."""
     found = {key: text.format(*words) for key, text in RULES[rule].items()}  # severity, title, why, fix
-    found.update(where="%s:%d" % (path, line) if line else path, rule=rule, file=path, line=line)
-    return found
+    return dict(found, where="%s:%d" % (path, line) if line else path, rule=rule, file=path, line=line)
 
 
 def unquote(text):
@@ -220,9 +223,7 @@ def check_project(root):
         healthcheck = report["summary"]["healthcheck"]
         targets = set(report["summary"]["targets"])
     for name in [name for name in names if DOCKERFILE.match(name)]:
-        ignore = name + ".dockerignore"  # BuildKit uses this one instead of .dockerignore
-        if ignore not in names:
-            ignore = ".dockerignore" if ".dockerignore" in names else None
+        ignore = next((n for n in (name + ".dockerignore", ".dockerignore") if n in names), None)  # BuildKit's order
         if ignore and ignore not in ignores:
             ignores[ignore] = [line.strip() for line in read(root, ignore).splitlines()
                                if line.strip() and not line.strip().startswith("#")]
@@ -235,13 +236,15 @@ def check_project(root):
             if path.split("/")[0] == ".." or not os.path.exists(os.path.join(root, path)):  # .. is outside
                 findings.append(finding("missing", name, line, word, source, ignore))
             elif is_ignored(ignores.get(ignore, []), path.split("/")[0]):  # a folder by the folder's line
-                findings.append(finding("kept_out", name, line, word, source, ignore))
+                secret = SECRET_FILE.match(posixpath.basename(path))  # kept_secret never says to let it in
+                findings.append(finding("kept_secret" if secret else "kept_out", name, line, word, source, ignore))
         healthcheck = healthcheck or has_check
         checked.append(name)
     if not checked:
         raise ValueError("nothing to check: no Dockerfile or compose file in " + root)
-    for ignore in sorted(ignores):
-        findings += [finding("ignore", ignore, 0, shown, ignore) for name, shown in KEEP_OUT
+    keep_out = dict(KEEP_OUT + tuple((n, n) for n in names if SECRET_FILE.match(n) and n not in BY_PROFILE))
+    for ignore in sorted(ignores):  # KEEP_OUT and each file of secrets in ROOT (a dict: .env only once)
+        findings += [finding("ignore", ignore, 0, shown, ignore) for name, shown in keep_out.items()
                      if not is_ignored(ignores[ignore], name)]
         checked.append(ignore)
     if not healthcheck:

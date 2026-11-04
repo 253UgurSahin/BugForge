@@ -21,7 +21,7 @@
     "severity": "high",
     "title": "{1} does not keep out {0}",
     "why": "a COPY of the folder puts it in the image, for anyone who has the image to read",
-    "fix": "add a line {0} to {1}"
+    "fix": "add a line {0} at the end of {1}"
   },
   "missing": {
     "severity": "high",
@@ -34,6 +34,12 @@
     "title": "The image build needs {1}, which {2} keeps out",
     "why": "docker compose build stops at this {0} line: the file never reaches the build",
     "fix": "let it in with a line !{1} at the end of {2}, or copy another file"
+  },
+  "kept_secret": {
+    "severity": "high",
+    "title": "The image build copies {1}, a file of secrets that {2} keeps out",
+    "why": "docker compose build stops at this {0} line, and letting the file in would put its secrets in the image, for anyone who has the image to read",
+    "fix": "never let it in: take it out of this {0} line; the app reads its secrets at run time (env_file: .env in the compose file), and a secret the build needs goes in with RUN --mount=type=secret, never into a layer"
   },
   "tag": {
     "severity": "medium",
