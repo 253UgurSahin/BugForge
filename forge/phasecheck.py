@@ -13,6 +13,7 @@ Usage:
 before test's fixes, from the build or from an earlier round does not count: test-plan.md (test),
 parity.md (diff; also newer than bugs.md and features.csv, which the fix loop and forge-build change),
 security.md (secure), audit.md, inspect.md and improve.md, all in forge-work/.
+--until TIME: the phase's own go, once it is done: a bugs.md or features.csv changed later is a later phase's.
 --mode MODE: clone, idea or improve, for the checks that differ by mode (where test's specs are).
 Without it, the mode in forge-work/state.json; without that, only the checks every mode shares.
 
@@ -179,15 +180,16 @@ def check_counts(root, name):
     return True, "%s counts %d critical or high finding(s)%s" % (name, serious, ", accepted" if serious else "")
 
 
-def check_fresh(root, name, since, *inputs):
-    """NAME was written after SINCE, the last go before this phase, and after each of INPUTS that exists:
-    an older report says nothing of now. The same time passes: some file systems keep whole seconds."""
+def check_fresh(root, name, since, until, *inputs):
+    """NAME was written after SINCE, the last go before this phase, and after each of INPUTS that changed
+    before UNTIL (the phase's own go, or None): an older report says nothing of now. The same time passes."""
     written = os.path.getmtime(os.path.join(root, name))
     if written < datetime.datetime.fromisoformat(since).timestamp():
-        return False, "%s is older than the last go (%s): the app may have changed since. Run the phase's " \
-                      "skill again in full, so it writes a new one" % (name, since)
+        return False, "%s is older than the last go (%s): the app may have changed, or an earlier phase was " \
+                      "recorded again. Run the phase's skill again in full, so it writes a new one" % (name, since)
+    end = datetime.datetime.fromisoformat(until).timestamp() if until else float("inf")
     later = [other for other in inputs if os.path.isfile(os.path.join(root, other))
-             and os.path.getmtime(os.path.join(root, other)) > written]
+             and written < os.path.getmtime(os.path.join(root, other)) <= end]
     if later:
         return False, "%s is older than %s, which the fix loop or forge-build changed after it. Run the " \
                       "phase's skill again from its first step, so it writes a new one" % (name, " and ".join(later))
@@ -223,14 +225,14 @@ def profile_of(root):
     return found[0].strip() if len(found) == 1 and found[0].strip() in PROFILES else None
 
 
-def run_checks(root, phase, since=None, mode=None):
+def run_checks(root, phase, since=None, mode=None, until=None):
     """Every exit check of PHASE in ROOT for MODE (None: not known) and plan.md's profile, plus the age of
     its report when SINCE is given: a list of {"ok", "what", "output"}. A missing file is named once. A
     check with 'when' runs only when that path is there; else its line says it was skipped."""
     profile = profile_of(root)
     entries = [entry for entry in CHECKS[phase] if mode in entry.get("modes", [mode])
                and profile in entry.get("profiles", [profile])]
-    fresh = [{"run": check_fresh, "args": [FRESH[phase], since, *INPUTS.get(phase, ())]}] \
+    fresh = [{"run": check_fresh, "args": [FRESH[phase], since, until, *INPUTS.get(phase, ())]}] \
         if since and phase in FRESH else []
     results = []
     for entry in entries + fresh:
@@ -286,11 +288,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("phase", choices=list(CHECKS))
     parser.add_argument("--since", type=a_time, metavar="TIME", help="the report must be newer than this time")
+    parser.add_argument("--until", type=a_time, metavar="TIME", help="the phase's own go, once it is done")
     parser.add_argument("--mode", choices=MODES, help="the forge mode (default: the one in forge-work/state.json)")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     args = parser.parse_args(argv)
     mode = args.mode or mode_of(os.getcwd())
-    return show_checks(args.phase, run_checks(os.getcwd(), args.phase, args.since, mode), args.json, mode)
+    return show_checks(args.phase, run_checks(os.getcwd(), args.phase, args.since, mode, args.until), args.json, mode)
 
 
 if __name__ == "__main__":

@@ -92,9 +92,9 @@ in the wrong folder they are missing. Run status first. Show the user an exit 2 
 
 ## Step 2: start
 
-1. In the project root: `python3 ../forge/gate.py init --mode <mode> --about '<the URL, idea or
-   repo, as the user said it>'`. Exit 1: a forge state is there already, so resume (below).
-   `--force` starts over and forgets every approval (not the work): only when the user asks.
+1. In the project root: `python3 ../forge/gate.py init --mode <mode> --about '<the URL, idea or repo, as
+   the user said it>'`. Exit 1: a forge state is there already, so resume (below). `--force` (only when
+   the user asks) forgets every approval, and test, diff, secure, audit, inspect and improve run again.
 2. `forge-work/` holds notes, reports and screenshots of other apps, never shipped. `init` writes
    `forge-work/.gitignore` (`*`), so git ignores the folder from the start, in every mode, before
    any `git add`. Never delete it. forge-pack's `.dockerignore` keeps it out of images.
@@ -131,7 +131,7 @@ forge-build's last step wrote is from before test, brand and launch changed the 
   /forge-build, then /forge-test (its tests). Then rebuild (`docker compose up -d --build --wait`)
   and go back to the phase you came from (diff runs again from its Step 1).
 - A phase that is done stays done. When its files change, run its check again and fix what fails
-  before you go on. `done` may record it again after a new go.
+  before you go on. `done` may record it again after a new go; later reports must then be newer.
 - secure says FAIL: nothing moves on until it is fixed, or the user accepts one specific risk in
   writing in security.md (forge-secure, "The gate"). Never change the verdict by hand.
 - pack runs secretscan again: a secret added after secure stops it.

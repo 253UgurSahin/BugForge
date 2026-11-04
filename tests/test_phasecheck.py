@@ -921,6 +921,21 @@ class SinceTests(Checks):
                 self.assertIn("forge-work/parity.md is newer than the last go (%s)" % go,
                               self.assert_passes("diff", "--since", go))
 
+    def test_an_input_changed_after_the_phases_own_go_is_a_later_phases(self):
+        """--until is the phase's own go, once it is done: a bugs.md changed after it comes from a later
+        phase's fix (brand, launch, secure or pack sent a bug through test's loop), not from diff's own."""
+        self.finish("diff")
+        go, own = "2026-10-27T09:51:44+00:00", "2026-10-27T10:30:00+00:00"
+        at = datetime.datetime.fromisoformat(own).timestamp()
+        os.utime(os.path.join(self.root, "forge-work", "parity.md"), (at - 60, at - 60))  # Step 4, during diff
+        bugs = os.path.join(self.root, "forge-work", "bugs.md")
+        os.utime(bugs, (at + 60, at + 60))  # after diff's go
+        os.utime(os.path.join(self.root, "forge-work", "features.csv"), (at - 120, at - 120))
+        self.assert_passes("diff", "--since", go, "--until", own)
+        os.utime(bugs, (at - 30, at - 30))  # still during diff, after parity.md: the report is stale
+        self.assert_fails("diff", "forge-work/parity.md is older than forge-work/bugs.md",
+                          args=("--since", go, "--until", own))
+
     def test_a_report_from_an_earlier_round_does_not_count(self):
         """gate-2: later changes to a finished app run improve mode in its root (forge/SKILL.md, Next), and
         init --force keeps the files of the earlier round. Its test-plan.md, audit.md, inspect.md and

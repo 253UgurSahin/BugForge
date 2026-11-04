@@ -5,6 +5,7 @@ hand-edited state.json, resuming in a new process, and the atomic write. The exi
 tested in test_phasecheck.py. Every test works in its own temporary project folder."""
 
 import contextlib
+import datetime
 import io
 import json
 import os
@@ -187,6 +188,20 @@ class InitTests(Project):
         self.assertIn("ls -la forge-work", err)
         self.assertEqual(read(os.path.join(folder, "notes.txt")), "important user data\n")
         self.assertEqual(os.listdir(os.path.join(self.root, "forge-work")), [".gitignore"])
+
+    def test_a_linked_state_is_never_read(self):
+        """forge-work/state.json as a link: it could point to a pipe (status would hang) or /dev/zero. init
+        refuses as for a linked .gitignore, and status, check, done and skip read nothing through it."""
+        folder = self.outside("state.json", "{}\n")
+        os.makedirs(os.path.join(self.root, "forge-work"))
+        symlink(self, os.path.join(folder, "state.json"), os.path.join(self.root, "forge-work", "state.json"))
+        for args in (["init", "--mode", "improve"], ["status"], ["check", "plan"], ["done", "plan", "--approved", "go"],
+                     ["skip", "compare", "--reason", "none"]):
+            with self.subTest(args=args):
+                code, out, err = self.gate(*args)
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn("error: %s is a link" % os.path.join("forge-work", "state.json"), err)
+        self.assertEqual(read(os.path.join(folder, "state.json")), "{}\n")
 
     def test_init_never_writes_into_a_linked_forge_work(self):
         """forge-work itself as a link to another folder: init writes nothing there, not even with --force."""
@@ -408,6 +423,19 @@ class FreshReportTests(Project):
         code, out, _ = self.gate("done", "secure", "--approved", "go")
         self.assertEqual(code, 1)
         self.assertIn("is older than the last go", out)
+
+    def test_a_later_phases_bug_fix_leaves_diff_done(self):
+        """gate-6 asks for a parity.md newer than bugs.md while diff runs. After diff's go, a bug that brand,
+        launch, secure or pack finds goes through test's fix loop and changes bugs.md: that is a later
+        phase's work, so diff's check still passes (forge/SKILL.md: go back to the phase you came from)."""
+        self.gate("init", "--mode", "clone")
+        self.approve("recon", "compare", "plan", "design", "build", "test", "diff")
+        write(self.root, "forge-work/bugs.md", read(os.path.join(self.root, "forge-work", "bugs.md")) +
+              "\n## B007 [high] [fixed] Found by forge-secure\nfixed in: 7d6e5f4\n")
+        later = datetime.datetime.fromisoformat(self.state()["phases"]["diff"]["at"]).timestamp() + 5
+        os.utime(os.path.join(self.root, "forge-work", "bugs.md"), (later, later))  # after diff's go
+        code, out, _ = self.gate("check", "diff")
+        self.assertEqual(code, 0, out)
 
     def test_a_parity_report_from_before_tests_go_does_not_count(self):
         """test's fix loop changes the clone, so diff must score it after test's go (N26, N27)."""

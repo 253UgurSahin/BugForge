@@ -78,7 +78,8 @@ python3 $FORGE/forge/gate.py done plan --approved 'ja, ga door'
 python3 $FORGE/forge/gate.py skip compare --reason 'no rivals worth reading'   # compare and inspect only
 ```
 
-`init --force` starts over and forgets every approval (not the work).
+`init --force` starts over: it forgets every approval, and test, diff, secure, audit, inspect and
+improve run again, since their reports must be newer than the new start.
 
 ## Stack profiles
 
@@ -141,7 +142,7 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 | usage | what it does |
 | --- | --- |
 | `gate.py {init,status,check,done,skip} ...` | the gate (above); 1 = refused |
-| `phasecheck.py PHASE [--since TIME] [--mode MODE] [--json]` | the exit checks of one phase, from `phasecheck.json`; gate.py runs it |
+| `phasecheck.py PHASE [--since TIME] [--until TIME] [--mode MODE] [--json]` | the exit checks of one phase, from `phasecheck.json`; gate.py runs it |
 | `doccheck.py FILE [--template T] [--section S] [--cases BUGS] [--specs P] [--rows A,B] [--names L] [--json]` | is a report filled in: no placeholder of its template left, text of its own in each section, the test cases, a file a line names; phasecheck runs it |
 | `workcheck.py {features,built,tokens,specs,compared,named} ... [--json]` | a phase's work files: the feature list, the design tokens, the end-to-end specs, the compared screenshots, the app's new name; phasecheck runs it |
 | `gitguard.py [PATH] [--clean] [--json]` | 0 only on a work branch, never main, master, trunk or production; `--clean`: nothing uncommitted |

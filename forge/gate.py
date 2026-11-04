@@ -19,8 +19,8 @@ Exit codes:
     1  refused: a check fails, no words of go or no reason, an earlier phase is still open, the
        phase may not be skipped, or a state exists already (init without --force)
     2  a phase that is not in this mode, or a damaged state.json; for status, done and skip also no
-       state.json in this folder (check then only looks at the files, so run status first); for init,
-       done and skip also a forge-work that is a link (init: or its .gitignore): it writes nothing then
+       state.json in this folder (check then only looks at the files, so run status first); also a
+       forge-work, forge-work/.gitignore or state.json that is a link: it reads and writes nothing then
 """
 
 import argparse
@@ -108,6 +108,8 @@ def load_state(root, phase=None):
     path = os.path.join(root, STATE)
     if not os.path.lexists(path):
         raise StateError("no forge state in %s. Run gate.py in the project root, or start: gate.py init" % path)
+    if os.path.islink(path):  # it could point anywhere: a pipe would hang this, /dev/zero fill the memory
+        raise StateError(LINKED % STATE)
     try:
         with open(path, encoding="utf-8") as handle:
             state = json.load(handle)
@@ -115,8 +117,8 @@ def load_state(root, phase=None):
     except (OSError, ValueError, RecursionError) as error:
         state, problem = None, "it cannot be read as JSON (%s)" % error
     if problem:
-        raise StateError("%s is damaged: %s. Do not guess what it said: tell the user. Only with their go: gate.py "
-                         "init --mode <mode> --force (work files stay, approvals go)." % (path, problem))
+        raise StateError("%s is damaged: %s. Do not guess: tell the user. Only with their go: gate.py init --mode "
+                         "<mode> --force (approvals go; reports must be newer than the new start)." % (path, problem))
     if phase and phase not in MODES[state["mode"]]:
         raise StateError("%s is not a phase of %s mode: %s" % (phase, state["mode"], ", ".join(MODES[state["mode"]])))
     return state
@@ -163,8 +165,9 @@ def exit_checks(root, phase, state=None, as_json=False):
     mode, and the phase's report must be newer than the last go before it. Returns 0 when every check
     passes, else 1."""
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phasecheck.py")
-    command = [sys.executable, script, phase] + (
-        ["--mode", state["mode"], "--since", last_go(state, phase)] if state else [])
+    own = state["phases"].get(phase, {}).get("at") if state else None  # done already: a later change is not its
+    command = [sys.executable, script, phase] + (["--mode", state["mode"], "--since", last_go(state, phase)]
+                                                 + (["--until", own] if own else []) if state else [])
     try:
         done = subprocess.run(command + (["--json"] if as_json else []), cwd=root, stdin=subprocess.DEVNULL,
                               capture_output=True, encoding="utf-8", errors="replace", timeout=TIMEOUT,
@@ -195,7 +198,7 @@ def refuse(text):
 
 
 def cmd_init(root, args):
-    for name in ("forge-work", "forge-work/.gitignore"):  # git stores links, so a repo can carry either as one
+    for name in ("forge-work", "forge-work/.gitignore", STATE):  # git stores links: a repo can carry any as one
         if os.path.islink(os.path.join(root, name)):
             raise StateError(LINKED % name)
     if os.path.lexists(os.path.join(root, STATE)) and not args.force:
@@ -236,8 +239,7 @@ def cmd_status(root, args):
 
 
 def cmd_check(root, args):
-    """The exit checks. With a state.json here, a phase of another mode is refused (exit 2) and the
-    phase's report must be newer than the last go. Without one, it only looks at the files."""
+    """The exit checks: of the state's mode when there is one (a phase of another mode: exit 2), else of the files."""
     state = load_state(root, args.phase) if os.path.lexists(os.path.join(root, STATE)) else None
     return exit_checks(root, args.phase, state, args.json)
 
