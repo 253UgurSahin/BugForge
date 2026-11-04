@@ -36,7 +36,9 @@ END = "/* forge theme end */"
 NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 UNSAFE = re.compile(r"[;{}<>\r\n]")  # a value that could end the declaration or the block
 KNOWN = {"color", "font", "type", "space", "radius", "shadow", "motion", "layout", "size", "breakpoint", "pairs"}
-STATEMENT = re.compile(r"\s*(?:/\*.*?\*/|@[\w-]+[^;{}]*;)", re.S)  # a comment, or an @-rule without a block
+STATEMENT = re.compile(r"""\s*(?:/\*.*?\*/|@[\w-]+(?:"[^"\n]*"|'[^'\n]*'|url\([^)"'{}]*\)"""
+                       r"""|(?!url\([^)"'{}]*\))[^;{}"'])*;)""", re.S)  # a comment, or an @-rule without a
+# block: a ; or a brace inside quotes or url() ends neither (Google Fonts URLs hold wght@400;700)
 DECLARED = re.compile(r"(--[\w-]+)\s*:(?!\s*initial)")  # a custom property set (not one cleared)
 IDENT = r"-?[A-Za-z_\x80-\U0010ffff][-\w\x80-\U0010ffff]*"  # a CSS identifier: Inter, -apple-system, Café
 FAMILY = re.compile(r"%s(?:[ \t]+%s)*\Z" % (IDENT, IDENT))  # a font name of identifiers needs no quotes

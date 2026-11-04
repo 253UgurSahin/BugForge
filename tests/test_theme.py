@@ -193,6 +193,20 @@ class WriteTests(Folder):
                 self.assertEqual(run(TEMPLATE, "--tailwind", "no", "--write", target)[0], 0)
                 self.assertEqual(self.read("style.css"), text)  # the block is replaced where it is
 
+    def test_a_semicolon_or_a_brace_in_an_imports_url_is_no_end(self):
+        """Google Fonts URLs hold a ; (wght@400;700), quoted or not, and a file name may hold a brace: the
+        @import ends at its own ;, so the block goes below the whole line, never inside the URL."""
+        vite = ":root {\n  --text: #6b6375;\n}\n"
+        for line in ("@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');",
+                     "@import url(https://fonts.googleapis.com/css2?family=Inter:wght@400;700);",
+                     '@import "theme-{v1}.css";'):
+            with self.subTest(line=line):
+                target = self.write("style.css", line + "\n" + vite)
+                self.assertEqual(run(TEMPLATE, "--tailwind", "no", "--write", target)[0], 0)
+                text = self.read("style.css")
+                self.assertTrue(text.startswith(line + "\n\n" + theme.START), text[:200])
+                self.assertTrue(text.endswith(vite))
+
     def test_the_scaffolds_own_theme_values_are_named(self):
         """Laravel's app.css sets --font-sans in its own @theme after the imports: it would win."""
         target = self.write("app.css", "@import 'tailwindcss';\n@source '../**/*.blade.php';\n\n@theme {\n"
