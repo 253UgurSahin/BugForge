@@ -55,7 +55,8 @@ HEREDOC = re.compile(r"""(?:^|\s)\d*<<-?(["']?)([A-Za-z_][\w-]*)\1""")  # RUN <<
 KEEP_OUT = ((".env", ".env"), (".git", ".git"), ("forge-work", "forge-work/"))  # (name, as shown)
 # Files of secrets: never let in, and kept out when they are in PATH. BY_PROFILE is the profile's call: next and
 # static let in .env.production (public build values); only laravel's and django's images take all of PATH.
-SECRET_FILE = re.compile(r"^(?:\.env(?:\.(?!example$).+)?|auth\.json|\.npmrc|\.yarnrc\.yml|.*\.(?i:key|p12|pfx))$")
+SECRET_FILE = re.compile(r"^(?:\.env(?:\..+(?<!\.example)(?<!\.sample)(?<!\.dist)(?<!\.template))?|auth\.json"
+                         r"|\.npmrc|\.yarnrc\.yml|.*\.(?i:key|p12|pfx))$")  # env templates as in secretscan.py
 BY_PROFILE = {".env.production", ".npmrc", ".yarnrc.yml"}
 NOT_LOOKED_UP = re.compile(r"[$*?\[]|^<<|://|^git@")  # a variable, a wildcard, a heredoc or a URL
 # The app's own package files, which a template on its own lacks: forge-pack checks they are committed.

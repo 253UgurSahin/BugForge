@@ -163,7 +163,9 @@ class TemplateTests(unittest.TestCase):
         for profile in PROFILES:
             with self.subTest(profile=profile):
                 lines = read(os.path.join(TEMPLATES, profile, "dockerignore")).splitlines()
-                for name in (".env", ".git", "forge-work", "node_modules", "coverage", "test-results"):
+                # every file of secrets packcheck asks to keep out, so an honest project passes as it is
+                for name in (".env", ".git", "forge-work", "node_modules", "coverage", "test-results", "auth.json",
+                             "local.key", "cert.p12", "cert.pfx"):
                     self.assertTrue(mod.is_ignored(lines, name), name)
                 self.assertFalse(mod.is_ignored(lines, ".env.example"))
                 # npm's and Yarn's logins: the laravel and django images take the whole folder, while
@@ -314,10 +316,10 @@ class ProjectTests(Project):
         profile decides on: .env.production (next and static let in its public build values) and
         npm's and Yarn's logins (only the laravel and django images take the whole folder)."""
         for name in (".env.local", ".env.production.local", "auth.json", "oauth-private.key", "app.p12", "app.pfx",
-                     ".env.example", ".env.production", ".npmrc", ".yarnrc.yml", "ca.pem", "monkey"):
+                     ".env.example", ".env.production", ".npmrc", ".yarnrc.yml", "ca.pem", "monkey", ".env.sample"):
             write(self.dir, name, "x")
         static = ".env\n.env.*\n!.env.example\n!.env.production\n.git\nforge-work/\n"  # as in the templates
-        write(self.dir, ".dockerignore", static + "!.env.local\n")
+        write(self.dir, ".dockerignore", static + "!.env.local\n!.env.sample\n")  # .env.sample: fake values
         self.assertEqual([f["title"] for f in self.check()[0]], [
             ".dockerignore does not keep out .env.local", ".dockerignore does not keep out app.p12",
             ".dockerignore does not keep out app.pfx", ".dockerignore does not keep out auth.json",
@@ -418,9 +420,10 @@ class CopySourceTests(Project):
                 self.assertIn("RUN --mount=type=secret", findings[0]["fix"])
 
     def test_a_kept_out_file_that_holds_no_secret_may_be_let_in(self):
-        """A CA certificate (.pem) is public; .env.example holds fake values only."""
+        """A CA certificate (.pem) is public; env templates (.env.example, .sample, .dist, .template: as
+        secretscan.py reads them) hold fake values only."""
         write(self.dir, ".dockerignore", GOOD_IGNORE + ".env*\n*.pem\n")
-        for source in (".env.example", "ca.pem"):
+        for source in (".env.example", ".env.sample", ".env.dist", ".env.template", ".env.local.example", "ca.pem"):
             with self.subTest(source=source):
                 write(self.dir, source, "x")
                 write(self.dir, "Dockerfile", in_final_stage("COPY %s /app/" % source))

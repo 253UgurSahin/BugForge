@@ -10,12 +10,15 @@ vendor/
 public/build/
 public/hot
 public/storage
-# Local files: Composer, npm and Yarn logins for private packages, Laravel's OAuth keys, the cached
-# config (it holds every .env value), local uploads, sessions and logs. The .gitignore files in
-# these folders stay, so the folders exist in the image.
+# Local files: Composer, npm and Yarn logins for private packages, private keys, Laravel's OAuth
+# keys, the cached config (it holds every .env value), local uploads, sessions and logs. The
+# .gitignore files in these folders stay, so the folders exist in the image.
 auth.json
 .npmrc
 .yarnrc.yml
+*.key
+*.p12
+*.pfx
 storage/*.key
 storage/app/**
 storage/framework/**

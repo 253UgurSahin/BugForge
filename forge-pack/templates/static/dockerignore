@@ -4,6 +4,11 @@
 !.env.example
 # Public build settings (VITE_ values) only. Never a secret in this file.
 !.env.production
+# Logins and private keys: Composer's or Playwright's auth.json, *.key, *.p12, *.pfx.
+auth.json
+*.key
+*.p12
+*.pfx
 .git
 .github
 forge-work/

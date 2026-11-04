@@ -2,9 +2,13 @@
 .env
 .env.*
 !.env.example
-# npm and Yarn logins for private packages: the image takes the whole folder.
+# Logins and private keys (npm, Yarn, Composer or Playwright's auth.json): the image takes the whole folder.
 .npmrc
 .yarnrc.yml
+auth.json
+*.key
+*.p12
+*.pfx
 .git
 .github
 forge-work/
