@@ -4,10 +4,10 @@
 Finds hidden characters, orders for an AI, fake chat roles, requests to run commands or send
 secrets, HTML comments, hidden, off-screen or white-on-white text and long base64 runs, in the
 source and in the page text (plain() shows how text is cleaned). Short text behind the hidden
-attribute, display:none or visibility:hidden that gives no orders is only a low "Hidden UI state".
-Not flagged: a byte order mark at the start, a joiner in an emoji or an Arabic or Indic word, the
-England, Scotland and Wales flags. Rarer tricks can slip through. "forge:allow" is NOT honoured:
-strangers could add it. The words of each finding are in untrusted.json next to this script.
+attribute, display:none or visibility:hidden with no order phrase it knows is only a low "Hidden UI
+state". Not flagged: a byte order mark at the start, a joiner in an emoji or an Arabic or Indic
+word, the England, Scotland and Wales flags. Rarer tricks can slip through. "forge:allow" is NOT
+honoured: strangers could add it. Each finding's words are in untrusted.json next to this script.
 
 Usage:
     python3 untrusted.py page.html notes.md [--json] [--fail-on medium]

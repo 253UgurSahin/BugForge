@@ -17,7 +17,7 @@ Account terms: {{checked YYYY-MM-DD: no clause against building a competing prod
 
 | # | source | URL | read on | how | untrusted.py | notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | help center | {{https://...}} | {{YYYY-MM-DD}} | {{fetched, user's copy, secondhand or used in a fresh browser}} | {{no hits, or 2 low: hidden UI states that fit the page}} | {{...}} |
+| 1 | help center | {{https://...}} | {{YYYY-MM-DD}} | {{fetched, user's copy, secondhand or used in a fresh browser}} | {{no hits, or 2 low: hidden UI states, quoted: "Bedankt", "Annuleren"}} | {{...}} |
 
 Not reached: {{URL and why, or none}}
 
