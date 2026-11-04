@@ -3,7 +3,7 @@ template the gate reads is found when it is left, in code blocks and over line b
 such as Blade's {{ $name }}, a comment or the Theme block's <role> never counts; a section with only the
 template's lines or only a comment has no text of its own; the Cases tables (one per flow too), the specs, a
 table's rows and a line that names a file are checked as the gate reads them; a bugs.md in UTF-16 is read as
-bugs.py reads it; any console shows the output."""
+bugs.py reads it; a [ in the pack's own path is no wildcard; any console shows the output."""
 
 import codecs
 import contextlib
@@ -125,6 +125,23 @@ class PlaceholderTests(Report):
         self.assertEqual(code, 1)
         self.assertIn("1 placeholder(s) of templates/*/RUN.md", out)
         self.assertEqual(self.check("# Running Slotwise\n", "--template", "templates/*/RUN.md", "--no-sections")[0], 0)
+
+    def test_a_pack_in_a_folder_with_brackets(self):
+        """phasecheck.py passes <pack>/forge/../forge-pack/templates/*/RUN.md. A [ in the pack's own path, as in
+        a folder named 'skills [work]', stays a [: only the * that phasecheck.json wrote is a wildcard."""
+        pack = os.path.join(self.root, "skills [work]")
+        shutil.copytree(os.path.join(ROOT, "forge-pack", "templates"), os.path.join(pack, "forge-pack", "templates"))
+        os.makedirs(os.path.join(pack, "forge"))
+        shutil.copy(SCRIPT, os.path.join(pack, "forge"))
+        pattern = os.path.join(pack, "forge", "..", "forge-pack", "templates", "*", "RUN.md")
+        done = filled("forge-pack/templates/static/RUN.md")
+        for text, code in ((done, 0), (done + "\n{{App name}}\n", 1)):
+            with self.subTest(code=code):
+                write(self.root, "RUN.md", text)
+                result = run_cp1252(os.path.join(pack, "forge", "doccheck.py"), "RUN.md", "--template", pattern,
+                                    "--no-sections", cwd=self.root)
+                self.assertEqual(result[0], code, result[1] + result[2])
+        self.assertIn("RUN.md still has 1 placeholder(s) of ../forge-pack/templates/*/RUN.md", result[1])
 
 
 class SectionTests(Report):

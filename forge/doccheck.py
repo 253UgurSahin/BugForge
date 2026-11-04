@@ -232,10 +232,16 @@ def check_names(name, text, label):
                   "(found: %s)" % (name, label, ", ".join(named) or "no file name"), []
 
 
+def as_glob(pattern):
+    """PATTERN for glob, with the pack's own folder escaped: a [ in the pack's path (a folder such as
+    'skills [work]') stays a [, so only the rest, such as the * that phasecheck.json wrote, is a wildcard."""
+    return glob.escape(PACK) + pattern[len(PACK):] if pattern.startswith(PACK + os.sep) else pattern
+
+
 def run(args):
     """Every check ARGS asks for, as [(ok, what, output lines)]. OSError when a file cannot be read."""
     text = read(args.file)
-    paths = [found for pattern in args.template for found in sorted(glob.glob(pattern)) or [pattern]]
+    paths = [found for pattern in args.template for found in sorted(glob.glob(as_glob(pattern))) or [pattern]]
     templates, label = [read(path) for path in paths], " and ".join(shown(path) for path in args.template)
     first = templates[0] if templates else None
     checks = [check_placeholders(args.file, text, templates, label)] if templates else []
