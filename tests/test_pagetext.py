@@ -142,6 +142,23 @@ class KeepTests(Project):
         self.assertEqual(sorted(os.listdir(KEPT)), ["source-1.txt", "source-2.txt"])
         self.assertIn('only 5 words: drawn by JavaScript? Save it from a browser, "Webpage, Complete"', out)
 
+    def test_a_page_with_no_6_words_in_a_row_says_so(self):
+        """copycheck.py looks for 6 words in a row. A page of short labels, or in a language written without
+        spaces, has none, so no copy of it can ever be found: pagetext.py says so while the saved pages still
+        exist. A page with few words also gets the hint that JavaScript drew it."""
+        labels = "".join("<a href='/%d'>Pagina %d</a> " % (i, i) for i in range(12)) + "<p>Gemaakt in Utrecht</p>"
+        for name, page, notes in [("labels", labels, ["Kept 27 words of", "no 6 words in a row"]),
+                                  ("japanese", "<h1>植物の水やりを、もう忘れない。</h1>",
+                                   ["Kept 2 words of", "only 2 words: drawn by JavaScript?", "no 6 words in a row"]),
+                                  ("page", PAGE, ["Kept 59 words of"])]:
+            with self.subTest(page=name):
+                code, out, err = run(self.save(name + ".html", page))
+                self.assertEqual(code, 0, err)
+                for note in notes:
+                    self.assertIn(note, out)
+                self.assertEqual("drawn by JavaScript" in out, name == "japanese")
+                self.assertEqual("in a row" in out, name != "page")
+
     def test_a_complete_save_and_an_old_encoding(self):
         """A browser's "Webpage, Complete" puts the page's files in source-1_files/, embedded pages too:
         those are not the original's pages. A page saved in cp1252 keeps its accents."""

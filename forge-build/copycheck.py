@@ -3,8 +3,9 @@
 
 Clean-room proof for forge-build: every word of the clone is written fresh, so 6+ words in a row
 that it shares with the original's pages are their copy, or written from memory of it. Labels
-that match by what they do ("Add a plant") are shorter. The original's text is what pagetext.py
-kept in forge-work/original-text/. Run it from the project root.
+that match by what they do ("Add a plant") are shorter. Japanese, Chinese and Thai are written
+without spaces, so they are compared clause by clause: the check is weak there. The original's
+text is what pagetext.py kept in forge-work/original-text/. Run it from the project root.
 
 Usage:
     python3 copycheck.py                    check the whole project (.)
@@ -19,9 +20,9 @@ A run in forge-work/copy-allow.txt (one per line, # for notes) is let through, s
 user's own words or a legal phrase: each needs the user's OK.
 
 Exit codes:
-    0  nothing shared
+    0  nothing shared, also when the kept text has no run of --words words (a note says so)
     1  at least one run of --words (default 6) or more words is in both
-    2  bad input or an incomplete check: a missing path, no kept text (run pagetext.py), no
+    2  bad input or an incomplete check: a missing path, no word kept (run pagetext.py), no
        file read, or a file or folder it could not read
 """
 
@@ -51,6 +52,8 @@ TOOL_FILES = {"package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-loc
               "composer.lock", "poetry.lock", "Pipfile.lock", "uv.lock", ".phpunit.result.cache"}
 FIX = ("write it again in your own words. Must it match (the user's own words, a legal phrase)? "
        "Then put it on its own line in %s, with the user's OK" % ALLOW_FILE)
+SHORT = ("the original's kept text has no %d words in a row (a language written without spaces, or only "
+         "short labels), so nothing can be shared at that length: say so at the checkpoint")
 
 
 def words(text):
@@ -85,18 +88,19 @@ def file_blocks(path, text):
 
 
 def load_original(size):
-    """{SIZE words in a row: the names of the original's pages that have them}, from TEXT_DIR."""
-    runs = {}
+    """{SIZE words in a row: the names of the original's pages that have them}, from TEXT_DIR. Empty when
+    the kept text has no SIZE words in a row; a ValueError when it has no word at all."""
+    runs, kept = {}, False
     for name in sorted(os.listdir(TEXT_DIR)) if os.path.isdir(TEXT_DIR) else []:
         if name.endswith(".txt"):
             with open(os.path.join(TEXT_DIR, name), encoding="utf-8", errors="replace") as handle:
                 for found in [words(line) for line in handle if not line.startswith("#")]:
+                    kept = kept or bool(found)
                     for i in range(len(found) - size + 1):
                         runs.setdefault(tuple(found[i:i + size]), set()).add(name[:-4])
-    if not runs:
-        raise ValueError("%s holds no text of the original: in clone mode forge-recon keeps it there with "
-                         "pagetext.py (its Step 2), so run that on the saved pages. With none saved (a "
-                         "secondhand recon) there is nothing to compare: say so at the checkpoint" % TEXT_DIR)
+    if not kept:
+        raise ValueError("%s holds no text of the original: save its pages again as forge-recon Step 2 says (it "
+                         "deletes them after recon.md) and run pagetext.py on them, or ask the user" % TEXT_DIR)
     return runs
 
 
@@ -188,7 +192,8 @@ def check(paths, original, size, allow):
     findings = [one for one in found if one]
     verdict = "INCOMPLETE" if unreadable or not counts["checked"] else "FAIL" if findings else "PASS"
     return findings, {"runs": len(findings), "files_checked": counts["checked"], "files_skipped": counts["binary"],
-                      "words": size, "unreadable": sorted(unreadable), "allowed": sorted(used), "verdict": verdict}
+                      "words": size, "unreadable": sorted(unreadable), "allowed": sorted(used), "verdict": verdict,
+                      "note": "" if original else SHORT % size}
 
 
 def format_human(findings, summary):
@@ -200,6 +205,8 @@ def format_human(findings, summary):
                  % (summary["files_checked"], summary["files_skipped"], TEXT_DIR, summary["words"]))
     if summary["allowed"]:
         lines.append("Let through by %s, each needs the user's OK: %s" % (ALLOW_FILE, "; ".join(summary["allowed"])))
+    if summary["note"]:
+        lines.append("Note: %s." % summary["note"])
     if summary["verdict"] == "INCOMPLETE":
         missed = "Could not read: " + ", ".join(summary["unreadable"]) if summary["unreadable"] else "No file read."
         lines.append("INCOMPLETE, so not a pass. " + missed)

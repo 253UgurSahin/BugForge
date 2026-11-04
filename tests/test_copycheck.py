@@ -183,10 +183,32 @@ class CheckTests(Project):
                 code, out, err = run(*args)
                 self.assertEqual(code, 2)
                 self.assertIn(words, out if stream == 1 else err)
-        shutil.rmtree(os.path.join("forge-work", "original-text"))
-        code, _, err = run()
-        self.assertEqual(code, 2)
-        self.assertIn("forge-recon keeps it there with pagetext.py", err)
+        self.write(os.path.join("forge-work", "original-text", "source-1.txt"), "# kept by pagetext.py\n\n")
+        for state in ("only a header line", "no folder"):
+            with self.subTest(state=state):
+                code, out, err = run()
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn("holds no text of the original: save its pages again as forge-recon Step 2 says", err)
+                self.assertIn("run pagetext.py on them, or ask the user", err)
+                self.assertLessEqual(len(err.rstrip()), 200, "the gate shows 200 characters of a line")
+                shutil.rmtree(os.path.join("forge-work", "original-text"), ignore_errors=True)
+
+    def test_kept_text_with_no_run_that_long_passes_with_a_note(self):
+        """An original of short labels, or in a language written without spaces, has no 6 words in a row.
+        Nothing can be shared at that length, so that is a pass, with a note to pass on at the checkpoint.
+        A shorter --words still finds what the clone shares with it."""
+        self.keep("source-1", "<nav><a href='/'>Planten</a> <a href='/p'>Prijzen</a></nav><p>Gemaakt in Utrecht</p>")
+        self.write("index.html", "<footer>Gemaakt in Utrecht</footer>\n")
+        code, out, err = run()
+        self.assertEqual(code, 0, err)
+        self.assertIn("Note: the original's kept text has no 6 words in a row (a language written without spaces, "
+                      "or only short labels), so nothing can be shared at that length: say so at the checkpoint.\n"
+                      "PASS: no run of 6 or more words", out)
+        summary = json.loads(run("--json")[1])["summary"]
+        self.assertEqual(summary["verdict"], "PASS")
+        self.assertIn("no 6 words in a row", summary["note"])
+        code, out, _ = run("--json", "--words", "3")
+        self.assertEqual((code, json.loads(out)["summary"]["note"]), (1, ""))
 
     def test_a_cp1252_pipe_gets_escapes_not_a_crash(self):
         self.write(os.path.join("forge-work", "original-text", "source-2.txt"),
@@ -213,6 +235,29 @@ class EndToEnd(Project):
         self.assertEqual(code, 1)
         self.assertIn('"je planten blijven in je eigen browser"', out)
         self.assertIn("page source-7 has", out)
+
+    def test_a_language_written_without_spaces(self):
+        """Japanese has no spaces between words, so a clause counts as one word and no block of the page has
+        6. pagetext.py says so while the saved pages still exist. copycheck.py passes with a note, and a
+        shorter --words still finds a paragraph the clone took from it."""
+        os.remove(os.path.join("forge-work", "original-text", "source-1.txt"))
+        outside = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, outside)
+        page = os.path.join(outside, "source-8.html")
+        paragraph = "データはお使いのブラウザにだけ保存され、外部に送信されることはありません。アカウントも不要です。登録は無料です。"
+        with open(page, "w", encoding="utf-8") as handle:
+            handle.write("<h1>植物の水やりを、もう忘れない。</h1><p>%s</p>" % paragraph)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(pagetext.main([page]), 0)
+        self.assertIn("no 6 words in a row", out.getvalue())
+        self.write("privacy.html", "<p>%s</p>\n" % paragraph)
+        code, out, _ = run()
+        self.assertEqual(code, 0, out)
+        self.assertIn("Note: the original's kept text has no 6 words in a row", out)
+        code, out, _ = run("--words", "3")
+        self.assertEqual(code, 1, out)
+        self.assertIn("4 words in a row from the original", out)
 
 
 if __name__ == "__main__":
