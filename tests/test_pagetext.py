@@ -171,6 +171,29 @@ class KeepTests(Project):
         with open(os.path.join(KEPT, "source-1.txt"), encoding="utf-8") as handle:
             self.assertIn("café één keer per week water geven", handle.read())
 
+    def test_the_charset_the_page_names(self):
+        """getpage.py saves a page's bytes as they came. One that is not UTF-8 is read in the charset its <meta>
+        names, the way browsers read it (ISO-8859-1 as cp1252, EUC-KR as windows-949); a name that is no text
+        codec gives cp1252. UTF-8 comes first: a browser saves a page as UTF-8 and may keep the old <meta>."""
+        russian, japanese = "Каждое растение получает воду вовремя", "植物の水やりを、もう忘れない。"
+        korean, latin = "똠방각하 물주기 알림을 제때 받아 보세요", "Škoda’s één keer per week"
+        http_equiv = '<meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS">'
+        for name, meta, codec, text in [("ru", '<meta charset="windows-1251">', "cp1251", russian),
+                                        ("ja", http_equiv, "shift_jis", japanese),
+                                        ("utf8", '<meta charset="windows-1251">', "utf-8", russian),
+                                        ("ko", "<meta charset='euc-kr'>", "cp949", korean),
+                                        ("latin", "<meta charset=ISO-8859-1>", "cp1252", latin),
+                                        ("unknown", '<meta charset="x-made-up">', "cp1252", latin),
+                                        ("base64", '<meta charset="base64">', "cp1252", latin),
+                                        ("idna", '<meta charset="idna">', "cp1252", latin)]:
+            with self.subTest(page=name):
+                with open(os.path.join(self.outside, name + ".html"), "wb") as handle:
+                    handle.write(("<html><head>%s</head><body><p>%s</p></body></html>" % (meta, text)).encode(codec))
+                code, _, err = run(os.path.join(self.outside, name + ".html"))
+                self.assertEqual(code, 0, err)
+                with open(os.path.join(KEPT, name + ".txt"), encoding="utf-8") as handle:
+                    self.assertIn(" ".join(pagetext.words(text)) + "\n", handle.read())
+
     def test_bad_input_keeps_nothing(self):
         inside = self.save("source-1.html", PAGE, folder=os.path.join(self.project, "saved"))
         shell = self.save("source-3.html", "<div id='app'></div><script>start()</script>")

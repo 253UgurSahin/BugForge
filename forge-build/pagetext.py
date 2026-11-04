@@ -25,6 +25,7 @@ Exit codes:
 """
 
 import argparse
+import codecs
 import html.parser
 import os
 import re
@@ -42,6 +43,9 @@ META_TEXT = {"description", "og:title", "og:description", "og:image:alt", "twitt
              "twitter:description", "twitter:image:alt"}
 FEW = 25  # fewer words than this: probably a page drawn by JavaScript
 RUN = 6  # the shortest run copycheck.py counts (its --words default)
+CHARSET = re.compile(rb"<meta[^>]+charset\s*=\s*[\"']?\s*([\w.:-]+)", re.I)  # <meta charset> or http-equiv
+AS_BROWSERS_READ = {"ascii": "cp1252", "iso8859-1": "cp1252", "shift_jis": "cp932", "gb2312": "gbk",
+                    "euc_kr": "cp949"}  # these charsets are read as the code page that extends them
 
 
 def words(text):
@@ -119,10 +123,17 @@ def saved_pages(paths):
 
 
 def decode(data):
-    """A saved page's text: UTF-8, or else cp1252, what older sites and Windows browsers use."""
+    """A saved page's text. UTF-8 first: a browser saves a page as UTF-8 and may keep its old <meta>. Else
+    the charset a <meta> names in the first 4096 bytes, read the way browsers read it; else cp1252, what
+    older sites and Windows browsers use. A name that is no text codec gives cp1252 too."""
     try:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:
+        named = CHARSET.search(data[:4096])
+    try:
+        codec = codecs.lookup(named.group(1).decode("ascii")).name if named else "cp1252"
+        return data.decode(AS_BROWSERS_READ.get(codec, codec), errors="replace")
+    except (LookupError, UnicodeError):  # an unknown name, base64, or idna (which cannot replace)
         return data.decode("cp1252", errors="replace")
 
 
