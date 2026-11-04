@@ -17,8 +17,8 @@ Usage:
   and a spec's <button> never count. Its ## headings are the sections, unless --section names them.
 --section TITLE: a heading that starts with TITLE needs a line of its own under it: a line that the
   template's section does not have, such as "none seen". Code blocks are text, comments are not.
---cases BUGS: the table with the columns case and result holds this app's rows, not only the
-  template's, and each result is pass, fail B003 (with a ## B003 heading in BUGS) or skipped: why.
+--cases BUGS: the tables with the columns case and result (one per flow too) hold this app's rows,
+  not only the template's; each result is pass, fail B003 (a ## B003 heading in BUGS) or skipped: why.
 --specs PATTERN: when a case is marked e2e (the auto column), a file like PATTERN is in the project
   (** is any folders; node_modules does not count). Give it more than once for more patterns.
 --rows 'A,B': a table with the columns A and B has at least one row.
@@ -144,14 +144,15 @@ def check_sections(name, text, titles, template, label):
 
 
 def table(text, *columns):
-    """The rows of the first table in TEXT whose header has COLUMNS, as dicts (its line 2 is ---)."""
+    """The rows of every table in TEXT whose header has COLUMNS, as dicts (a table's line 2 is ---)."""
+    found = []
     for block in re.findall(r"(?m)(?:^[ \t]*\|.*\n?)+", text):
         rows = [[cell.strip() for cell in re.split(r"(?<!\\)\|", line.strip().strip("|"))]
                 for line in block.splitlines()]
         header = [cell.lower() for cell in rows[0]]
         if set(columns) <= set(header):
-            return [dict(zip(header, row + [""] * len(header))) for row in rows[2:] if any(row)]
-    return []
+            found += [dict(zip(header, row + [""] * len(header))) for row in rows[2:] if any(row)]
+    return found
 
 
 def check_cases(name, text, bugs, template, label):
@@ -245,7 +246,7 @@ def main(argv=None):
     parser.add_argument("--template", action="append", default=[], metavar="FILE", help="the template it came from")
     parser.add_argument("--section", action="append", default=[], metavar="TITLE", help="a section to check")
     parser.add_argument("--no-sections", action="store_true", help="check the placeholders only")
-    parser.add_argument("--cases", metavar="BUGS", help="check the Cases table, with this bug list")
+    parser.add_argument("--cases", metavar="BUGS", help="check the Cases tables, with this bug list")
     parser.add_argument("--specs", action="append", default=[], metavar="PATTERN", help="where the e2e specs are")
     parser.add_argument("--rows", action="append", default=[], metavar="'A,B'", help="a table that needs rows")
     parser.add_argument("--names", action="append", default=[], metavar="LABEL", help="a line naming a file")

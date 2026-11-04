@@ -1,8 +1,8 @@
 """Tests for forge/doccheck.py: a report against the template it came from. Every placeholder of every
 template the gate reads is found when it is left, in code blocks and over line breaks too, while user code
 such as Blade's {{ $name }}, a comment or the Theme block's <role> never counts; a section with only the
-template's lines or only a comment has no text of its own; the Cases table, the specs, a table's rows and a
-line that names a file are checked as the gate reads them; any console shows the output."""
+template's lines or only a comment has no text of its own; the Cases tables (one per flow too), the specs, a
+table's rows and a line that names a file are checked as the gate reads them; any console shows the output."""
 
 import contextlib
 import io
@@ -205,6 +205,21 @@ class CasesTests(Report):
         code, checks, out = self.cases(CASES.replace("| e2e |", "| unit |"), "--specs", "e2e/**/*.spec.*")
         self.assertEqual(code, 0)
         self.assertIn("marks no case e2e, so it needs no end-to-end spec", out)
+
+    def test_every_cases_table_counts(self):
+        """forge-test works per flow, so a plan may keep a Cases table per flow: the rows of each one count."""
+        header, first = "".join(CASES.splitlines(True)[:2]), CASES.replace("| e2e |", "| unit |")
+        second = "\n### F02 cancel a booking\n\n" + header + "| F02-H1 | cancel | happy | | gone | %s | %s |\n"
+        code, checks, out = self.cases(first + second % ("unit", "pass"), "--specs", "e2e/**/*.spec.*")
+        self.assertEqual(code, 0, out)
+        self.assertIn("report.md has 3 case row(s), each with a result", out)
+        for auto, result, problem in (("unit", "", "1 case row(s) without a result: F02-H1"),
+                                      ("unit", "fail B099", "F02-H1: fail B099, but there is no ## B099"),
+                                      ("e2e", "pass", "marks 1 case(s) e2e, but there is no file like e2e/")):
+            with self.subTest(problem=problem):
+                code, checks, out = self.cases(first + second % (auto, result), "--specs", "e2e/**/*.spec.*")
+                self.assertEqual(code, 1, out)
+                self.assertIn(problem, out)
 
 
 class RowsAndNamesTests(Report):
