@@ -15,8 +15,9 @@ does that); 3 and no: plain :root blocks (Tailwind 3 maps them in tailwind.confi
 group in color becomes a prefers-color-scheme: dark block. --write puts the block in that file
 between the forge theme marks, in place of the one there; the first time right after the
 @charset, @import, @source and other statements at its top, or at the very top when there are
-none, never inside a rule (a new file is made). Numbers get px (not a weight), strings stay as
-they are: contrast.py checks the colours.
+none, never inside a rule (a new file is made). Numbers get px (not a weight), font names get
+quotes where they need them ("Source Serif 4"), other strings stay as they are: contrast.py
+checks the colours.
 
 Exit codes:
     0  printed or written
@@ -37,10 +38,13 @@ UNSAFE = re.compile(r"[;{}<>\r\n]")  # a value that could end the declaration or
 KNOWN = {"color", "font", "type", "space", "radius", "shadow", "motion", "layout", "size", "breakpoint", "pairs"}
 STATEMENT = re.compile(r"\s*(?:/\*.*?\*/|@[\w-]+[^;{}]*;)", re.S)  # a comment, or an @-rule without a block
 DECLARED = re.compile(r"(--[\w-]+)\s*:(?!\s*initial)")  # a custom property set (not one cleared)
+IDENT = r"-?[A-Za-z_\x80-\U0010ffff][-\w\x80-\U0010ffff]*"  # a CSS identifier: Inter, -apple-system, Café
+FAMILY = re.compile(r"%s(?:[ \t]+%s)*\Z" % (IDENT, IDENT))  # a font name of identifiers needs no quotes
 
 
-def value(where, item, px=True):
-    """A token value as CSS: a number gets px, a string stays. Raises ValueError on anything else."""
+def value(where, item, px=True, font=False):
+    """A token value as CSS: a number gets px, a string stays, and in a font stack (font) the names that
+    need them get quotes. Raises ValueError on anything else."""
     if isinstance(item, dict) and ("$value" in item or "value" in item):  # {"$value": ...}, {"value": ...}
         item = item.get("$value", item.get("value"))
         item = item.get("hex", item) if isinstance(item, dict) else item
@@ -49,7 +53,27 @@ def value(where, item, px=True):
     if isinstance(item, str) and (UNSAFE.search(item) or not item.strip()):
         raise ValueError("%s is %s: write a plain CSS value, without ; { } < > or a line break"
                          % (where, json.dumps(item)))
-    return ("%gpx" % item if px else "%g" % item) if not isinstance(item, str) else item.strip()
+    if not isinstance(item, str):
+        return "%gpx" % item if px else "%g" % item
+    return font_names(item.strip()) if font else item.strip()
+
+
+def font_names(stack):
+    """A font stack with double quotes around each name that needs them: "Source Serif 4", Georgia,
+    serif. A name made of identifiers needs none (Inter Variable, -apple-system, Café Sans), a generic
+    family must have none, and a name with a quote or a bracket in it (quoted, var()) stays as it is."""
+    names = []
+    for part in stack.split(","):
+        if names and names[-1].count("(") > names[-1].count(")"):  # a comma inside var( ): not between names
+            names[-1] += "," + part
+        else:
+            names.append(part)
+    quoted = []
+    for name in map(str.strip, names):
+        if name and not FAMILY.match(name) and not re.search("[\"'()]", name):
+            name = '"%s"' % re.sub(r"[ \t]+", " ", name)  # one space between words, as CSS reads them unquoted
+        quoted.append(name)
+    return ", ".join(quoted)
 
 
 def group(tokens, name):
@@ -89,7 +113,8 @@ def blocks(tokens, tailwind):
     dark = colours(group(color, "dark"), "color.dark") if "dark" in color else []
     first = [("--color-*", "initial")] if tailwind == "4" else []
     first += colours({key: item for key, item in color.items() if key != "dark"})
-    first += [("--font-" + key, value("font." + key, item)) for key, item in group(tokens, "font").items()]
+    first += [("--font-" + key, value("font." + key, item, font=True))
+              for key, item in group(tokens, "font").items()]
     for step, item in group(tokens, "type").items():
         if not (isinstance(item, dict) and {"size", "line", "weight"} <= set(item)):
             raise ValueError('type.%s needs size, line and weight, such as {"size": 16, "line": 24, '

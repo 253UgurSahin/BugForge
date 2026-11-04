@@ -106,6 +106,23 @@ class PlainCss(unittest.TestCase):
             json.dump(tokens, handle)
         return path
 
+    def test_font_names_get_quotes_where_they_need_them(self):
+        """Unquoted, a name with a word that starts with a digit (Source Serif 4) makes the browser drop the
+        whole stack. Names of identifiers, generic families, quoted names and var() stay as they are."""
+        tokens = template()
+        tokens["font"] = {"serif": "Source Serif 4, Georgia, serif", "display": "Exo  2,M PLUS 1p , cursive",
+                          "sans": "Inter Variable, system-ui, -apple-system, Segoe UI, Café Sans, sans-serif",
+                          "next": "var(--font-inter), system-ui, sans-serif", "size": 16,
+                          "brand": "'Baloo 2', \"Noto Sans JP\", var(--font-brand, Fira Sans), monospace"}
+        code, out, err = run(self.file(tokens), "--tailwind", "no")
+        self.assertEqual(code, 0, err)
+        for line in ('--font-serif: "Source Serif 4", Georgia, serif;',
+                     '--font-display: "Exo 2", "M PLUS 1p", cursive;',
+                     "--font-sans: Inter Variable, system-ui, -apple-system, Segoe UI, Café Sans, sans-serif;",
+                     "--font-next: var(--font-inter), system-ui, sans-serif;", "--font-size: 16px;",
+                     "--font-brand: 'Baloo 2', \"Noto Sans JP\", var(--font-brand, Fira Sans), monospace;"):
+            self.assertIn("\n  %s\n" % line, out)
+
     def test_older_files_and_unknown_groups(self):
         tokens = template()
         for group in ("size", "motion", "layout", "breakpoint", "shadow"):
