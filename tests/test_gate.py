@@ -18,7 +18,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import ROOT, load  # noqa: E402
+from _load import ROOT, load, symlink  # noqa: E402
 from test_phasecheck import HAS_GIT, OLD, PASSING, read, write  # noqa: E402
 
 gate = load("forge", "gate")
@@ -166,6 +166,39 @@ class InitTests(Project):
         self.assertEqual(code, 2)
         self.assertIn("error:", err)
         self.assertNotIn("Traceback", err)
+
+    def outside(self, name, text):
+        """A file NAME with TEXT in a folder outside the project. Returns the folder."""
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        write(folder, name, text)
+        return folder
+
+    def test_init_never_writes_through_a_linked_gitignore(self):
+        """Git stores links, so a repo for improve mode can carry forge-work/.gitignore as a link to any file
+        the user can write. init writes nothing then, not even a state, and asks the user to look."""
+        folder = self.outside("notes.txt", "important user data\n")
+        os.makedirs(os.path.join(self.root, "forge-work"))
+        symlink(self, os.path.join(folder, "notes.txt"), os.path.join(self.root, "forge-work", ".gitignore"))
+        code, out, err = self.gate("init", "--mode", "improve", "--about", "improve this app")
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("error: forge-work/.gitignore is a link", err)
+        self.assertIn("forge writes only into a folder of its own in the project", err)
+        self.assertIn("ls -la forge-work", err)
+        self.assertEqual(read(os.path.join(folder, "notes.txt")), "important user data\n")
+        self.assertEqual(os.listdir(os.path.join(self.root, "forge-work")), [".gitignore"])
+
+    def test_init_never_writes_into_a_linked_forge_work(self):
+        """forge-work itself as a link to another folder: init writes nothing there, not even with --force."""
+        folder = self.outside(".gitignore", "node_modules\n")
+        symlink(self, folder, os.path.join(self.root, "forge-work"))
+        for args in (["init", "--mode", "improve"], ["init", "--mode", "clone", "--force"]):
+            with self.subTest(args=args):
+                code, out, err = self.gate(*args)
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn("error: forge-work is a link", err)
+                self.assertEqual(os.listdir(folder), [".gitignore"])
+                self.assertEqual(read(os.path.join(folder, ".gitignore")), "node_modules\n")
 
 
 class CheckTests(Project):
@@ -680,6 +713,26 @@ class SaveTests(Project):
         self.assertEqual(self.state_text(), before)
         self.assertEqual(sorted(os.listdir(os.path.join(self.root, "forge-work"))),
                          [".gitignore", "compare.md", "state.json"])
+
+    def test_done_and_skip_never_write_into_a_linked_forge_work(self):
+        """forge-work made a link after init, to a folder outside the project: done and skip read the state
+        through it, but write nothing there."""
+        self.gate("init", "--mode", "improve")
+        self.approve("audit")
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        moved = os.path.join(folder, "work")
+        shutil.move(os.path.join(self.root, "forge-work"), moved)
+        symlink(self, moved, os.path.join(self.root, "forge-work"))
+        self.finish("inspect")
+        before = read(os.path.join(moved, "state.json"))
+        for args in (["skip", "inspect", "--reason", "no UI"], ["done", "inspect", "--approved", "go"]):
+            with self.subTest(args=args):
+                code, out, err = self.gate(*args)
+                self.assertEqual(code, 2, out + err)
+                self.assertIn("error: forge-work is a link", err)
+                self.assertEqual(read(os.path.join(moved, "state.json")), before)
+                self.assertEqual(sorted(os.listdir(moved)), [".gitignore", "audit.md", "inspect.md", "state.json"])
 
 
 if __name__ == "__main__":

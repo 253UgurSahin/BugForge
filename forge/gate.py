@@ -19,7 +19,8 @@ Exit codes:
     1  refused: a check fails, no words of go or no reason, an earlier phase is still open, the
        phase may not be skipped, or a state exists already (init without --force)
     2  a phase that is not in this mode, or a damaged state.json; for status, done and skip also no
-       state.json in this folder (check then only looks at the files, so run status first)
+       state.json in this folder (check then only looks at the files, so run status first); for init,
+       done and skip also a forge-work that is a link (init: or its .gitignore): it writes nothing then
 """
 
 import argparse
@@ -34,6 +35,8 @@ import tempfile
 import unicodedata
 
 STATE = os.path.join("forge-work", "state.json")
+LINKED = ("%s is a link. forge writes only into a folder of its own in the project, so it wrote nothing. "
+          "Change nothing yourself: tell the user and ask them to look (ls -la forge-work).")
 VERSION = 1  # of the state.json format
 TIMEOUT = 1800  # seconds for one phase's exit checks: up to two scripts of 600 seconds each, and more
 MODES = {
@@ -53,7 +56,7 @@ ESCAPE = {code: "\\u%04x" % code for code in [*range(0x10000), *range(0xE0000, 0
 
 
 class StateError(Exception):
-    """No state.json, a damaged one, or a phase that is not in its mode (exit 2)."""
+    """No state.json, a damaged one, a phase that is not in its mode, or a link where it would write (exit 2)."""
 
 
 def now():
@@ -119,18 +122,27 @@ def load_state(root, phase=None):
     return state
 
 
-def save_state(root, state):
-    """Write state.json whole: a temporary file next to it, then a rename over the old one."""
-    handle, temp = tempfile.mkstemp(prefix=".state-", suffix=".tmp", dir=os.path.join(root, "forge-work"))
+def write_whole(root, name, text):
+    """Write forge-work/NAME whole: a temporary file next to it, then a rename over the old one, which
+    replaces a link there instead of following it. Never into a forge-work that is a link (StateError)."""
+    folder = os.path.join(root, "forge-work")
+    if os.path.islink(folder):
+        raise StateError(LINKED % "forge-work")
+    handle, temp = tempfile.mkstemp(prefix=".forge-", suffix=".tmp", dir=folder)
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as out:
-            out.write(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
+            out.write(text)
             out.flush()
             os.fsync(out.fileno())
-        os.replace(temp, os.path.join(root, STATE))
+        os.replace(temp, os.path.join(folder, name))
     finally:
         if os.path.exists(temp):
             os.unlink(temp)
+
+
+def save_state(root, state):
+    """Write state.json whole (write_whole)."""
+    write_whole(root, "state.json", json.dumps(state, indent=2, ensure_ascii=False) + "\n")
 
 
 def still_open(state, phase=None):
@@ -183,12 +195,15 @@ def refuse(text):
 
 
 def cmd_init(root, args):
+    for name in ("forge-work", "forge-work/.gitignore"):  # git stores links, so a repo can carry either as one
+        if os.path.islink(os.path.join(root, name)):
+            raise StateError(LINKED % name)
     if os.path.lexists(os.path.join(root, STATE)) and not args.force:
         return refuse("%s exists already. Resume with: gate.py status. Start over only when the user asks for "
                       "it: gate.py init --mode %s --force (forgets every approval)." % (STATE, args.mode))
     os.makedirs(os.path.join(root, "forge-work"), exist_ok=True)
-    with open(os.path.join(root, "forge-work", ".gitignore"), "w", encoding="utf-8") as handle:
-        handle.write("# forge notes, reports and screenshots: git ignores this whole folder, from the start\n*\n")
+    write_whole(root, ".gitignore", "# forge notes, reports and screenshots: git ignores this whole folder, "
+                                    "from the start\n*\n")
     state = {"version": VERSION, "mode": args.mode, "phases": {}, "started": now()}
     if shows(args.about or ""):  # what the user asked for, in their words, so a later session knows it too
         state["about"] = args.about.strip()
