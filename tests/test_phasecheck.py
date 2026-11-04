@@ -492,6 +492,10 @@ class PhaseTests(Checks):
             write(self.root, "forge-work/improve.md", "# Improve\n## To do\n## Fixed\n### A001 [high] Any user "
                                                       "can open any invoice\n## Skipped\n## For you\n")
             self.assert_passes("improve")
+            write(self.root, "forge-work/improve.md", IMPROVE.replace("## To do\n", "## To do\n### A003 [high] "
+                                                                       "Passwords stored with MD5\n"))
+            self.assert_fails("improve", "forge-work/improve.md has 1 item(s) left under ## To do",
+                              "why: forge-improve, Output")
 
     def test_the_report_in_each_skills_output_passes(self):
         """The example in forge-audit's, forge-inspect's and forge-improve's Output passes as it is: its

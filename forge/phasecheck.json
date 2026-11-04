@@ -162,7 +162,7 @@
   ],
   "improve": [
     {"check": ["file", "forge-work/improve.md"], "why": "forge-improve, Output: forge-work/improve.md"},
-    {"check": ["doc", "forge-work/improve.md", "--section", "Fixed"],
+    {"check": ["doc", "forge-work/improve.md", "--section", "Fixed", "--moved", "To do"],
      "why": "forge-improve, Output: improve.md as shown there; Step 2: move each picked finding from To do to Fixed or Skipped"},
     {"check": ["run", "forge/gitguard.py", "."],
      "why": "forge-improve, Step 6: gitguard.py must exit 0, still on the work branch"}

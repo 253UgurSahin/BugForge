@@ -283,6 +283,20 @@ class RowsAndNamesTests(Report):
                 self.assertIn("(found: %s)" % found, out)
 
 
+    def test_a_section_that_must_end_empty(self):
+        """--moved: forge-improve copies each picked finding under To do, then moves it to Fixed or Skipped.
+        A ### item still under To do is a pick the round did not finish."""
+        done = "# Improve\n## To do\n## Fixed\n### A003 [high] Passwords stored with MD5\ncommit: 9b1e2f4\n"
+        self.assertEqual(self.check(done, "--moved", "To do")[0], 0)
+        left = done.replace("## To do\n", "## To do\n### A001 [critical] Any user can open any invoice\nwhere: x\n"
+                                            "### X001 [high] The webhook trusts any caller\n")
+        code, checks, out = self.check(left, "--moved", "To do")
+        self.assertEqual(code, 1, out)
+        self.assertIn("report.md has 2 item(s) left under ## To do", out)
+        self.assertIn("### A001 [critical] Any user can open any invoice", out)
+        self.assertEqual(self.check(left.replace("\n", "\r\n"), "--moved", "To do")[0], 1)  # CRLF too
+
+
 class CommandLineTests(Report):
     def test_unreadable_files_and_nothing_to_check(self):
         out, err = io.StringIO(), io.StringIO()

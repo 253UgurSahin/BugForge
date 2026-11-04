@@ -23,11 +23,12 @@ Usage:
   (** is any folders; node_modules does not count). Give it more than once for more patterns.
 --rows 'A,B': a table with the columns A and B has at least one row.
 --names LABEL: the line `LABEL: ...` names a file that is in the project, such as public/og.png.
+--moved TITLE: no ### item is left under the heading that starts with TITLE (a To do that ends empty).
 
 Exit codes:
     0  every check passes
     1  a check fails: the output says which and how to fix it
-    2  the report, a template or BUGS cannot be read: missing, a folder, or not text
+    2  the report or a template cannot be read (missing, a folder, or not text), or BUGS is not text
 """
 
 import argparse
@@ -252,6 +253,10 @@ def run(args):
         checks.append(check_cases(args.file, text, args.cases, first, label))
     checks += [check_specs(args.file, text, args.specs)] if args.specs else []
     checks += [check_rows(args.file, text, columns) for columns in args.rows]
+    for title in args.moved:  # each ### item under it was moved on, as the skill says (a To do that ends empty)
+        left = [line for lines in under(sections(text), title) for line in lines if line.startswith("### ")]
+        checks.append((not left, "%s has %s left under ## %s" % (
+            args.file, "%d item(s)" % len(left) if left else "no item", title), left[:5]))
     return checks + [check_names(args.file, text, line) for line in args.names]
 
 
@@ -268,10 +273,11 @@ def main(argv=None):
     parser.add_argument("--specs", action="append", default=[], metavar="PATTERN", help="where the e2e specs are")
     parser.add_argument("--rows", action="append", default=[], metavar="'A,B'", help="a table that needs rows")
     parser.add_argument("--names", action="append", default=[], metavar="LABEL", help="a line naming a file")
+    parser.add_argument("--moved", action="append", default=[], metavar="TITLE", help="a section with no ### left")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     args = parser.parse_args(argv)
-    if not (args.template or args.section or args.cases or args.specs or args.rows or args.names):
-        parser.error("nothing to check: give --template, --section, --cases, --specs, --rows or --names")
+    if not (args.template or args.section or args.cases or args.specs or args.rows or args.names or args.moved):
+        parser.error("nothing to check: give --template, --section, --cases, --specs, --rows, --names or --moved")
     try:
         checks = run(args)
     except (OSError, ValueError) as error:  # missing, a folder, or not text
