@@ -437,6 +437,23 @@ class FreshReportTests(Project):
         code, out, _ = self.gate("check", "diff")
         self.assertEqual(code, 0, out)
 
+    def test_diff_recorded_again_needs_a_report_newer_than_bugs_md(self):
+        """done records a new go, so it checks as a first record: a second run of diff (its Next, after the
+        fix loop) must write parity.md after the bugs it found, whatever its old go said."""
+        self.gate("init", "--mode", "clone")
+        self.approve("recon", "compare", "plan", "design", "build", "test", "diff")
+        write(self.root, "forge-work/bugs.md", read(os.path.join(self.root, "forge-work", "bugs.md")) +
+              "\n## B015 [high] [fixed] Found in the second walk\nfixed in: 7d6e5f4\n")
+        later = datetime.datetime.fromisoformat(self.state()["phases"]["diff"]["at"]).timestamp() + 5
+        os.utime(os.path.join(self.root, "forge-work", "parity.md"), (later, later))
+        os.utime(os.path.join(self.root, "forge-work", "bugs.md"), (later + 5, later + 5))
+        code, out, _ = self.gate("done", "diff", "--approved", "ja, nu wel")
+        self.assertEqual(code, 1, out)
+        self.assertIn("forge-work/parity.md is older than forge-work/bugs.md", out)
+        code, out, _ = self.gate("check", "diff")  # a check of the done phase: a later phase's change
+        self.assertEqual(code, 0, out)
+        self.assertIn("and than forge-work/bugs.md and forge-work/features.csv at its go (", out)
+
     def test_a_parity_report_from_before_tests_go_does_not_count(self):
         """test's fix loop changes the clone, so diff must score it after test's go (N26, N27)."""
         self.gate("init", "--mode", "clone")

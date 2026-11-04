@@ -18,9 +18,9 @@ Exit codes:
     0  state started, checks passed, phase recorded, or status shown
     1  refused: a check fails, no words of go or no reason, an earlier phase is still open, the
        phase may not be skipped, or a state exists already (init without --force)
-    2  a phase that is not in this mode, or a damaged state.json; for status, done and skip also no
-       state.json in this folder (check then only looks at the files, so run status first); also a
-       forge-work, forge-work/.gitignore or state.json that is a link: it reads and writes nothing then
+    2  a phase that is not in this mode, or a damaged or linked state.json (a link is never read); for
+       status, done and skip also no state.json in this folder (check then only looks at the files, so run
+       status first); for init, done and skip a linked forge-work (init: or its .gitignore): nothing written
 """
 
 import argparse
@@ -160,14 +160,13 @@ def last_go(state, phase):
                                      if order.index(name) < order.index(phase)], key=stamp)
 
 
-def exit_checks(root, phase, state=None, as_json=False):
+def exit_checks(root, phase, state=None, as_json=False, until=None):
     """Run phasecheck.py for PHASE in ROOT and show what it says. With a STATE, the checks are those of its
-    mode, and the phase's report must be newer than the last go before it. Returns 0 when every check
-    passes, else 1."""
+    mode, and the phase's report must be newer than the last go before it and than its inputs changed
+    before UNTIL (check: the phase's own go; done records a new one). 0 when every check passes, else 1."""
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phasecheck.py")
-    own = state["phases"].get(phase, {}).get("at") if state else None  # done already: a later change is not its
     command = [sys.executable, script, phase] + (["--mode", state["mode"], "--since", last_go(state, phase)]
-                                                 + (["--until", own] if own else []) if state else [])
+                                                 + (["--until", until] if until else []) if state else [])
     try:
         done = subprocess.run(command + (["--json"] if as_json else []), cwd=root, stdin=subprocess.DEVNULL,
                               capture_output=True, encoding="utf-8", errors="replace", timeout=TIMEOUT,
@@ -241,7 +240,8 @@ def cmd_status(root, args):
 def cmd_check(root, args):
     """The exit checks: of the state's mode when there is one (a phase of another mode: exit 2), else of the files."""
     state = load_state(root, args.phase) if os.path.lexists(os.path.join(root, STATE)) else None
-    return exit_checks(root, args.phase, state, args.json)
+    own = state["phases"].get(args.phase, {}).get("at") if state else None  # done already: a later change is not its
+    return exit_checks(root, args.phase, state, args.json, own)
 
 
 def cmd_mark(root, args):

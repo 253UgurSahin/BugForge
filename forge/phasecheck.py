@@ -193,7 +193,7 @@ def check_fresh(root, name, since, until, *inputs):
     if later:
         return False, "%s is older than %s, which the fix loop or forge-build changed after it. Run the " \
                       "phase's skill again from its first step, so it writes a new one" % (name, " and ".join(later))
-    also = " and than " + " and ".join(inputs) if inputs else ""
+    also = " and than " + " and ".join(inputs) + (" at its go (%s)" % until if until else "") if inputs else ""
     return True, "%s is newer than the last go (%s)%s" % (name, since, also)
 
 
