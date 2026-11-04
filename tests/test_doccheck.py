@@ -2,8 +2,10 @@
 template the gate reads is found when it is left, in code blocks and over line breaks too, while user code
 such as Blade's {{ $name }}, a comment or the Theme block's <role> never counts; a section with only the
 template's lines or only a comment has no text of its own; the Cases tables (one per flow too), the specs, a
-table's rows and a line that names a file are checked as the gate reads them; any console shows the output."""
+table's rows and a line that names a file are checked as the gate reads them; a bugs.md in UTF-16 is read as
+bugs.py reads it; any console shows the output."""
 
+import codecs
 import contextlib
 import io
 import json
@@ -220,6 +222,26 @@ class CasesTests(Report):
                 code, checks, out = self.cases(first + second % (auto, result), "--specs", "e2e/**/*.spec.*")
                 self.assertEqual(code, 1, out)
                 self.assertIn(problem, out)
+
+    def test_a_bugs_list_in_utf16_or_utf32_and_one_that_is_not_text(self):
+        """PowerShell's > writes UTF-16 with a byte order mark, and bugs.py reads it (UTF-32 too): so does the
+        Cases check. A bugs.md that is not text is named in the error, not the report."""
+        os.makedirs(os.path.join(self.root, "forge-work"))
+        path = os.path.join(self.root, "forge-work", "bugs.md")
+        for mark, codec in ((codecs.BOM_UTF16_LE, "utf-16-le"), (codecs.BOM_UTF16_BE, "utf-16-be"),
+                            (codecs.BOM_UTF32_LE, "utf-32-le"), (codecs.BOM_UTF32_BE, "utf-32-be")):
+            with self.subTest(codec=codec):
+                with open(path, "wb") as handle:
+                    handle.write(mark + BUGS.replace("\n", "\r\n").encode(codec))
+                code, checks, out = self.check(CASES, "--cases", "forge-work/bugs.md")
+                self.assertEqual(code, 0, out)  # F01-E1 fails B001, which is only known when bugs.md was read
+        with open(path, "wb") as handle:
+            handle.write(BUGS.encode("utf-8") + b"caf\xe9\n")
+        code, checks, err = self.check(CASES, "--cases", "forge-work/bugs.md")
+        self.assertEqual(code, 2)
+        self.assertIn("error: forge-work/bugs.md cannot be read", err)
+        self.assertIn("save it as UTF-8", err)
+        self.assertNotIn("report.md", err)
 
 
 class RowsAndNamesTests(Report):

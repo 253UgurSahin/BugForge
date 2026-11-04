@@ -2,7 +2,7 @@
 """Is a forge report finished? Checks one markdown file: the placeholders of the template it was
 copied from that are still in it, the sections with no text of their own, and the tables the forge
 gate reads. phasecheck.py runs it for the exit checks of a phase. Run it from the project root. It
-reads files; it changes nothing.
+reads files (UTF-8; UTF-16 and UTF-32 with a byte order mark too, like bugs.py) and changes nothing.
 
 Usage:
     python3 doccheck.py forge-work/recon.md --template ../forge-recon/recon-map.md
@@ -27,10 +27,12 @@ Usage:
 Exit codes:
     0  every check passes
     1  a check fails: the output says which and how to fix it
-    2  the report or a template cannot be read
+    2  the report, a template or BUGS cannot be read: missing, a folder, or not text
 """
 
 import argparse
+import codecs
+import errno
 import glob
 import json
 import os
@@ -45,11 +47,21 @@ ANGLES = re.compile(r"<[^<>\n]+>")  # a template's <...>, as in forge-design/com
 FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
 HEADING = re.compile(r" {0,3}(#{1,2})[ \t]+(.*?)[ \t#]*$")
 FILE_NAME = re.compile(r"[\w@-]+(?:[./][\w@-]+)*\.(?:png|jpe?g|webp|gif|svg|avif|tsx|jsx|ts|js)\b")
+BOMS = ((codecs.BOM_UTF32_LE, "utf-32"), (codecs.BOM_UTF32_BE, "utf-32"), (codecs.BOM_UTF16_LE, "utf-16"),
+        (codecs.BOM_UTF16_BE, "utf-16"))  # UTF-32 first: its little-endian mark starts like UTF-16's
 
 
 def read(path):
-    with open(path, encoding="utf-8-sig") as handle:  # Notepad may start a file with a BOM
-        return handle.read()
+    """The text of the file at PATH: UTF-8, or UTF-16 or UTF-32 with a byte order mark (PowerShell's >
+    writes that, and bugs.py reads it). A file that is not text raises an OSError that names PATH."""
+    with open(path, "rb") as handle:
+        data = handle.read()
+    codec = next((codec for mark, codec in BOMS if data.startswith(mark)), "utf-8-sig")  # -sig: Notepad's BOM
+    try:
+        text = data.decode(codec)
+    except UnicodeDecodeError as error:  # it names no file, so the error would blame the report
+        raise OSError(errno.EILSEQ, "not UTF-8 text (%s): save it as UTF-8" % error, path) from None
+    return text.replace("\r\n", "\n").replace("\r", "\n")  # line ends as text mode reads them
 
 
 def blank(match):
@@ -256,9 +268,10 @@ def main(argv=None):
         parser.error("nothing to check: give --template, --section, --cases, --specs, --rows or --names")
     try:
         checks = run(args)
-    except (OSError, ValueError) as error:  # missing, a folder, or not UTF-8
-        print("error: %s cannot be read: %s" % (getattr(error, "filename", None) or args.file, error),
-              file=sys.stderr)
+    except (OSError, ValueError) as error:  # missing, a folder, or not text
+        name = getattr(error, "filename", None)  # the file that failed: the report, a template or BUGS
+        why = error.strerror if name and error.strerror else error  # an OSError's text names the file again
+        print("error: %s cannot be read: %s" % (name or args.file, why), file=sys.stderr)
         return 2
     ok = all(check[0] for check in checks)
     if args.json:
