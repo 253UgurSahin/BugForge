@@ -565,6 +565,7 @@ class DamagedStateTests(Project):
         {"version": 1, "mode": "clone", "started": START},
         {"version": 1, "mode": "clone", "phases": {}},
         {"version": 1, "mode": "clone", "phases": {}, "started": "yesterday"},
+        {"version": 1, "mode": "clone", "phases": {}, "started": "2026-11-31T09:00:00+00:00"},  # no such day
         {"version": 1, "mode": "clone", "phases": {"audit": GO}, "started": START},
         {"version": 1, "mode": "clone", "phases": {"recon": dict(GO, status="maybe")}, "started": START},
         {"version": 1, "mode": "clone", "phases": {"recon": dict(GO, status=["done"])}, "started": START},
@@ -576,6 +577,10 @@ class DamagedStateTests(Project):
          "started": START},
         {"version": 1, "mode": "clone", "phases": {"recon": {"status": "done", "approved": "go"}}, "started": START},
         {"version": 1, "mode": "clone", "phases": {"recon": dict(GO, at=5)}, "started": START},
+        {"version": 1, "mode": "clone", "phases": {"recon": dict(GO, at="2026-10-27T25:51:44+00:00")},  # hour 25
+         "started": START},
+        {"version": 1, "mode": "clone", "phases": {"recon": dict(GO, at="2026-10-27T09:51:44+99:99")},  # no such zone
+         "started": START},
         {"version": 1, "mode": "clone", "phases": {"recon": "done"}, "started": START},
         {"version": 1, "mode": "clone", "phases": {"compare": {"status": "skipped", "reason": "", "at": GO["at"]}},
          "started": START},

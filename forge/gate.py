@@ -70,18 +70,27 @@ def quote(text):
     return json.dumps(text, ensure_ascii=False).translate(ESCAPE)
 
 
+def is_time(text):
+    """TEXT is a time as this script writes it, and one the calendar has: not 2026-11-31, hour 25 or +99:99."""
+    try:  # TypeError: not a text. OSError: a time with no offset is local, and Windows has none before 1970
+        datetime.datetime.fromisoformat(text).timestamp()  # as last_go reads it
+    except (TypeError, ValueError, OverflowError, OSError):
+        return False
+    return bool(TIME.match(text))
+
+
 def state_problem(state):
     """What is wrong with a loaded state.json, in plain words, or None. Only what gate.py writes passes:
     the gate keeps the phases in order, so a gap, a missing time or a placeholder means a hand edit."""
     if not (isinstance(state, dict) and type(state.get("version")) is int and state["version"] == VERSION
             and str(state.get("mode")) in MODES and isinstance(state.get("phases"), dict)
-            and TIME.match(str(state.get("started")))):
+            and is_time(state.get("started"))):
         return "it is not a forge state: version %d, a mode (clone, idea or improve), phases, a start time" % VERSION
     for phase, entry in state["phases"].items():
         entry = entry if isinstance(entry, dict) else {}
         words = entry.get({"done": "approved", "skipped": "reason"}.get(str(entry.get("status"))))
         if (phase not in MODES[state["mode"]] or not isinstance(words, str) or not shows(words)
-                or PLACEHOLDER.match(words.strip()) or not TIME.match(str(entry.get("at")))
+                or PLACEHOLDER.match(words.strip()) or not is_time(entry.get("at"))
                 or (entry["status"] == "skipped" and phase not in OPTIONAL)):
             return "%r is not a %s phase done with the user's words or skipped with a reason, at a time" % (
                 phase, state["mode"])
