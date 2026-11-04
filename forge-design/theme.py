@@ -14,8 +14,9 @@ only your colours (--color-*: initial) and breakpoints, and no --space-* (Tailwi
 does that); 3 and no: plain :root blocks (Tailwind 3 maps them in tailwind.config.js). A dark
 group in color becomes a prefers-color-scheme: dark block. --write puts the block in that file
 between the forge theme marks, in place of the one there; the first time right after the
-@charset, @import, @source and other statements at its top (a new file is made). Numbers get px
-(not a weight), strings stay as they are: contrast.py checks the colours.
+@charset, @import, @source and other statements at its top, or at the very top when there are
+none, never inside a rule (a new file is made). Numbers get px (not a weight), strings stay as
+they are: contrast.py checks the colours.
 
 Exit codes:
     0  printed or written
@@ -141,8 +142,9 @@ def read_tokens(path):
 
 
 def write(path, css):
-    """Put CSS in the file at PATH between the marks, or after its top statements the first time.
-    Returns the names of our variables the file also sets outside the block (the scaffold's)."""
+    """Put CSS in the file at PATH between the marks, or the first time after its top statements (at
+    the very top when it has none). Returns the names of our variables the file also sets outside the
+    block (the scaffold's)."""
     text = ""
     if os.path.exists(path):
         with open(path, encoding="utf-8-sig", newline="") as handle:
@@ -156,10 +158,12 @@ def write(path, css):
         end = text.index(END) + len(END)
         text = text[:text.index(START)] + css.rstrip(newline) + text[end:]
     else:
-        top = 0
+        top = 0  # no statement at the top: the block goes first, before the first rule, not inside it
         while STATEMENT.match(text, top):
             top = STATEMENT.match(text, top).end()
-        top = text.find("\n", top) + 1 if text.find("\n", top) >= 0 else len(text)
+        next_line = text.find("\n", top) + 1 or len(text)  # where the next line starts, or the end of the file
+        if top and not text[top:next_line].strip():  # nothing else on the last statement's line: go below it
+            top = next_line
         before = newline if text[:top].strip() else ""
         after = newline if text[top:].strip() and not text[top:].startswith(newline) else ""
         text = text[:top] + before + css + after + text[top:]

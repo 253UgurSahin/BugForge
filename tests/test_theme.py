@@ -161,6 +161,21 @@ class WriteTests(Folder):
         self.assertNotIn("#3f4856", again)
         self.assertTrue(again.endswith("body { margin: 0; }\n"))
 
+    def test_a_rule_at_the_top_stays_outside_the_block(self):
+        """create-vite's CSS starts with :root {. The block goes before that rule, never inside it (there
+        it is :root :root, which matches nothing), and after a statement only when its line holds no more."""
+        vite = ":root {\n  --text: #6b6375;\n}\n"
+        for top in ("", '@import "x.css"; ', "/* the app */ "):
+            with self.subTest(top=top):
+                target = self.write("style.css", top + vite)
+                self.assertEqual(run(TEMPLATE, "--tailwind", "no", "--write", target)[0], 0)
+                text = self.read("style.css")
+                self.assertEqual(text.index(theme.START), len(top.rstrip()) + 1 if top else 0)
+                self.assertLess(text.index(theme.END), text.index(vite))
+                self.assertTrue(text.endswith(vite))  # the scaffold's rule is whole
+                self.assertEqual(run(TEMPLATE, "--tailwind", "no", "--write", target)[0], 0)
+                self.assertEqual(self.read("style.css"), text)  # the block is replaced where it is
+
     def test_the_scaffolds_own_theme_values_are_named(self):
         """Laravel's app.css sets --font-sans in its own @theme after the imports: it would win."""
         target = self.write("app.css", "@import 'tailwindcss';\n@source '../**/*.blade.php';\n\n@theme {\n"
