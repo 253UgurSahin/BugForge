@@ -83,8 +83,7 @@ Not a logo but a brief for the user, a designer, or an image tool whose terms gi
 - Files: an SVG master; `favicon.ico` (32x32) and an SVG favicon; a 180x180 apple-touch-icon;
   with `PWA: yes` icons of 192x192 and 512x512 plus a maskable 512x512 with the mark inside the
   middle 80%; an Open Graph image of 1200x630.
-- **Must not resemble the original's mark**: no shared shape, colour pair or letter trick. Put
-  their logo next to the drafts and check.
+- **Must not resemble the original's mark**: no shared shape, colour pair or letter trick (check side by side).
 - A font in a wordmark has an open licence (SIL OFL) or one the user bought. Until the logo
   exists, a plain wordmark in the app's own font holds its place, and the favicon and app icons
   are the name's first letter in `on-accent` on `accent`, drawn as an SVG path: build's placeholders go.
@@ -100,21 +99,22 @@ share with it: `python3 ../forge-build/copycheck.py forge-work/brand.md --words 
 ## Step 6: rename and sweep
 
 1. Write `forge-work/brand.json` (below).
-   - `avoid`: the original's product and company names (idea mode: the closest competitors from
-     compare.md), the working name (plan.md's title) unless the user keeps it, and what the scaffold
-     shows ("Create Next App" and Vercel, Vite's "Vite + React", Laravel's Laracasts). Never a framework
-     name: Laravel, Django, Next or Vite sit in every config file (`APP_NAME=Laravel` is fixed in item 2).
-     A working name that is a plain word for what the app holds (Notes, Bookings, Kapsalon) stays a word:
-     rename it where it is the name (titles, manifest, emails), leave it out of `avoid`, say why in brand.md.
+   - `avoid`: the original's product and company names (idea mode: the closest competitors, from
+     compare.md or, if it was skipped, the best known), the working name (plan.md's title) unless the user
+     keeps it, and what the scaffold shows ("Create Next App" and Vercel, Vite's "Vite + React", Laravel's
+     Laracasts). Never a framework name: Laravel, Django, Next or Vite are in every config file. A working
+     name that is a plain word for what the app holds (Notes, Bookings, Kapsalon) stays a word: rename it
+     where it is the name (titles, manifest, emails), leave it out of `avoid`, say why in brand.md.
    - `domains`: the original's (idea mode: the competitors'). `colors`: the signature colours under
      `## Original brand colours` in components.md, never white, black or greys (every app has them).
    - `allow`: single words that hold a name and are fine, such as `linear-gradient` for an app
      called Linear. The sweep lists them; tell the user which ones you added.
 2. Replace the name, colours and strings everywhere: the app name setting (laravel `APP_NAME` in
-   `.env.example`, `.env` and `config/app.php`, django settings and `base.html`, next the root layout's
-   `metadata`, static `index.html`), titles and meta tags, `package.json` or `composer.json`, email
-   templates and the sender name, the PWA manifest's `name` and `short_name`, error pages, the
-   README and the texts e2e tests expect. Rename files and folders with the old name; fix imports.
+   `.env.example`, `config/app.php` and `.env`, that line changed by a script that never prints the file,
+   like forge-pack Step 5's; django settings and `base.html`, next the root layout's `metadata`, static
+   `index.html`), titles and meta tags, `package.json` or `composer.json`, email templates and the sender
+   name, the manifest's `name` and `short_name`, error pages, the README and e2e tests' expected texts.
+   Rename files and folders with the old name; fix imports.
 3. From the project root: `python3 ../forge-brand/sweep.py . --config forge-work/brand.json`. Exit 1:
    leftovers by place; fix them and run it again until it exits 0. Exit 2: brand.json or the path is
    wrong (the error says what), or the sweep is INCOMPLETE (a file not read, no text file found). A

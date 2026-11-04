@@ -98,8 +98,8 @@ Read `../forge/rules.md` once per session. In short:
 - A seed script (the names forge-test Step 2 uses) with fake users `alice@example.test` and `bob@example.test`,
   password from `SEED_PASSWORD`, made only in dev and tests (laravel `app()->environment('local', 'testing')`,
   django `DEBUG`, next `NODE_ENV !== "production"`). Reference data goes in a migration. Static: none, no accounts.
-- `PWA: yes`, per profiles.md's PWA toggle: `manifest.webmanifest`, `offline.html` with `/offline.css` and `sw.js`
-  (copy `../forge-plan/sw.example.js`, `ASSETS` set per profile) in `public/`; placeholder icons until forge-brand.
+- `PWA: yes`, per profiles.md's PWA toggle: in `public/`, `manifest.webmanifest`, `offline.html` with `/offline.css`,
+  placeholder icons and `sw.js` from `../forge-plan/sw.example.js` (a static app working offline: vite-plugin-pwa's).
 
 ## Step 3: the vertical slice
 

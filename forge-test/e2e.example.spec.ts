@@ -47,9 +47,10 @@
 //   FORGE_BASE_URL=http://localhost:8080 E2E_PASSWORD=... npx playwright test
 // The browser download fails (a proxy, a sandbox): run it in Playwright's own image, which has the
 // browser, of the exact version in package.json (here 1.64.1), with both variables exported:
-//   docker run --rm --ipc=host --network host -u "$(id -u)" -e HOME=/tmp -v "$PWD":/e2e -w /e2e \
-//     -e FORGE_BASE_URL -e E2E_PASSWORD mcr.microsoft.com/playwright:v1.64.1-noble \
+//   MSYS_NO_PATHCONV=1 docker run --rm --ipc=host --network host -u "$(id -u)" -e HOME=/tmp \
+//     -v "$PWD":/e2e -w /e2e -e FORGE_BASE_URL -e E2E_PASSWORD mcr.microsoft.com/playwright:v1.64.1-noble \
 //     npx playwright test
+// (MSYS_NO_PATHCONV=1 keeps Git Bash on Windows from rewriting /e2e and /tmp; elsewhere it does nothing.)
 // Without E2E_PASSWORD the signed-in tests are skipped and Playwright still exits 0: write each
 // skip in test-plan.md.
 //

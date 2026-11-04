@@ -244,7 +244,18 @@ As a plugin, in Claude Code, one command at a time:
 Plugin skills carry the plugin's name in front: `/bugforge:forge`, `/bugforge:forge-audit`. Claude
 also picks the right skill when you just say what you want ("audit my code").
 
-To update, run both in a terminal and restart Claude Code. The first fetches the new version, the
+Installed it before the rename, as `forge@forge`? Remove that install and its marketplace first, in a
+terminal, then run the two commands above:
+
+```bash
+claude plugin uninstall forge@forge
+```
+
+```bash
+claude plugin marketplace remove forge
+```
+
+To update, run the next two in a terminal and restart Claude Code. The first fetches the new version, the
 second installs it; the second alone finds nothing new.
 
 ```bash
@@ -281,10 +292,10 @@ CI (`.github/workflows/test.yml`) runs on every push and pull request:
 
 ## Releasing
 
-Every push to `main` is a release. `.claude-plugin/plugin.json` has no `version` on purpose: Claude
-Code then uses the commit as the version, so users get each push with the two update commands
-above. With a fixed version they would get nothing until it was raised. `tests/test_repo.py` keeps
-it that way.
+Every push to `main`, the default branch, is a release. `.claude-plugin/plugin.json` has no
+`version` on purpose: Claude Code then uses the commit as the version, so users get each push with
+the two update commands above. With a fixed version they would get nothing until it was raised.
+`tests/test_repo.py` keeps it that way.
 
 ## Credit and license
 
