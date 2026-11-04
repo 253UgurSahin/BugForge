@@ -184,14 +184,16 @@ class CheckTests(Project):
                 self.assertEqual(code, 2)
                 self.assertIn(words, out if stream == 1 else err)
         self.write(os.path.join("forge-work", "original-text", "source-1.txt"), "# kept by pagetext.py\n\n")
-        for state in ("only a header line", "no folder"):
-            with self.subTest(state=state):
-                code, out, err = run()
-                self.assertEqual((code, out), (2, ""))
-                self.assertIn("holds no text of the original: save its pages again as forge-recon Step 2 says", err)
-                self.assertIn("run pagetext.py on them, or ask the user", err)
-                self.assertLessEqual(len(err.rstrip()), 200, "the gate shows 200 characters of a line")
-                shutil.rmtree(os.path.join("forge-work", "original-text"), ignore_errors=True)
+        code, out, err = run()  # pagetext kept no word: save the pages again
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("holds no text of the original: save its pages again as forge-recon Step 2 says", err)
+        self.assertIn("run pagetext.py on them, or ask the user", err)
+        self.assertLessEqual(len(err.rstrip()), 200, "the gate shows 200 characters of a line")
+        shutil.rmtree(os.path.join("forge-work", "original-text"))
+        code, out, err = run()  # no folder: a secondhand recon kept no page (the gate skips the check then)
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("With no page saved (a secondhand recon) there is nothing to compare: say so at the checkpoint",
+                      err)
 
     def test_kept_text_with_no_run_that_long_passes_with_a_note(self):
         """An original of short labels, or in a language written without spaces, has no 6 words in a row.
@@ -235,6 +237,19 @@ class EndToEnd(Project):
         self.assertEqual(code, 1)
         self.assertIn('"je planten blijven in je eigen browser"', out)
         self.assertIn("page source-7 has", out)
+
+    def test_vowel_signs_stay_inside_a_word(self):
+        """Thai and Hindi write vowel signs (combining marks) inside a word: they are no word break, so a
+        Thai clause stays one word, as Japanese does, and a Hindi line splits at its spaces only."""
+        self.write(os.path.join("forge-work", "original-text", "source-9.txt"),
+                   "ข้อมูลของคุณจะถูกเก็บไว้ในเบราว์เซอร์ของคุณเท่านั้น ไม่ต้องสมัครสมาชิก\n"
+                   "आपका डेटा केवल आपके ब्राउज़र में रहता है\n")
+        self.write("privacy.html", "<p>ข้อมูลของคุณจะถูกเก็บไว้บนอุปกรณ์นี้</p>\n<p>आपका डेटा केवल आपके ब्राउज़र में रहता</p>\n")
+        code, out, _ = run()
+        self.assertEqual(code, 1, out)
+        self.assertIn("7 words in a row from the original", out)  # the Hindi line, word by word
+        self.assertIn("where: privacy.html:2", out)
+        self.assertNotIn("privacy.html:1", out)  # the Thai clause differs: no run of 6 fragments
 
     def test_a_language_written_without_spaces(self):
         """Japanese has no spaces between words, so a clause counts as one word and no block of the page has

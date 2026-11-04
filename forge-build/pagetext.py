@@ -34,10 +34,14 @@ import unicodedata
 
 TEXT_DIR = os.path.join("forge-work", "original-text")
 HEADER = "# The original's visible text, kept by pagetext.py for copycheck.py. Never ship it.\n"
-WORD = re.compile(r"[^\W_]+")  # letters and digits only: no key, URL or code survives this
+MARKS = "".join(chr(code) for code in range(0x300, 0x10000)
+                if unicodedata.category(chr(code))[0] == "M")  # vowel signs and accents that join a letter
+WORD = re.compile("[^\\W_](?:[^\\W_]|[%s])*" % MARKS)  # letters and digits: no key, URL or code survives
 INLINE = set("a abbr b bdi bdo cite code data del dfn em font i ins kbd mark q s samp small span strong "
              "sub sup time tt u var wbr".split())  # tags inside a sentence: they do not end a block
 SKIPPED = {"script", "style", "svg", "math"}  # code and drawings, never visible copy
+HEADINGS = {"h1", "h2", "h3", "h4", "h5", "h6"}  # in a headline, a span per word stays one block
+EMPHASIS = set("b strong i em mark u s q cite dfn del ins".split())  # side by side inside a sentence
 TEXT_ATTRS = ("alt", "title", "placeholder", "aria-label", "aria-description")
 META_TEXT = {"description", "og:title", "og:description", "og:image:alt", "twitter:title",
              "twitter:description", "twitter:image:alt"}
@@ -55,13 +59,15 @@ def words(text):
 
 class Blocks(html.parser.HTMLParser):
     """The text blocks of a page as lists of words: a heading, a paragraph, a button, an alt text.
-    Inline tags (a, strong, span) do not end a block, except where a link and another inline element
-    have only space between them, as two buttons or links do: labels side by side are not one
-    sentence. Other inline elements side by side stay in the block, as two words when they touch."""
+    Inline tags (a, strong, span) do not end a block, except where two inline elements have only space
+    between them: labels side by side (two links, a hint and its counter, weekday names) are not one
+    sentence. Not split: in a heading (a span per word), and two emphasis tags (strong, em). Two that
+    touch are two words."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.blocks, self.parts, self.skip, self.after_inline = [], [], 0, False  # after_inline: a tag's name
+        self.heading = 0  # inside h1 to h6
 
     def end_block(self):
         found = words("".join(self.parts))
@@ -80,12 +86,16 @@ class Blocks(html.parser.HTMLParser):
         if tag == "meta" and (attrs.get("name") or attrs.get("property", "")).lower() in META_TEXT:
             texts.append(attrs.get("content", ""))
         self.blocks += [words(text) for text in texts if words(text)]  # each one a block of its own
-        if tag not in INLINE or self.after_inline and "a" in (tag, self.after_inline):  # a link next to a label
+        self.heading += tag in HEADINGS
+        apart = self.after_inline and ("a" in (tag, self.after_inline)
+                                       or not self.heading and not {tag, self.after_inline} <= EMPHASIS)
+        if tag not in INLINE or apart:  # a link next to anything, or two labels side by side
             self.end_block()
         elif self.after_inline:
             self.parts.append(" ")  # <span>gets</span><span>its</span>: two words
 
     def handle_endtag(self, tag):
+        self.heading = max(0, self.heading - (tag in HEADINGS))
         if tag in SKIPPED:
             self.skip = max(0, self.skip - 1)
         elif not self.skip and tag in INLINE:

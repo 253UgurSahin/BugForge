@@ -36,7 +36,9 @@ import unicodedata
 
 TEXT_DIR = os.path.join("forge-work", "original-text")
 ALLOW_FILE = os.path.join("forge-work", "copy-allow.txt")
-WORD = re.compile(r"[^\W_]+")  # letters and digits only, the same as in pagetext.py
+MARKS = "".join(chr(code) for code in range(0x300, 0x10000)
+                if unicodedata.category(chr(code))[0] == "M")  # vowel signs and accents that join a letter
+WORD = re.compile("[^\\W_](?:[^\\W_]|[%s])*" % MARKS)  # letters and digits with those marks, as in pagetext.py
 ESCAPE = re.compile(r"\\u([0-9a-fA-F]{4})")  # json.dump writes a curly quote as such a \u escape
 TAG = re.compile(r"</?([A-Za-z][\w:.-]*)(?:[^>\"']|\"[^\"]*\"|'[^']*')*>")  # a '>' in quotes is no end
 TOUCHING = re.compile(r"(</[A-Za-z][^<>]*>)(?=<[A-Za-z])")  # an end tag right before a start tag
@@ -98,6 +100,10 @@ def load_original(size):
                     kept = kept or bool(found)
                     for i in range(len(found) - size + 1):
                         runs.setdefault(tuple(found[i:i + size]), set()).add(name[:-4])
+    if not kept and not os.path.isdir(TEXT_DIR):
+        raise ValueError("there is no %s: forge-recon keeps the original's text there (its Step 2). With no "
+                         "page saved (a secondhand recon) there is nothing to compare: say so at the checkpoint"
+                         % TEXT_DIR)
     if not kept:
         raise ValueError("%s holds no text of the original: save its pages again as forge-recon Step 2 says (it "
                          "deletes them after recon.md) and run pagetext.py on them, or ask the user" % TEXT_DIR)

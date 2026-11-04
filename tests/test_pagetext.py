@@ -88,6 +88,19 @@ class Blocks(unittest.TestCase):
                           "groeiwijs is gratis voor altijd en houdt je planten bij",
                           "privacy", "voorwaarden", "contact", "groeiwijs", "open de planner"])
 
+    def test_labels_side_by_side_stay_apart_outside_a_heading(self):
+        """Outside a heading, two inline elements side by side end the block unless both are emphasis: a
+        form hint next to its counter and a row of weekday names are separate labels, not one sentence."""
+        blocks = pagetext.page_blocks(
+            '<p class="hint"><span>Minimaal 10 tekens.</span> <span id="teller">0 van 1000 tekens</span></p>'
+            '<div class="weekdays"><span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span>'
+            '<span>za</span><span>zo</span></div>'
+            '<h2><span>Water</span> <span>op</span> <span>tijd</span></h2>'
+            '<p>Dit is <b>echt</b> <i>gratis</i> voor iedereen.</p>')
+        self.assertEqual([" ".join(found) for found in blocks],
+                         ["minimaal 10 tekens", "0 van 1000 tekens", "ma", "di", "wo", "do", "vr", "za", "zo",
+                          "water op tijd", "dit is echt gratis voor iedereen"])
+
     def test_submit_values_and_share_tags(self):
         blocks = pagetext.page_blocks('<input type="submit" value="Stuur het bericht">'
                                       '<input type="text" value="not a label">'
