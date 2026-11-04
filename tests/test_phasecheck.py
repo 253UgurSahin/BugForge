@@ -156,7 +156,8 @@ PASSING = {
                            write(root, "forge-work/design/tokens.json", TOKENS),
                            write(root, "index.html", "<title>Slotwise</title>\n")),
     "launch": lambda root: (write(root, "forge-work/launch.md", filled("forge-launch/launch.md")),
-                            write(root, "public/og.png", "not really a PNG\n")),
+                            write(root, "public/og.png", "not really a PNG\n"),
+                            write(root, "forge-work/brand.json", BRAND_JSON)),  # forge-brand's, for the sweep
     "secure": lambda root: (write(root, "forge-work/security.md", SECURITY),
                             write(root, "index.html", "<title>Slotwise</title>\n")),
     "pack": copy_static_pack,
@@ -415,6 +416,19 @@ class PhaseTests(Checks):
         self.finish("diff")
         write(self.root, "forge-work/features.csv", FEATURES.replace("must,yes,yes", "must,yes,partial"))
         self.assert_fails("diff", "parity.py forge-work/features.csv exits 1")
+
+    def test_launch_sweeps_its_pages_for_the_names_to_avoid(self):
+        """Launch writes the public pages after brand ran its sweep: the original's or a rival's name on one
+        of them fails launch too. brand.json is forge-brand's, which comes before launch in both its modes."""
+        self.finish("launch")
+        write(self.root, "pricing.html", "<p>Switching from Calendly? Bring your slots along.</p>\n")
+        out = self.assert_fails("launch", "sweep.py . --config forge-work/brand.json exits 1: it found problems",
+                                "A name to avoid: Calendly")
+        self.assertIn("why: forge-launch, Also for this skill: no names, logos or screenshots of competitors", out)
+        self.remove("pricing.html")
+        self.assertIn("sweep.py . --config forge-work/brand.json exits 0", self.assert_passes("launch"))
+        self.remove("forge-work/brand.json")
+        self.assert_fails("launch", "sweep.py . --config forge-work/brand.json exits 2: it could not check")
 
     def test_brand(self):
         self.finish("brand")

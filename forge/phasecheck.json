@@ -111,6 +111,8 @@
     {"check": ["doc", "forge-work/launch.md", "--template", "../forge-launch/launch.md", "--section", "Pricing",
                "--section", "Privacy, cookies and SEO", "--section", "Legal pages", "--names", "OG image"],
      "why": "forge-launch, Output: launch.md from the template; Step 4: tick the legal items you wrote; Step 5: an og:image of your own"},
+    {"check": ["run", "forge-brand/sweep.py", ".", "--config", "forge-work/brand.json"],
+     "why": "forge-launch, Also for this skill: no names, logos or screenshots of competitors or the original on the site; commit once all tests pass and sweep.py exits 0"},
     {"check": ["run", "forge-build/copycheck.py"], "modes": ["clone"], "when": "forge-work/original-text/",
      "why": "forge-launch, Also for this skill: commit once all tests pass and secretscan.py, sweep.py and, in clone mode, copycheck.py exit 0; forge-build, Clean room: rewrite each shared run, or with the user's OK add it to forge-work/copy-allow.txt"}
   ],
