@@ -38,6 +38,7 @@ ALLOW_FILE = os.path.join("forge-work", "copy-allow.txt")
 WORD = re.compile(r"[^\W_]+")  # letters and digits only, the same as in pagetext.py
 ESCAPE = re.compile(r"\\u([0-9a-fA-F]{4})")  # json.dump writes a curly quote as such a \u escape
 TAG = re.compile(r"</?([A-Za-z][\w:.-]*)(?:[^>\"']|\"[^\"]*\"|'[^']*')*>")  # a '>' in quotes is no end
+TOUCHING = re.compile(r"(</[A-Za-z][^<>]*>)(?=<[A-Za-z])")  # an end tag right before a start tag
 INLINE = set("a abbr b bdi bdo cite code data del dfn em font i ins kbd mark q s samp small span strong "
              "sub sup time tt u var wbr".split())  # tags inside a sentence: they do not end a block
 HTML_LIKE = (".html", ".htm", ".xhtml", ".php", ".twig", ".jinja", ".jinja2", ".j2", ".njk", ".liquid",
@@ -61,13 +62,14 @@ def words(text):
 
 def tag_blocks(text):
     """(line, words) of each block in an HTML-like file: inline tags stay inside a block, every
-    other tag ends one. Code in it gives odd blocks, which match nothing the original says."""
+    other tag ends one. Inline elements that touch (<b>x</b><i>y</i>) are two words, as in
+    pagetext.py. Code in it gives odd blocks, which match nothing the original says."""
     blocks, start, line = [], 0, 1
     for match in list(TAG.finditer(text)) + [None]:
         if match is not None and match.group(1).lower() in INLINE:
             continue
         end = match.start() if match else len(text)
-        chunk = TAG.sub("", text[start:end])  # only inline tags are left in it
+        chunk = TAG.sub("", TOUCHING.sub(r"\1 ", text[start:end]))  # only inline tags are left in it
         first = len(chunk) - len(chunk.lstrip())
         if words(chunk):
             blocks.append((line + chunk.count("\n", 0, first), words(chunk)))

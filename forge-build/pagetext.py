@@ -49,12 +49,13 @@ def words(text):
 
 class Blocks(html.parser.HTMLParser):
     """The text blocks of a page as lists of words: a heading, a paragraph, a button, an alt text.
-    Inline tags (a, strong, span) do not end a block, except when only space stands between two
-    of them, as between two buttons or links: labels side by side are not one sentence."""
+    Inline tags (a, strong, span) do not end a block, except where a link and another inline element
+    have only space between them, as two buttons or links do: labels side by side are not one
+    sentence. Other inline elements side by side stay in the block, as two words when they touch."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.blocks, self.parts, self.skip, self.after_inline = [], [], 0, False
+        self.blocks, self.parts, self.skip, self.after_inline = [], [], 0, False  # after_inline: a tag's name
 
     def end_block(self):
         found = words("".join(self.parts))
@@ -73,21 +74,23 @@ class Blocks(html.parser.HTMLParser):
         if tag == "meta" and (attrs.get("name") or attrs.get("property", "")).lower() in META_TEXT:
             texts.append(attrs.get("content", ""))
         self.blocks += [words(text) for text in texts if words(text)]  # each one a block of its own
-        if tag not in INLINE or self.after_inline:  # a new block, or a label next to a label
+        if tag not in INLINE or self.after_inline and "a" in (tag, self.after_inline):  # a link next to a label
             self.end_block()
+        elif self.after_inline:
+            self.parts.append(" ")  # <span>gets</span><span>its</span>: two words
 
     def handle_endtag(self, tag):
         if tag in SKIPPED:
             self.skip = max(0, self.skip - 1)
         elif not self.skip and tag in INLINE:
-            self.after_inline = True
+            self.after_inline = tag
         elif not self.skip:
             self.end_block()
 
     def handle_data(self, data):
         if not self.skip:
             self.parts.append(data)
-            self.after_inline = self.after_inline and not data.strip()
+            self.after_inline = False if data.strip() else self.after_inline
 
 
 def page_blocks(text):

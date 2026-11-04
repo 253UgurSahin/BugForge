@@ -73,6 +73,21 @@ class Blocks(unittest.TestCase):
                       "ignored", "markeer", "btn", "prijzen/"):
             self.assertNotIn(never, kept)
 
+    def test_only_a_link_next_to_an_inline_element_ends_a_block(self):
+        """Labels side by side are not one sentence: a link next to a link or a label ends the block, as in
+        a footer. Other inline elements side by side stay in it, as in a headline with a span per word, and
+        two that touch are two words."""
+        blocks = pagetext.page_blocks(
+            '<h1><span class="w">Elke</span> <span class="w">kamerplant</span><span class="w">krijgt</span> '
+            '<span class="w">precies</span><span class="w">op</span> <span class="w">tijd</span> water</h1>'
+            '<p>Groeiwijs is <strong>gratis</strong> <em>voor altijd</em> en houdt je planten bij.</p>'
+            '<footer><a href="/privacy">Privacy</a><span>&middot;</span><a href="/voorwaarden">Voorwaarden</a>'
+            ' <a href="/contact">Contact</a> <strong>Groeiwijs</strong> <a href="/app/">Open de planner</a></footer>')
+        self.assertEqual([" ".join(found) for found in blocks],
+                         ["elke kamerplant krijgt precies op tijd water",
+                          "groeiwijs is gratis voor altijd en houdt je planten bij",
+                          "privacy", "voorwaarden", "contact", "groeiwijs", "open de planner"])
+
     def test_submit_values_and_share_tags(self):
         blocks = pagetext.page_blocks('<input type="submit" value="Stuur het bericht">'
                                       '<input type="text" value="not a label">'

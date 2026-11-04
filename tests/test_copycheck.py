@@ -123,6 +123,24 @@ class CheckTests(Project):
                          [("foto s notities van je planten zo n beetje elke dag dat s alles",
                            ["index.html:1", "messages.json:1", os.path.join("app", "page.tsx") + ":1"])])
 
+    def test_a_headline_with_a_span_per_word(self):
+        """A page builder puts each word of a headline in a span of its own, with space between or touching.
+        pagetext.py keeps the headline whole, so a copy of it is found, written plainly or in the same markup.
+        So is a sentence with <strong> and <em> side by side."""
+        self.keep("source-2", '<h1><span class="w">Elke</span> <span class="w">kamerplant</span><span class="w">'
+                              'krijgt</span> <span class="w">precies</span><span class="w">op</span> <span>tijd</span>'
+                              ' water</h1><p>Groeiwijs is <strong>gratis</strong> <em>voor altijd</em> en houdt je '
+                              'planten bij.</p>')
+        self.write("index.html", "<h1>Elke kamerplant krijgt precies op tijd water</h1>\n"
+                                 "<p>Groeiwijs is gratis voor altijd en houdt je planten bij.</p>\n")
+        self.write("copied.vue", "<h1><span>Elke</span><span>kamerplant</span><span>krijgt</span><span>precies"
+                                 "</span><span>op</span><span>tijd</span> water</h1>\n")
+        code, out, _ = run("--json")
+        self.assertEqual(code, 1, out)
+        self.assertEqual([(f["run"], f["places"]) for f in json.loads(out)["findings"]],
+                         [("groeiwijs is gratis voor altijd en houdt je planten bij", ["index.html:2"]),
+                          ("elke kamerplant krijgt precies op tijd water", ["copied.vue:1", "index.html:1"])])
+
     def test_two_pages_of_the_original(self):
         self.write(os.path.join("forge-work", "original-text", "source-2.txt"),
                    "zo zie je elke dag in een oogopslag\n")
