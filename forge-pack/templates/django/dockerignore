@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+# npm and Yarn logins for private packages: the image takes the whole folder.
+.npmrc
+.yarnrc.yml
 .git
 .github
 forge-work/

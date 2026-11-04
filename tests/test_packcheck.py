@@ -166,6 +166,18 @@ class TemplateTests(unittest.TestCase):
                 for name in (".env", ".git", "forge-work", "node_modules", "coverage", "test-results"):
                     self.assertTrue(mod.is_ignored(lines, name), name)
                 self.assertFalse(mod.is_ignored(lines, ".env.example"))
+                # npm's and Yarn's logins: the laravel and django images take the whole folder, while
+                # next and static ship only their build output (review: a token reached the image).
+                for name in (".npmrc", ".yarnrc.yml"):
+                    self.assertEqual(mod.is_ignored(lines, name), profile in ("laravel", "django"), name)
+
+    def test_the_in_image_check_looks_for_each_login(self):
+        """forge-pack Step 5 looks in the running app image for the .env, npm's and Composer's logins
+        and forge's notes, which the laravel and django images would take from the folder."""
+        text = read(os.path.join(ROOT, "forge-pack", "SKILL.md"))
+        check = re.search(r"docker compose exec app sh -c '([^']*)'", text).group(1)
+        self.assertEqual(re.findall(r"test ! -e (\S+) &&", check), [".env", ".npmrc", "auth.json", "forge-work"])
+        self.assertTrue(check.endswith("&& echo clean"), check)
 
     def test_e2e_and_backups_stay_out_of_the_image(self):
         """forge-test keeps the whole e2e/ folder out; a database dump or an uploads backup too."""
@@ -215,11 +227,12 @@ class TemplateTests(unittest.TestCase):
                         self.assertIn("> ~/backups/{{app}}/", line)
 
     def test_laravel_keeps_its_local_secrets_out(self):
-        """Composer logins, Passport keys, the cached config (every .env value), uploads and sessions."""
+        """Composer, npm and Yarn logins, Passport keys, the cached config (every .env value), uploads
+        and sessions."""
         lines = read(os.path.join(TEMPLATES, "laravel", "dockerignore")).splitlines()
         self.assertTrue(mod.is_ignored(lines, "vendor"))
-        for line in ("auth.json", "storage/*.key", "storage/app/**", "storage/framework/**", "storage/logs/**",
-                     "bootstrap/cache/**", "!storage/**/.gitignore", "!bootstrap/cache/.gitignore"):
+        for line in ("auth.json", ".npmrc", ".yarnrc.yml", "storage/*.key", "storage/app/**", "storage/framework/**",
+                     "storage/logs/**", "bootstrap/cache/**", "!storage/**/.gitignore", "!bootstrap/cache/.gitignore"):
             self.assertIn(line, lines)
         dockerfile = read(os.path.join(TEMPLATES, "laravel", "Dockerfile"))
         self.assertIn("mkdir -p storage/app/public storage/framework/cache/data", dockerfile)

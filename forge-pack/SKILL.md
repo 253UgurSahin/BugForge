@@ -128,8 +128,8 @@ in `.env`), and a RUN.md for that profile.
    ```
 
    Every service `healthy` (the laravel worker: `running`) and the health URL gives 200. Then:
-   - No secrets in the image (laravel, django, next):
-     `docker compose exec app sh -c 'test ! -e .env && test ! -e forge-work && echo clean'`.
+   - No secrets in the image (laravel, django, next): `docker compose exec app sh -c 'test ! -e .env &&
+     test ! -e .npmrc && test ! -e auth.json && test ! -e forge-work && echo clean'`.
    - The headers: `python3 ../forge-secure/headers.py http://localhost:8080/` (a passive check
      of your own container). laravel and static get them from `nginx.conf`; django and next set
      them in the app (Django: the CSP middleware with `SECURE_CSP`; Next.js: `headers()` in
