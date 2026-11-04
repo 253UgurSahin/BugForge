@@ -13,9 +13,10 @@ Usage:
 
 It reads every text file under the paths line by line, and HTML-like files (templates,
 components) also by block, so a sentence wrapped over lines or with a link in it is still one
-run. Skipped: forge-work, dependencies, build output (unless you name it), lock files, binary
-files, symlinks. A run in forge-work/copy-allow.txt (one per line, # for notes) is let through,
-such as the user's own words or a legal phrase: each needs the user's OK.
+run. An entity (&rsquo;) or a \\u escape counts as the character it stands for. Skipped:
+forge-work, dependencies, build output (unless you name it), lock files, binary files, symlinks.
+A run in forge-work/copy-allow.txt (one per line, # for notes) is let through, such as the
+user's own words or a legal phrase: each needs the user's OK.
 
 Exit codes:
     0  nothing shared
@@ -25,6 +26,7 @@ Exit codes:
 """
 
 import argparse
+import html
 import json
 import os
 import re
@@ -34,6 +36,7 @@ import unicodedata
 TEXT_DIR = os.path.join("forge-work", "original-text")
 ALLOW_FILE = os.path.join("forge-work", "copy-allow.txt")
 WORD = re.compile(r"[^\W_]+")  # letters and digits only, the same as in pagetext.py
+ESCAPE = re.compile(r"\\u([0-9a-fA-F]{4})")  # json.dump writes a curly quote as such a \u escape
 TAG = re.compile(r"</?([A-Za-z][\w:.-]*)(?:[^>\"']|\"[^\"]*\"|'[^']*')*>")  # a '>' in quotes is no end
 INLINE = set("a abbr b bdi bdo cite code data del dfn em font i ins kbd mark q s samp small span strong "
              "sub sup time tt u var wbr".split())  # tags inside a sentence: they do not end a block
@@ -50,7 +53,9 @@ FIX = ("write it again in your own words. Must it match (the user's own words, a
 
 
 def words(text):
-    """'Elke plant, op tijd!' -> ['elke', 'plant', 'op', 'tijd']."""
+    """'Elke plant, op tijd!' -> ['elke', 'plant', 'op', 'tijd']. A \\u escape and an entity (&rsquo;) count as
+    the character they stand for, the way pagetext.py reads the original's entities."""
+    text = html.unescape(ESCAPE.sub(lambda match: chr(int(match.group(1), 16)), text))  # JSON can wrap an entity
     return WORD.findall(unicodedata.normalize("NFKC", text).lower())
 
 

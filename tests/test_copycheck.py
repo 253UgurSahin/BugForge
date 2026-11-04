@@ -57,8 +57,12 @@ class Project(unittest.TestCase):
         old = os.getcwd()
         os.chdir(self.project)
         self.addCleanup(os.chdir, old)
-        self.write(os.path.join("forge-work", "original-text", "source-1.txt"),
-                   "# kept\n" + "".join(" ".join(found) + "\n" for found in pagetext.page_blocks(ORIGINAL)))
+        self.keep("source-1", ORIGINAL)
+
+    def keep(self, name, page):
+        """Keep PAGE's text in forge-work/original-text/NAME.txt, the way pagetext.py does."""
+        self.write(os.path.join("forge-work", "original-text", name + ".txt"),
+                   "# kept\n" + "".join(" ".join(found) + "\n" for found in pagetext.page_blocks(page)))
 
     def write(self, path, text):
         os.makedirs(os.path.dirname(os.path.join(self.project, path)), exist_ok=True)
@@ -100,6 +104,24 @@ class CheckTests(Project):
         self.write("a.html", "<p>Zo zie je elke dag in een oogopslag wat er moet\ngebeuren</p>\n")
         data = json.loads(run("--json")[1])
         self.assertEqual([(f["words"], f["places"]) for f in data["findings"]], [(12, ["a.html:1"])])
+
+    def test_entities_and_escapes_count_as_the_characters_they_stand_for(self):
+        """pagetext.py reads the original's entities as the characters a visitor sees. copycheck.py reads the
+        clone's files the same way, so a copy that keeps them (JSX wants &apos;) is still one run. So is one
+        in a JSON file, where json.dump writes the curly quote as \\u2019."""
+        self.keep("source-2", "<p>Foto&rsquo;s &amp; notities van je planten, zo&rsquo;n beetje elke&nbsp;dag: "
+                              "dat&rsquo;s alles.</p>")
+        self.write("index.html", "<p>Foto&rsquo;s &amp; notities van je planten, zo&rsquo;n beetje elke&nbsp;dag: "
+                                 "dat&rsquo;s alles.</p>\n")
+        self.write("app/page.tsx", "export const Lead = () => <p>Foto&apos;s &amp; notities van je planten, zo&#39;n "
+                                   "beetje elke dag: dat&apos;s alles.</p>;\n")
+        self.write("messages.json", '{"lead": "Foto\\u2019s & notities van je planten, zo\\u2019n beetje elke dag: '
+                                    'dat\\u2019s alles."}\n')
+        code, out, _ = run("--json")
+        self.assertEqual(code, 1, out)
+        self.assertEqual([(f["run"], f["places"]) for f in json.loads(out)["findings"]],
+                         [("foto s notities van je planten zo n beetje elke dag dat s alles",
+                           ["index.html:1", "messages.json:1", os.path.join("app", "page.tsx") + ":1"])])
 
     def test_two_pages_of_the_original(self):
         self.write(os.path.join("forge-work", "original-text", "source-2.txt"),
