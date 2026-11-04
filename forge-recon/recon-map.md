@@ -7,7 +7,8 @@ Date: {{YYYY-MM-DD}}
 Account terms: {{checked YYYY-MM-DD: no clause against building a competing product}}
 
 <!-- Replace every {{...}}, then delete this comment. Write "none seen" rather than leaving a
-     section empty. Quotes from the app's pages go in a quote block with their URL (rules.md 1).
+     section empty. Quotes from the app's pages go in a quote block with their URL (rules.md 1); a
+     hit's short excerpt in the sources table goes in quotation marks, since its row gives the URL.
      Account terms may also be "public sources only, because ..." or "n/a: the app has no
      accounts (site terms checked YYYY-MM-DD, or not reachable)". Screenshot names: S01.png
      (1440x900), S01-mobile.png (390x844), and for a further state S01-<state>.png and

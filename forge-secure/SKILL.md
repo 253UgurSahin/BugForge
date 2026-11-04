@@ -86,8 +86,8 @@ Each failed check is a finding in the plain format. Default severity in brackets
 
 **Containers**
 - Runs as a non-root user: a `USER` line in the Dockerfile (medium). Base image pinned, not `latest` (low).
-- No secrets baked into the image: no `.env` copied in, no secret in `ENV` or `ARG` (critical).
-- `.dockerignore` excludes `.env`, `.git` and `forge-work/` (high).
+- No secrets baked into the image: no `.env` or other file of secrets (`.env.local`, `auth.json`, `.npmrc`) copied in, no secret in `ENV` or `ARG` (critical).
+- `.dockerignore` excludes `.env`, `.git`, `forge-work/` and the other files of secrets in the project (high).
 
 **Stripe**
 - Test mode only: `sk_test_` and `pk_test_` keys. Live keys are the user's job (critical).

@@ -195,7 +195,7 @@ def gives_orders(words):
 
 def check_hidden(text):
     """Yield (offset, rule, excerpt) for hidden elements with text, read to their own closing tag (inner
-    tags of the same name counted): a UI state when a switch hides short text that gives no orders."""
+    tags of the same name counted): a UI state when a switch hides short text with no order phrase it knows."""
     covered = 0  # an element inside one already found is part of it
     for tag in TAG.finditer(text):
         name = tag.group(1).lower()
