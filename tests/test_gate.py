@@ -240,6 +240,7 @@ class CheckTests(Project):
         self.assertIn("Exit checks for test (idea mode):", out)
         self.assertIn("no end-to-end spec: no file like e2e/", out)
         self.gate("init", "--mode", "improve", "--force")
+        os.utime(os.path.join(self.root, "forge-work", "test-plan.md"))  # this round's plan: after the init
         code, out, _ = self.gate("check", "test")
         self.assertEqual(code, 0, out)
         self.assertIn("Exit checks for test (improve mode):", out)

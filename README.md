@@ -58,10 +58,11 @@ skill on its own.
 2. Claude runs that phase's skill.
 3. `gate.py check <phase>` runs the phase's exit checks (`forge/phasecheck.py`), in your project's
    mode: what the phase's skill promises is there. Its files, with no placeholder of their template
-   left (code blocks too) and text of its own in each section; the phase's scripts pass (contrast,
-   bugs, parity, brand sweep, codecheck, secret scan, packcheck, and in clone mode the copy check
-   once forge-recon kept the original's text); and the reports of diff and secure are newer than the
-   go before them.
+   left (code blocks too) and text of its own in each section that must not stay empty; the phase's
+   scripts pass (contrast, bugs, parity, brand sweep, codecheck, secret scan, packcheck, and in
+   clone mode the copy check once forge-recon kept the original's text); and the reports of test,
+   diff, secure, audit, inspect and improve are newer than the go before them (diff's also newer
+   than bugs.md and features.csv, which its fix loop changes).
 4. Claude shows you the skill's checkpoint plus one line with the gate's result, and stops.
 5. Only after your go: `gate.py done <phase> --approved '<your exact words>'`. It refuses when a
    check fails, the words are missing, or an earlier phase is still open.

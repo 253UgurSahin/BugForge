@@ -46,6 +46,11 @@ def template(folder, name):
     return read(os.path.join(ROOT, folder, name))
 
 
+def example(skill):
+    """The report in SKILL's Output section: the first markdown block of its SKILL.md."""
+    return template(skill, "SKILL.md").split("```markdown\n")[1].split("\n```\n")[0] + "\n"
+
+
 def filled(path, **lines):
     """The template at PATH (in the pack) as a writer fills it in: each {{...}}, and each <...> outside
     code, becomes its own words; each ## section gets a line of this app's own; LINES set `Label: value`."""
@@ -102,8 +107,10 @@ SECURITY = "# Security check\nDate: 2026-10-27\nVerdict: PASS\nCounts: 0 critica
            "## What was checked\n- secretscan, codecheck, deps (npm), headers (http://localhost:8080), trackers\n\n" \
            "## Findings\n### X001 [medium] Login has no rate limit\nwhere: app/login.ts:12\n\n" \
            "## Not checked\n- composer audit: composer is not installed.\n\n## Accepted risks\nNone.\n"
-PARITY = "# Parity\n\nParity: 91.0 / 100\n\n## Behaviour differences\n" \
-         "| flow | original does | clone does | fix or keep |\n|---|---|---|---|\n" \
+PARITY = "# Parity\n\nParity: 75.0 / 100\n- features: 75.0  (2 features scored, must-haves 1 of 1 done)\n\n" \
+         "Every must-have feature is done.\n\n## By area, weakest first\n- email    0.0  (1 feature)\n" \
+         "- booking  100.0  (1 feature)\n\n## Missing, in build order\n- [could] email: Reminders (not built)\n\n" \
+         "## Behaviour differences\n| flow | original does | clone does | fix or keep |\n|---|---|---|---|\n" \
          "| F01 book a slot | 5 clicks | 3 clicks | keep |\n\n## Verdict\nDate: 2026-10-27\n" \
          "Shippable: 1 of 1 must-haves done, no open critical or high bug.\n\n## Next to build\n1. Reminders.\n"
 BRAND = "# Brand\nDate: 2026-10-27\nName: Slotwise\n## Name checks (screening, not legal advice)\n" \
@@ -111,6 +118,35 @@ BRAND = "# Brand\nDate: 2026-10-27\nName: Slotwise\n## Name checks (screening, n
         "## Palette\naccent #0f7b6c, contrast.py exit 0.\n## Logo brief\nA slot in a week grid.\n" \
         "## Voice and the strings rewritten\nDirect, not blunt.\n## Sweep\nsweep.py exit 0 on 2026-10-27.\n"
 BRAND_JSON = '{"name": "Slotwise", "avoid": ["Calendly"]}'
+# The reports with no template, in the format of their skill's Output section.
+COMPARE = "# Compare\nDate: 2026-10-27   Mode: clone   Apps: App A (the original), App B\n" \
+          "Sample: 40 reviews from 3 sources (feedback.md). Pages read: 6, not reached: 0.\n\n" \
+          "## Features\n| feature | App A | App B |\n|---|---|---|\n| book a slot | yes [1] | yes [2] |\n\n" \
+          "## Pricing\n| app | plan | price | per | VAT | read | source |\n|---|---|---|---|---|---|---|\n" \
+          "| App A | Standard | EUR 12 | user, month | excl. | 2026-10-27 | [1] |\n\n" \
+          "## Positioning\nApp A: scheduling for sales teams. App B: for clinics.\n\n" \
+          "## What they hate\n1. Reminders cost extra (App A, 12 reviews, 3 sources).\n\n" \
+          "## What is missing\n1. SMS reminders (App A, App B, 9 reviews, 2 sources).\n\n" \
+          "## What is unsolved\n1. Not built for hair salons (5 reviews, 2 sources: thin).\n\n" \
+          "## Fix plan\n| id | fix | effort | evidence |\n|---|---|---|---|\n" \
+          "| C001 | SMS reminders | M | 9 reviews |\n\n" \
+          "## Angles\n1. For salons who hate paying for reminders, Slotwise sends them free. (recommended)\n\n" \
+          "## Sources\n[1] https://app-a.example/features (read 2026-10-27)\n" \
+          "[2] https://app-b.example/ (read 2026-10-27)\n"
+AUDIT = "# Audit: Slotwise\nDate: 2026-10-27   Commit: 3f2a1c9\nProfile: laravel (detect.py)   Verdict: needs work " \
+        "(0 critical, 1 high, 0 medium, 0 low)\n\n## Summary\nLaravel 11 with tests that pass. Any user can open " \
+        "any invoice.\n\n## Top 5\n1. A001 [high] Any logged-in user can open any invoice (effort S)\n\n## Numbers\n" \
+        "- Tests: 140 passed, 0 failed\n\n## Findings\n### A001 [high] Any logged-in user can open any invoice\n" \
+        "where: app/Http/Controllers/InvoiceController.php:31\n\n## Not checked\n- composer audit: not installed\n"
+INSPECT = "# Inspect: slotwise.example\nDate: 2026-10-27   Pages: 1   Mode: own app (active checks allowed)\n" \
+          "Verdict: healthy (0 critical, 0 high, 1 medium, 0 low)\n\n## Summary\nThe pages load fast. One field " \
+          "has no label.\n\n## What was checked\n- Pages: https://slotwise.example/. headers.py, pagecheck.py\n\n" \
+          "## Findings\n### I001 [medium] The email field has no label\nwhere: https://slotwise.example/, line 40\n\n" \
+          "## Not checked\n- Lighthouse: Chrome is not installed.\n"
+IMPROVE = "# Improve: Slotwise\nDate: 2026-10-27   Branch: forge/improve-20261027   Started from: main at 3f2a1c9\n" \
+          "Picked: A001. The user said: \"fix A001\"\n\n## To do\n## Fixed\n### A001 [high] Any logged-in user can " \
+          "open any invoice\ncommit: 9b1e2f4 fix(A001): check the owner first\n\n## Skipped\n## For you\n" \
+          "## Found on the way\n"  # To do ends empty; the last three may stay empty
 
 
 def git(root, *args):
@@ -140,7 +176,7 @@ def copy_static_pack(root):
 PASSING = {
     "recon": lambda root: (write(root, "forge-work/recon.md", filled("forge-recon/recon-map.md")),
                            write(root, "forge-work/features.csv", FEATURES)),
-    "compare": lambda root: write(root, "forge-work/compare.md", "# Compare\n"),
+    "compare": lambda root: write(root, "forge-work/compare.md", COMPARE),
     "plan": lambda root: (write(root, "forge-work/plan.md", PLAN),
                           write(root, "forge-work/features.csv", FEATURES)),
     "design": lambda root: (write(root, "forge-work/design/tokens.json", TOKENS),
@@ -150,8 +186,8 @@ PASSING = {
                            write(root, "forge-work/security.md", SECURITY)),  # forge-build Step 7 runs forge-secure
     "test": lambda root: (write(root, "forge-work/test-plan.md", TEST_PLAN), write(root, "forge-work/bugs.md", BUGS),
                           write(root, "e2e/f01-book.spec.ts", SPEC)),
-    "diff": lambda root: (write(root, "forge-work/features.csv", FEATURES), write(root, "forge-work/parity.md", PARITY),
-                          write(root, "forge-work/bugs.md", BUGS)),
+    "diff": lambda root: (write(root, "forge-work/features.csv", FEATURES), write(root, "forge-work/bugs.md", BUGS),
+                          write(root, "forge-work/parity.md", PARITY)),  # Step 4 writes parity.md last
     "brand": lambda root: (write(root, "forge-work/brand.json", BRAND_JSON), write(root, "forge-work/brand.md", BRAND),
                            write(root, "forge-work/design/tokens.json", TOKENS),
                            write(root, "index.html", "<title>Slotwise</title>\n")),
@@ -161,9 +197,9 @@ PASSING = {
     "secure": lambda root: (write(root, "forge-work/security.md", SECURITY),
                             write(root, "index.html", "<title>Slotwise</title>\n")),
     "pack": copy_static_pack,
-    "audit": lambda root: write(root, "forge-work/audit.md", "# Audit\n"),
-    "inspect": lambda root: write(root, "forge-work/inspect.md", "# Inspect\n"),
-    "improve": lambda root: (write(root, "forge-work/improve.md", "# Improve\n"), work_branch(root)),
+    "audit": lambda root: write(root, "forge-work/audit.md", AUDIT),
+    "inspect": lambda root: write(root, "forge-work/inspect.md", INSPECT),
+    "improve": lambda root: (write(root, "forge-work/improve.md", IMPROVE), work_branch(root)),
 }
 
 
@@ -429,6 +465,49 @@ class PhaseTests(Checks):
         self.assertIn("sweep.py . --config forge-work/brand.json exits 0", self.assert_passes("launch"))
         self.remove("forge-work/brand.json")
         self.assert_fails("launch", "sweep.py . --config forge-work/brand.json exits 2: it could not check")
+
+    def test_compare_audit_inspect_and_improve_have_their_sections(self):
+        """These reports have no template: the gate checks the sections their skill's Output names. One line
+        fails, and so do the headings alone. improve.md needs Fixed only (To do ends empty; Skipped, For you
+        and Found on the way are often empty), and a ### finding there is that section's text."""
+        sections = {"compare": "Features, ## Pricing, ## Positioning, ## What they hate, ## What is missing, "
+                               "## What is unsolved, ## Fix plan, ## Angles, ## Sources",
+                    "audit": "Summary, ## Top 5, ## Numbers, ## Findings, ## Not checked",
+                    "inspect": "Summary, ## What was checked, ## Findings, ## Not checked", "improve": "Fixed"}
+        for phase, titles in sections.items():
+            if phase == "improve" and not HAS_GIT:
+                continue  # its check runs gitguard.py, which needs git
+            with self.subTest(phase=phase):
+                shutil.rmtree(self.root, ignore_errors=True)
+                os.makedirs(self.root)
+                self.finish(phase)
+                name = "forge-work/%s.md" % phase
+                write(self.root, name, "# %s: Slotwise\nDate: 2026-10-27\n" % phase.title())
+                out = self.assert_fails(phase, "%s has no ## %s" % (name, titles))
+                self.assertIn("why: forge-%s, Output" % phase, out)
+                write(self.root, name, "# %s\n\n" % phase.title() + "".join("## %s\n" % title
+                                                                            for title in titles.split(", ## ")))
+                self.assert_fails(phase, "%s has no text of its own under ## %s" % (name, titles))
+        if HAS_GIT:
+            write(self.root, "forge-work/improve.md", "# Improve\n## To do\n## Fixed\n### A001 [high] Any user "
+                                                      "can open any invoice\n## Skipped\n## For you\n")
+            self.assert_passes("improve")
+
+    def test_the_report_in_each_skills_output_passes(self):
+        """The example in forge-audit's, forge-inspect's and forge-improve's Output passes as it is: its
+        findings are ### headings under ## Findings or ## Fixed. forge-compare's shows only the parts with a
+        fixed shape; with its other sections, in the order its Output gives, it passes too."""
+        for phase in ("audit", "inspect", "improve"):
+            if phase == "improve" and not HAS_GIT:
+                continue  # its check runs gitguard.py, which needs git
+            with self.subTest(phase=phase):
+                self.finish(phase)
+                write(self.root, "forge-work/%s.md" % phase, example("forge-" + phase))
+                self.assert_passes(phase)
+        others = ("Positioning", "What they hate", "What is missing", "What is unsolved", "Fix plan", "Angles")
+        write(self.root, "forge-work/compare.md", example("forge-compare").replace(
+            "## Sources", "".join("## %s\n1. Written for this app.\n\n" % title for title in others) + "## Sources"))
+        self.assert_passes("compare")
 
     def test_brand(self):
         self.finish("brand")
@@ -698,6 +777,8 @@ class FindingTests(Checks):
         self.finish("diff")
         write(self.root, "forge-work/parity.md", PARITY.split("## Behaviour")[0])
         self.assert_fails("diff", "has no ## Behaviour differences, ## Verdict, ## Next to build")
+        write(self.root, "forge-work/parity.md", "# Parity\n\n## Behaviour" + PARITY.split("## Behaviour")[1])
+        self.assert_fails("diff", "forge-work/parity.md has no ## By area, ## Missing")  # parity.py's part, by hand
 
     def test_n26_a_bug_from_the_behaviour_walk_keeps_diff_open(self):
         self.finish("diff")
@@ -817,9 +898,43 @@ class SinceTests(Checks):
         self.assert_fails("diff", "forge-work/parity.md is older than the last go (%s)" % go,
                           "Run the phase's skill again in full", args=("--since", go))
         self.assert_passes("diff")  # without --since, its age is not checked
+        for name in ("bugs.md", "features.csv"):  # written before parity.md, as in forge-diff
+            os.utime(os.path.join(self.root, "forge-work", name), (at, at))
         os.utime(os.path.join(self.root, "forge-work", "parity.md"), (at + 1, at + 1))
         self.assertIn("forge-work/parity.md is newer than the last go (%s)" % go,
                       self.assert_passes("diff", "--since", go))
+
+    def test_a_parity_report_older_than_the_bugs_or_the_features_does_not_count(self):
+        """gate-6: a bug from diff's behaviour walk goes through forge-test's fix loop, which changes bugs.md,
+        and a missing must-have through forge-build, which changes features.csv. diff then runs again from
+        Step 1 and its Step 4 rewrites parity.md: an older parity.md holds the verdict from before."""
+        self.finish("diff")
+        go = "2026-10-27T09:51:44+00:00"
+        parity = os.path.join(self.root, "forge-work", "parity.md")
+        for name in ("bugs.md", "features.csv"):
+            with self.subTest(name=name):
+                at = os.path.getmtime(parity)
+                os.utime(os.path.join(self.root, "forge-work", name), (at + 5, at + 5))
+                self.assert_fails("diff", "forge-work/parity.md is older than forge-work/%s, which" % name,
+                                  "Run the phase's skill again from its first step", args=("--since", go))
+                os.utime(parity, (at + 5, at + 5))  # the same time passes: some file systems keep whole seconds
+                self.assertIn("forge-work/parity.md is newer than the last go (%s)" % go,
+                              self.assert_passes("diff", "--since", go))
+
+    def test_a_report_from_an_earlier_round_does_not_count(self):
+        """gate-2: later changes to a finished app run improve mode in its root (forge/SKILL.md, Next), and
+        init --force keeps the files of the earlier round. Its test-plan.md, audit.md, inspect.md and
+        improve.md must not pass this round's test, audit, inspect and improve."""
+        go = "2026-10-27T09:51:44+00:00"
+        for phase in ("test", "audit", "inspect", "improve"):
+            if phase == "improve" and not HAS_GIT:
+                continue  # its check runs gitguard.py, which needs git
+            with self.subTest(phase=phase):
+                self.finish(phase)
+                name = phasecheck.FRESH[phase]
+                self.assert_passes(phase, "--since", go)
+                os.utime(os.path.join(self.root, name), (OLD, OLD))
+                self.assert_fails(phase, "%s is older than the last go (%s)" % (name, go), args=("--since", go))
 
     def test_since_applies_only_to_a_phase_with_a_report(self):
         self.finish("plan")

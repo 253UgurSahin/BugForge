@@ -9,7 +9,11 @@
      "why": "forge-recon, Output: features.csv with the contract header and at least one must row"}
   ],
   "compare": [
-    {"check": ["file", "forge-work/compare.md"], "why": "forge-compare, Output: forge-work/compare.md"}
+    {"check": ["file", "forge-work/compare.md"], "why": "forge-compare, Output: forge-work/compare.md"},
+    {"check": ["doc", "forge-work/compare.md", "--section", "Features", "--section", "Pricing",
+               "--section", "Positioning", "--section", "What they hate", "--section", "What is missing",
+               "--section", "What is unsolved", "--section", "Fix plan", "--section", "Angles", "--section", "Sources"],
+     "why": "forge-compare, Output: sections in this order: Features, Pricing, Positioning, What they hate, What is missing, What is unsolved, Fix plan, Angles (the recommended one first), Sources"}
   ],
   "plan": [
     {"check": ["file", "forge-work/plan.md"],
@@ -81,9 +85,9 @@
      "why": "forge-diff, Step 1: the gate for this phase stays shut until parity.py exits 0"},
     {"check": ["file", "forge-work/parity.md"],
      "why": "forge-diff, Step 4: parity.md, then by hand the behaviour differences, the verdict with the date and the top five things to build next"},
-    {"check": ["doc", "forge-work/parity.md", "--section", "Behaviour differences", "--section", "Verdict",
-               "--section", "Next to build"],
-     "why": "forge-diff, Step 4: parity.md, then by hand the behaviour differences, the verdict with the date and the top five things to build next"},
+    {"check": ["doc", "forge-work/parity.md", "--section", "By area", "--section", "Missing",
+               "--section", "Behaviour differences", "--section", "Verdict", "--section", "Next to build"],
+     "why": "forge-diff, Step 4 and Output: parity.py's report in parity.md (by area, missing, as parity.py prints them), then by hand the behaviour differences, the verdict with the date and the top five things to build next"},
     {"check": ["work", "compared", "forge-work/screens"],
      "why": "forge-diff, Step 2: compare every reference screenshot in forge-work/screens/ with a clone shot of the same name; a screen left out on purpose (skip in features.csv) has none, and the report says so"},
     {"check": ["run", "forge-test/bugs.py", "forge-work/bugs.md"],
@@ -145,13 +149,21 @@
      "why": "forge-pack, Step 6: secretscan.py must exit 0 first (pack writes its files after secure)"}
   ],
   "audit": [
-    {"check": ["file", "forge-work/audit.md"], "why": "forge-audit, Output: forge-work/audit.md"}
+    {"check": ["file", "forge-work/audit.md"], "why": "forge-audit, Output: forge-work/audit.md"},
+    {"check": ["doc", "forge-work/audit.md", "--section", "Summary", "--section", "Top 5", "--section", "Numbers",
+               "--section", "Findings", "--section", "Not checked"],
+     "why": "forge-audit, Output: audit.md as shown there: ## Summary, ## Top 5, ## Numbers, ## Findings, ## Not checked"}
   ],
   "inspect": [
-    {"check": ["file", "forge-work/inspect.md"], "why": "forge-inspect, Output: forge-work/inspect.md"}
+    {"check": ["file", "forge-work/inspect.md"], "why": "forge-inspect, Output: forge-work/inspect.md"},
+    {"check": ["doc", "forge-work/inspect.md", "--section", "Summary", "--section", "What was checked",
+               "--section", "Findings", "--section", "Not checked"],
+     "why": "forge-inspect, Output: inspect.md as shown there: ## Summary, ## What was checked, ## Findings, ## Not checked"}
   ],
   "improve": [
     {"check": ["file", "forge-work/improve.md"], "why": "forge-improve, Output: forge-work/improve.md"},
+    {"check": ["doc", "forge-work/improve.md", "--section", "Fixed"],
+     "why": "forge-improve, Output: improve.md as shown there; Step 2: move each picked finding from To do to Fixed or Skipped"},
     {"check": ["run", "forge/gitguard.py", "."],
      "why": "forge-improve, Step 6: gitguard.py must exit 0, still on the work branch"}
   ]

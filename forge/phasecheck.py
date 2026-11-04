@@ -9,9 +9,10 @@ Usage:
     python3 phasecheck.py plan
     python3 phasecheck.py secure --since 2026-10-27T09:51:44+00:00 --mode improve --json
 
---since TIME: the phase's report (diff: forge-work/parity.md, secure: forge-work/security.md) must be
-newer than TIME, the last go before the phase, so a report from before test's fixes, from the build or
-from an earlier round does not count.
+--since TIME: the phase's report must be newer than TIME, the last go before the phase, so a report from
+before test's fixes, from the build or from an earlier round does not count: test-plan.md (test),
+parity.md (diff; also newer than bugs.md and features.csv, which the fix loop and forge-build change),
+security.md (secure), audit.md, inspect.md and improve.md, all in forge-work/.
 --mode MODE: clone, idea or improve, for the checks that differ by mode (where test's specs are).
 Without it, the mode in forge-work/state.json; without that, only the checks every mode shares.
 
@@ -36,7 +37,9 @@ PACK = os.path.join(HERE, "..")  # the forge skill pack
 PYTHON = shlex.quote(sys.executable) if os.name == "nt" and sys.executable else "python3"  # no python3 on Windows
 MODES, PROFILES = ("clone", "idea", "improve"), ("laravel", "django", "next", "static")
 UNSEEN = re.compile(r"<!--.*?(?:-->|\Z)|^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1|\Z)", re.S | re.M)  # comments, code
-FRESH = {"diff": "forge-work/parity.md", "secure": "forge-work/security.md"}  # the reports --since applies to
+FRESH = {"test": "forge-work/test-plan.md", "diff": "forge-work/parity.md", "secure": "forge-work/security.md",
+         "audit": "forge-work/audit.md", "inspect": "forge-work/inspect.md", "improve": "forge-work/improve.md"}
+INPUTS = {"diff": ("forge-work/bugs.md", "forge-work/features.csv")}  # a fresh report is newer than these too
 
 
 def read_text(*parts):
@@ -176,12 +179,20 @@ def check_counts(root, name):
     return True, "%s counts %d critical or high finding(s)%s" % (name, serious, ", accepted" if serious else "")
 
 
-def check_fresh(root, name, since):
-    """NAME was written after SINCE, the last go before this phase: an older report says nothing of now."""
-    if os.path.getmtime(os.path.join(root, name)) >= datetime.datetime.fromisoformat(since).timestamp():
-        return True, "%s is newer than the last go (%s)" % (name, since)
-    return False, "%s is older than the last go (%s): the app may have changed since. Run the phase's " \
-                  "skill again in full, so it writes a new one" % (name, since)
+def check_fresh(root, name, since, *inputs):
+    """NAME was written after SINCE, the last go before this phase, and after each of INPUTS that exists:
+    an older report says nothing of now. The same time passes: some file systems keep whole seconds."""
+    written = os.path.getmtime(os.path.join(root, name))
+    if written < datetime.datetime.fromisoformat(since).timestamp():
+        return False, "%s is older than the last go (%s): the app may have changed since. Run the phase's " \
+                      "skill again in full, so it writes a new one" % (name, since)
+    later = [other for other in inputs if os.path.isfile(os.path.join(root, other))
+             and os.path.getmtime(os.path.join(root, other)) > written]
+    if later:
+        return False, "%s is older than %s, which the fix loop or forge-build changed after it. Run the " \
+                      "phase's skill again from its first step, so it writes a new one" % (name, " and ".join(later))
+    also = " and than " + " and ".join(inputs) if inputs else ""
+    return True, "%s is newer than the last go (%s)%s" % (name, since, also)
 
 
 def load_table(path):
@@ -219,7 +230,8 @@ def run_checks(root, phase, since=None, mode=None):
     profile = profile_of(root)
     entries = [entry for entry in CHECKS[phase] if mode in entry.get("modes", [mode])
                and profile in entry.get("profiles", [profile])]
-    fresh = [{"run": check_fresh, "args": [FRESH[phase], since]}] if since and phase in FRESH else []
+    fresh = [{"run": check_fresh, "args": [FRESH[phase], since, *INPUTS.get(phase, ())]}] \
+        if since and phase in FRESH else []
     results = []
     for entry in entries + fresh:
         try:

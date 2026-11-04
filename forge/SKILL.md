@@ -58,16 +58,16 @@ never skipped. Improve mode has no compare or pack phase: when the user wants th
 Run it with `python3` from the project root (rules.md, "Running the scripts"):
 
 - `python3 ../forge/gate.py init --mode clone|idea|improve --about '<what the user asked for>'`:
-  once per project. `--about` keeps the URL, the idea or the repo in the user's own words, so a
-  later session still knows it; `status` shows it.
+  once per project. `--about` keeps the URL, idea or repo in the user's words for later sessions.
 - `python3 ../forge/gate.py status`: each phase as done, skipped, next or waiting, then the next
   step with the exact commands, full paths included.
 - `python3 ../forge/gate.py check <phase>`: the exit checks of the phase in this mode (it runs
-  `../forge/phasecheck.py`, whose table names the skill line each check rests on). Exit 1 lists
-  what is missing and why. It checks what the skill promises: its files, no placeholder of their
-  template left (code blocks too), text of its own in each section, its scripts passing. build: each
-  must-have `yes`, or `partial` or `skip` with a note. test: specs, a result in every case. secure:
-  a verdict its counts and codecheck back. diff and secure: a report newer than the last go. Clone
+  `../forge/phasecheck.py`, whose table names the skill line each check rests on). Exit 1 lists what
+  is missing and why. It checks what the skill promises: its files, no placeholder of their template
+  left (code blocks too), text of its own in each section that must not stay empty, its scripts
+  passing. build: each must-have `yes`, or `partial` or `skip` with a note. test: specs, a result in
+  every case. secure: a verdict its counts and codecheck back. test, diff, secure, audit, inspect and
+  improve: a report newer than the last go (diff's also newer than bugs.md and features.csv). Clone
   mode (build, brand, launch): no run of 6+ words shared with the original's text that recon kept.
 - `python3 ../forge/gate.py done <phase> --approved '<the user's exact words>'`: runs the checks
   again, then records the words and the time. Refuses (exit 1) when a check fails, the words are
