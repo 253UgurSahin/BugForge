@@ -3,7 +3,7 @@
 
 Reads the feature matrix that forge-recon made and forge-build keeps up to date. Prints a
 score, the must-haves done, each area weakest first and the missing features in build order.
-With --visual it also folds in the layout scores of imgdiff.py --json.
+With --visual it also folds in the layout scores of imgdiff.py --json. --markdown writes UTF-8.
 
 Usage:
     python3 parity.py forge-work/features.csv
@@ -273,6 +273,8 @@ def main(argv=None):
     parser.add_argument("--fail-under", type=float, metavar="SCORE",
                         help="also exit 1 when the overall score (rounded down) is under this number")
     args = parser.parse_args(argv)
+    if args.markdown:  # parity.md is read as UTF-8, also where pipes are cp1252 (Windows)
+        getattr(sys.stdout, "reconfigure", lambda **_: None)(encoding="utf-8", errors="backslashreplace")
     if args.fail_under is not None and not 0 <= args.fail_under <= 100:  # also catches nan
         parser.error("--fail-under takes a score from 0 to 100")
     try:

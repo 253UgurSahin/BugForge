@@ -332,16 +332,19 @@ class Visual(TempFolder):
         self.assertEqual(run(self.path, "--visual", os.path.join(self.folder, "nope.json"))[0], 2)
 
     def test_reads_real_imgdiff_output(self):
+        """forge-diff Step 2 redirects imgdiff.py --json into S01.diff.json. That JSON is ASCII (other signs
+        as \\u escapes), so a cp1252 pipe (Windows) writes the bytes a UTF-8 one does."""
         imgdiff = load("forge-diff", "imgdiff")
         rows = [[(255, 255, 255)] * 40 for _ in range(30)]
         for y in range(5, 10):
             rows[y][5:30] = [(20, 20, 60)] * 25
-        picture = os.path.join(self.folder, "S01.png")
+        picture = os.path.join(self.folder, "caf\u00e9 \u2192 S01.png")
         imgdiff.write_png(picture, 40, 30, rows)
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            self.assertEqual(imgdiff.main([picture, picture, "--json"]), 0)
-        report = write(self.folder, "S01.diff.json", out.getvalue())
+        code, out, err = run_cp1252(imgdiff.__file__, picture, picture, "--json")
+        self.assertEqual(code, 0, err)
+        report = os.path.join(self.folder, "S01.diff.json")
+        with open(report, "wb") as handle:
+            handle.write(out.encode("cp1252"))  # the bytes the redirect wrote
         self.assertEqual(parity.visual_scores([report]), [{"file": picture, "score": 100.0}])
 
 
@@ -353,6 +356,17 @@ class ConsoleTests(TempFolder):
         code, out, err = run_cp1252(SCRIPT, path)
         self.assertEqual(code, 1, err)  # a must-have is not built
         self.assertIn("- [must] caf\u00e9: Boek \\u2192 betaal (not built)", out)
+
+    def test_markdown_is_utf_8_also_into_a_cp1252_pipe(self):
+        """forge-diff Step 4 redirects --markdown into parity.md, which the gate reads as UTF-8. On Windows
+        that redirect is a cp1252 pipe: --markdown writes UTF-8 there too, so the euro sign stays."""
+        path = write(self.folder, "euro.csv", "feature,area,priority,original,clone,notes\n"
+                     "Pick a time slot,booking page,must,yes,yes,\n"
+                     "\"Boek \u2192 betaal (Plus \u20ac3,99)\",payments,could,yes,no,\n")
+        code, out, err = run_cp1252(SCRIPT, path, "--markdown")
+        self.assertEqual(code, 0, err)
+        text = out.encode("cp1252").decode("utf-8")  # the bytes parity.md gets, read as the gate reads them
+        self.assertIn("- [could] payments: Boek \u2192 betaal (Plus \u20ac3,99) (not built)", text)
 
 
 if __name__ == "__main__":
