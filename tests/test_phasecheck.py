@@ -665,6 +665,18 @@ class FindingTests(Checks):
         self.assert_passes("test")  # no mode known: as lenient as improve mode
         self.assert_fails("test", "no end-to-end spec", args=("--mode", "idea"))
 
+    def test_improve_mode_finds_the_apps_playwright_setup_in_any_folder(self):
+        """A monorepo keeps its Playwright setup next to the app it tests (apps/web/playwright.config.ts, the
+        specs beside it), and forge-test adds the specs there. One inside node_modules is not the app's."""
+        self.finish("test")
+        shutil.rmtree(os.path.join(self.root, "e2e"))
+        write(self.root, "node_modules/some-kit/playwright.config.ts", "export default {};\n")
+        self.assert_fails("test", "marks 2 case(s) e2e, but there is no file like", args=("--mode", "improve"))
+        write(self.root, "apps/web/playwright.config.ts", "export default { testDir: 'tests' };\n")
+        write(self.root, "apps/web/tests/invoice-owner.spec.ts", SPEC)
+        out = self.assert_passes("test", "--mode", "improve")
+        self.assertIn("marks 2 case(s) e2e; a spec: apps/web/playwright.config.ts", out)
+
     def test_n26_a_diff_with_only_the_feature_list(self):
         self.finish("diff")
         self.remove("forge-work/parity.md", "forge-work/bugs.md")

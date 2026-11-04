@@ -67,7 +67,7 @@
      "why": "forge-test, Output: test-plan.md with every result and the totals; the template's legend: result pass, fail B003 (the bug in bugs.md) or skipped: why"},
     {"check": ["doc", "forge-work/test-plan.md", "--template", "../forge-test/test-plan.md",
                "--cases", "forge-work/bugs.md", "--specs", "e2e/**/*.spec.*", "--specs", "e2e/**/*.test.*",
-               "--specs", "playwright.config.*", "--specs", "*/playwright.config.*"],
+               "--specs", "**/playwright.config.*"],
      "modes": ["improve", null],
      "why": "forge-test, Step 3: improve mode adds the specs to the app's own Playwright setup (a playwright.config.*), or else to e2e/; Output: every result and the totals; the template's legend: result pass, fail B003 or skipped: why"},
     {"check": ["work", "specs", "e2e/**/*.spec.*", "e2e/**/*.test.*"],
