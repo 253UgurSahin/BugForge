@@ -1,5 +1,5 @@
 # Text files keep LF line endings in every checkout, also on Windows, where git would otherwise
-# write CRLF (core.autocrlf). forge-pack copies its container templates into projects, and a
+# write CRLF (core.autocrlf). forge-build pack copies its container templates into projects, and a
 # Dockerfile, nginx.conf or compose file with CRLF breaks in a Linux container. A plugin install
 # is a git clone, so this holds for users too.
 * text=auto eol=lf

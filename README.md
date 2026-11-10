@@ -49,10 +49,10 @@ your own" for auto mode (below). Say "where were we" in a new session to pick up
 | improve | your own repo | audit, inspect\*, improve, test, secure |
 
 \* optional: skipped only when you say so, and your reason is recorded. secure is never skipped.
-In improve mode, `/forge-compare` (competitors), `/forge-design` (a redesign), `/forge-dashboard`,
-`/forge-motion` and `/forge-pack` (containers) are there when you ask for them.
+In improve mode, `/forge-research compare` (competitors), `/forge-design` (a redesign), `/forge-design dashboard`,
+`/forge-design motion` and `/forge-build pack` (containers) are there when you ask for them.
 
-Each phase is one skill: recon is `/forge-recon`, pack is `/forge-pack`. You can also call any
+Each phase is one skill: recon is `/forge-research recon`, pack is `/forge-build pack`. You can also call any
 skill on its own: "redesign my app", "add a dashboard", "add animations", "test my app" or "is this
 safe" each start the skill that does it, on your own repo too.
 
@@ -66,7 +66,7 @@ safe" each start the skill that does it, on your own repo too.
    mode: what the phase's skill promises is there. Its files, with no placeholder of their template
    left (code blocks too) and text of its own in each section that must not stay empty; the phase's
    scripts pass (contrast, bugs, parity, brand sweep, codecheck, secret scan, packcheck, and in
-   clone mode the copy check once forge-recon kept the original's text); and the reports of test,
+   clone mode the copy check once forge-research recon kept the original's text); and the reports of test,
    diff, secure, audit, inspect and improve are newer than the go before them (diff's also newer
    than bugs.md and features.csv, which its fix loop changes).
 4. Claude shows you the skill's checkpoint plus one line with the gate's result, and stops.
@@ -115,7 +115,7 @@ improve run again, since their reports must be newer than the new start.
   service worker, an offline page and safe caching rules (never a signed-in page or a POST).
 - `forge-plan/profiles.md` is the one reference: how to pick, versions (with the date they were
   checked), auth, migrations, tests, Stripe library and the classic mistakes per profile.
-- An existing codebase keeps its stack: `forge-audit/detect.py` names the closest profile.
+- An existing codebase keeps its stack: `forge-check/detect.py` names the closest profile.
 - Every server profile gets mailpit for development email (`COMPOSE_PROFILES=dev`).
 
 ## What you get at the end
@@ -135,30 +135,30 @@ it out of git and out of every image. The reports you will read most:
 | file in `forge-work/` | from | what it holds |
 | --- | --- | --- |
 | `design/brief.md`, `design/review.md` | `/forge-design` | the concept and signature of the look; the scores per screen and round |
-| `dashboard.md`, `motion.md` | `/forge-dashboard`, `/forge-motion` | each number with its source; which moments move and why |
-| `test-plan.md`, `bugs.md`, `test/` | `/forge-test` | every case and its result; the bugs; the walk's findings and the screenshots per round |
-| `security.md`, `sbom.json` | `/forge-secure` | the verdict, the findings and the OWASP coverage table; the list of every locked package |
+| `dashboard.md`, `motion.md` | `/forge-design dashboard`, `/forge-design motion` | each number with its source; which moments move and why |
+| `test-plan.md`, `bugs.md`, `test/` | `/forge-check test` | every case and its result; the bugs; the walk's findings and the screenshots per round |
+| `security.md`, `sbom.json` | `/forge-check secure` | the verdict, the findings and the OWASP coverage table; the list of every locked package |
 
 ## The skills
 
 | skill | what it does |
 | --- | --- |
 | `/forge` | Runs a whole project, phase by phase, with the gate and your go after each phase, or straight through in auto mode. |
-| `/forge-recon` | Maps an app from public pages and your own account: screens, flows, components, data model, feature list. |
-| `/forge-compare` | Puts 2 to 5 competitors side by side and ranks what their users complain about and miss. |
+| `/forge-research recon` | Maps an app from public pages and your own account: screens, flows, components, data model, feature list. |
+| `/forge-research compare` | Puts 2 to 5 competitors side by side and ranks what their users complain about and miss. |
 | `/forge-plan` | Picks the stack profile and PWA with you; writes the schema, routes, payments and build order. |
 | `/forge-design` | A design brief with a concept of its own, design tokens and component specs, open fonts and icons, WCAG AA contrast checked; reviews screenshots of the built app in rounds; redesigns an app you already have. |
 | `/forge-build` | Scaffolds with the official installer, then builds screen by screen: auth, data access, Stripe with iDEAL, email, jobs. In clone mode it checks that no text is copied from the original. |
-| `/forge-dashboard` | Dashboards on the app's own data: the few numbers that matter, each traced to its source, accessible charts, every state, and a second user who sees none of it. |
-| `/forge-motion` | Puts motion into the app's own files, and proves it with a count before and after: transitions, micro-interactions, scroll and page transitions, a generative hero visual. CSS first, a library only when needed and never from a CDN, reduced motion always. |
-| `/forge-test` | Test plan, unit and Playwright tests against the local stack; a walk of every page at three widths in light and dark (console, links, accessibility, speed budget, layout), edge cases, screenshots compared between rounds, a bug list and a fix loop. |
-| `/forge-diff` | Scores the clone against the original: features, layout and behaviour. |
-| `/forge-brand` | Your own name, palette, logo brief and voice, plus the trademark checks to run; sweeps out the original's name. |
+| `/forge-design dashboard` | Dashboards on the app's own data: the few numbers that matter, each traced to its source, accessible charts, every state, and a second user who sees none of it. |
+| `/forge-design motion` | Puts motion into the app's own files, and proves it with a count before and after: transitions, micro-interactions, scroll and page transitions, a generative hero visual. CSS first, a library only when needed and never from a CDN, reduced motion always. |
+| `/forge-check test` | Test plan, unit and Playwright tests against the local stack; a walk of every page at three widths in light and dark (console, links, accessibility, speed budget, layout), edge cases, screenshots compared between rounds, a bug list and a fix loop. |
+| `/forge-check diff` | Scores the clone against the original: features, layout and behaviour. |
+| `/forge-design brand` | Your own name, palette, logo brief and voice, plus the trademark checks to run; sweeps out the original's name. |
 | `/forge-launch` | Landing page, prices in EUR with VAT, privacy policy, terms, cookie check, basic SEO, launch checklist. |
-| `/forge-secure` | The security gate: secrets, risky code and where input flows, dependencies and supply chain, headers, active probes and an access check on your own running app, trackers, AVG/GDPR, an OWASP Top 10 coverage table. Verdict PASS or FAIL. |
-| `/forge-pack` | Fits the container templates to the app, checks them and runs the stack until it is healthy. |
-| `/forge-audit` | Reads your own codebase without changing it: stack, size, tests, end-of-life versions, bugs, security, speed. |
-| `/forge-inspect` | Looks at a live URL like a visitor: headers, SEO, accessibility, speed, PWA tags. Active checks only on your own app. |
+| `/forge-check secure` | The security gate: secrets, risky code and where input flows, dependencies and supply chain, headers, active probes and an access check on your own running app, trackers, AVG/GDPR, an OWASP Top 10 coverage table. Verdict PASS or FAIL. |
+| `/forge-build pack` | Fits the container templates to the app, checks them and runs the stack until it is healthy. |
+| `/forge-check audit` | Reads your own codebase without changing it: stack, size, tests, end-of-life versions, bugs, security, speed. |
+| `/forge-check inspect` | Looks at a live URL like a visitor: headers, SEO, accessibility, speed, PWA tags. Active checks only on your own app. |
 | `/forge-improve` | Fixes the findings you pick on a new branch, one small commit each, tested where possible. |
 
 ## The scripts
@@ -177,7 +177,7 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 | `workcheck.py {features,built,tokens,specs,compared,named} ... [--json]` | a phase's work files: the feature list, the design tokens, the end-to-end specs, the compared screenshots, the app's new name; phasecheck runs it |
 | `gitguard.py [PATH] [--clean] [--json]` | 0 only on a work branch, never main, master, trunk or production; `--clean`: nothing uncommitted |
 
-**forge-secure/**
+**forge-check/**
 
 | usage | what it does |
 | --- | --- |
@@ -193,21 +193,21 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 | `trackers.py PATH [--json] [--fail-on L]` | third-party services in the code, for the privacy policy |
 | `untrusted.py FILE... [--json] [--fail-on L]` | prompt-injection signs in fetched text, before Claude uses it |
 
-**forge-audit/** (exit 0, or 2 on a bad path)
+**forge-check/** (exit 0, or 2 on a bad path)
 
 | usage | what it does |
 | --- | --- |
 | `detect.py PATH [--json]` | the stack, versions, databases, tests, CI and the closest forge profile |
 | `inventory.py PATH [--json]` | size and health in plain numbers: lines per language, biggest files, TODOs, tests |
 
-**forge-inspect/**
+**forge-check/**
 
 | usage | what it does |
 | --- | --- |
 | `getpage.py URL OUT [--json]` | loads one page passively and saves its HTML in a new file; 0 or 2 |
 | `pagecheck.py URL [--json] [--fail-on L] [--no-pwa]` or `--file FILE [--url URL]` | SEO, accessibility, speed, PWA and mixed-content basics of one page |
 
-**forge-compare/**, **forge-design/**, **forge-build/**, **forge-dashboard/**, **forge-motion/**, **forge-diff/**, **forge-brand/**, **forge-test/**, **forge-pack/**
+**forge-research/**, **forge-design/**, **forge-build/**, **forge-design/**, **forge-design/**, **forge-check/**, **forge-design/**, **forge-check/**, **forge-build/**
 
 | usage | what it does |
 | --- | --- |
@@ -234,9 +234,9 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 Try a few from the root of this repo:
 
 ```bash
-python3 forge-secure/secretscan.py .
-python3 forge-secure/scope.py http://localhost:8080
-python3 forge-audit/detect.py .
+python3 forge-check/secretscan.py .
+python3 forge-check/scope.py http://localhost:8080
+python3 forge-check/detect.py .
 python3 forge-design/contrast.py '#1a1a1a' '#ffffff'
 python3 forge-design/contrast.py forge-design/tokens.json
 ```
@@ -286,7 +286,7 @@ As a plugin, in Claude Code, one command at a time:
 /plugin install bugforge@bugforge
 ```
 
-Plugin skills carry the plugin's name in front: `/bugforge:forge`, `/bugforge:forge-audit`. Claude
+Plugin skills carry the plugin's name in front: `/bugforge:forge`, `/bugforge:forge-check audit`. Claude
 also picks the right skill when you just say what you want ("audit my code").
 
 Installed it before the rename, as `forge@forge`? Remove that install and its marketplace first, in a
@@ -319,7 +319,7 @@ mkdir -p ~/.claude/skills
 cp -r BugForge/forge BugForge/forge-* ~/.claude/skills/
 ```
 
-Copy them all: the skills call each other's scripts with paths like `../forge-secure/scope.py`.
+Copy them all: the skills call each other's scripts with paths like `../forge-check/scope.py`.
 
 ## Tests
 

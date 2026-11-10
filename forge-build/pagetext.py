@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Keep the visible text of the original's saved pages, for forge-build's copy check.
+"""Keep the visible text of the original's saved pages, for forge-build build's copy check.
 
-forge-recon saves the original's pages outside the project and deletes them once recon.md is
+forge-research recon saves the original's pages outside the project and deletes them once recon.md is
 written. Before that, this keeps what a visitor reads or hears on each page, so copycheck.py can
 later prove that the clone shares no run of 6 or more words with it.
 

@@ -1,4 +1,4 @@
-"""Tests for forge-motion/motioncheck.py: each rule fires and stays quiet, in stylesheets, templates
+"""Tests for forge-design/motioncheck.py: each rule fires and stays quiet, in stylesheets, templates
 and scripts, plus the walking rules, the exit codes and the output."""
 
 import contextlib
@@ -13,8 +13,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252, symlink  # noqa: E402
 
-mod = load("forge-motion", "motioncheck")
-SCRIPT = os.path.join(ROOT, "forge-motion", "motioncheck.py")
+mod = load("forge-design", "motioncheck")
+SCRIPT = os.path.join(ROOT, "forge-design", "motioncheck.py")
 CALM = "@media (prefers-reduced-motion: reduce) { .other { transition: none; } }\n"  # the project asks
 ASKS = 'const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;\n'
 CDN = "https://cdn.jsdelivr.net/npm/"
@@ -335,7 +335,7 @@ class OutputTests(Case):
         self.assertIn("\\u2192", out)
 
     def test_the_pack_own_motion_files_are_clean(self):
-        report = mod.scan_path(os.path.join(ROOT, "forge-motion"), "low")
+        report = mod.scan_path(os.path.join(ROOT, "forge-design"), "low")
         self.assertEqual(report["findings"], [])
         self.assertGreaterEqual(report["summary"]["files_checked"], 2)
 

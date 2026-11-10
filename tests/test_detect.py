@@ -1,4 +1,4 @@
-"""Tests for forge-audit/detect.py.
+"""Tests for forge-check/detect.py.
 
 Each test builds a small fake project in a temporary folder. The fake password in the
 .env files is glued together at runtime, so this file holds no secret-looking literal.
@@ -17,7 +17,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import load, run_cp1252, symlink  # noqa: E402
 
-mod = load("forge-audit", "detect")
+mod = load("forge-check", "detect")
 
 FAKE_PASSWORD = "Hunter" + "2" + "-not-real-77"
 DJANGO_MANAGE = ('import os, sys\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "shop.settings")\n'
@@ -449,7 +449,7 @@ class ContainerAndCITests(Project):
         self.assertEqual(by_name(self.describe()["ci"], "Jenkins")["source"], "Jenkinsfile")
 
     def test_ci_table_matches_inventory(self):
-        self.assertEqual(mod.STACKS["ci_files"], load("forge-audit", "inventory").CI_FILES)
+        self.assertEqual(mod.STACKS["ci_files"], load("forge-check", "inventory").CI_FILES)
 
 
 class WalkTests(Project):

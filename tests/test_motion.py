@@ -1,7 +1,7 @@
-"""Tests for forge-motion's reference files: motion.css, motion.md, wireform.example.js and SKILL.md.
+"""Tests for forge-design motion's reference files: motion.css, motion.md, wireform.example.js and SKILL.md.
 
 motion.css holds no values of its own: every variable it reads is one theme.py writes from the
-design tokens (forge-design's template plus the keys motion.md section 2 adds), or one it sets
+design tokens (forge-design design's template plus the keys motion.md section 2 adds), or one it sets
 itself, or one a script sets and that has a fallback. It has the reduced-motion block, keeps the
 rules motioncheck.py checks, and has every class the recipes in motion.md name. The hero example is
 valid JavaScript with no imports, and in a fake browser it draws, pauses off-screen, draws one
@@ -20,11 +20,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittes
 from _load import ROOT, load  # noqa: E402
 
 theme = load("forge-design", "theme")
-motioncheck = load("forge-motion", "motioncheck")
-FOLDER = os.path.join(ROOT, "forge-motion")
+motioncheck = load("forge-design", "motioncheck")
+FOLDER = os.path.join(ROOT, "forge-design")
 CSS = os.path.join(FOLDER, "motion.css")
 REFERENCE = os.path.join(FOLDER, "motion.md")
-SKILL = os.path.join(FOLDER, "SKILL.md")
+SKILL = os.path.join(FOLDER, "steps", "motion.md")
 WIREFORM = os.path.join(FOLDER, "wireform.example.js")
 TOKENS = os.path.join(ROOT, "forge-design", "tokens.json")
 MOTION_VARIABLES = {"--duration-fast", "--duration-base", "--duration-slow", "--duration-slower",
@@ -85,7 +85,7 @@ def added_tokens():
 
 
 def theme_variables():
-    """Every variable theme.py writes from forge-design's tokens with motion.md's keys added."""
+    """Every variable theme.py writes from forge-design design's tokens with motion.md's keys added."""
     tokens = json.loads(read(TOKENS))
     for group, keys in added_tokens().items():
         tokens[group] = dict(tokens[group], **keys)
@@ -153,7 +153,7 @@ class ReferenceTests(unittest.TestCase):
         self.assertEqual(sorted(added), ["motion", "size"])
         template = json.loads(read(TOKENS))
         for group, keys in added.items():
-            self.assertEqual(set(keys) & set(template[group]), set(), "a key forge-design already has")
+            self.assertEqual(set(keys) & set(template[group]), set(), "a key forge-design design already has")
         for key, item in added["motion"].items():  # theme.py: ease-* is a curve, the rest is a time
             self.assertRegex(item, r"^cubic-bezier\(" if key.startswith("ease-") else r"^\d+m?s$")
         self.assertTrue(all(isinstance(item, int) for item in added["size"].values()))
@@ -173,7 +173,7 @@ class ReferenceTests(unittest.TestCase):
         skill = read(SKILL)
         for section in ["## Direction", "## Inventory", "## Tokens", "## Libraries", "## Checks"]:
             self.assertIn("`%s`" % section, skill)
-        self.assertIn("/forge-test", skill[skill.index("## Next"):])
+        self.assertIn("/forge-check test", skill[skill.index("## Next"):])
 
 
 class WireformTests(unittest.TestCase):

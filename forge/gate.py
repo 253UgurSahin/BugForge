@@ -39,16 +39,16 @@ LINKED = ("%s is a link. forge writes only into a folder of its own in the proje
           "Change nothing yourself: tell the user and ask them to look (ls -la forge-work).")
 VERSION = 1  # of the state.json format
 TIMEOUT = 1800  # seconds for one phase's exit checks: up to two scripts of 600 seconds each, and more
-MODES = {
-    "clone": ["recon", "compare", "plan", "design", "build", "dashboard", "motion", "test", "diff", "brand",
-              "launch", "secure", "pack"],
-    "idea": ["compare", "plan", "design", "build", "dashboard", "motion", "test", "brand", "launch", "secure", "pack"],
-    "improve": ["audit", "inspect", "improve", "test", "secure"],
-}
+try:  # phases.json, next to this script: each mode's phases, which may be skipped, each one's skill (see its _about)
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "phases.json"), encoding="utf-8") as table:
+        table = json.load(table)
+    MODES, OPTIONAL, ADDED, ASKS, PARTS = (table[key] for key in ("modes", "optional", "added", "asks", "parts"))
+except (OSError, ValueError, LookupError, TypeError) as table_error:
+    sys.exit("error: forge/phases.json is missing or broken (%s)" % table_error)
 PHASES = list(dict.fromkeys(phase for phases in MODES.values() for phase in phases))
-OPTIONAL = ("compare", "inspect", "dashboard", "motion")  # may be skipped with the user's reason; secure never
-ADDED = ("dashboard", "motion")  # newer than some projects: a state from before them records neither
-ASKS, AUTO = ("secure",), "auto mode: "  # auto mode never records ASKS; what it records starts with AUTO
+SKILL = {**{phase: "forge-" + phase for phase in PHASES},  # the skill to run for a phase: its own, or the part of one
+         **{phase: "forge-%s %s" % (skill, phase) for skill, parts in PARTS.items() for phase in parts}}
+AUTO = "auto mode: "  # what auto mode records starts with this
 PYTHON = shlex.quote(sys.executable) if os.name == "nt" and sys.executable else "python3"  # no python3 on Windows
 PLACEHOLDER = re.compile(r"^(<.*>|\{\{.*\}\}|TEXT)$", re.S)  # copied from the docs, not said by the user
 TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:[+-]\d\d:\d\d)?\Z")  # as this script writes it
@@ -178,12 +178,12 @@ def next_step(state):
     waiting, gate = still_open(state), PYTHON + " " + shlex.quote(os.path.abspath(__file__))
     if not waiting:
         return "All phases are done. Tell the user what they have now, what is left, and that shipping is their step."
-    text = ("Next: {0}. Run /forge-{0}, then {1} check {0}. Show the user the skill's checkpoint plus one line "
+    text = ("Next: {0}. Run /{2}, then {1} check {0}. Show the user the skill's checkpoint plus one line "
             "with the gate result, and wait for their go. Then: {1} done {0} --approved '<their exact words>'")
     if state.get("auto") and waiting[0] not in ASKS:  # the last phase but ASKS was recorded with --auto
-        text = "Next: {0}. Auto mode: run /forge-{0}, fix what fails (rules.md 7), then {1} done {0} --auto '<ask>'"
+        text = "Next: {0}. Auto mode: run /{2}, fix what fails (rules.md 7), then {1} done {0} --auto '<ask>'"
     skip = ". Or, when the user says so: {1} skip {0} --reason '<their reason>'".format(waiting[0], gate)
-    return text.format(waiting[0], gate) + (skip if waiting[0] in OPTIONAL else "")
+    return text.format(waiting[0], gate, SKILL[waiting[0]]) + (skip if waiting[0] in OPTIONAL else "")
 
 
 def refuse(text):
@@ -214,7 +214,7 @@ def cmd_status(root, args):
     for phase in MODES[state["mode"]]:
         entry = state["phases"].get(phase, {})
         status = entry.get("status") or ("next" if phase == still_open(state)[0] else "waiting")
-        rows.append(dict(entry, phase=phase, status=status, skill="forge-" + phase, optional=phase in OPTIONAL))
+        rows.append(dict(entry, phase=phase, status=status, skill=SKILL[phase], optional=phase in OPTIONAL))
     if args.json:
         print(json.dumps({"mode": state["mode"], "about": state.get("about"), "started": state["started"],
                           "phases": rows, "next_step": next_step(state)}, indent=2))

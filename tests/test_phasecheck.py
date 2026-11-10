@@ -25,7 +25,7 @@ from _load import ROOT, load, run_cp1252  # noqa: E402
 phasecheck = load("forge", "phasecheck")
 gate = load("forge", "gate")
 HAS_GIT = shutil.which("git") is not None
-STATIC = os.path.join(ROOT, "forge-pack", "templates", "static")
+STATIC = os.path.join(ROOT, "forge-build", "templates", "static")
 OLD = 1500000000  # 2017: a file time long before any go
 FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
 
@@ -46,9 +46,18 @@ def template(folder, name):
     return read(os.path.join(ROOT, folder, name))
 
 
-def example(skill):
-    """The report in SKILL's Output section: the first markdown block of its SKILL.md."""
-    return template(skill, "SKILL.md").split("```markdown\n")[1].split("\n```\n")[0] + "\n"
+def example(phase):
+    """The report in the Output section of PHASE's steps: the first markdown block of its steps file (a phase that
+    is a skill of its own: of its SKILL.md)."""
+    skill, _, part = gate_skill(phase).partition(" ")
+    name = os.path.join("steps", part + ".md") if part else "SKILL.md"
+    return template(skill, name).split("```markdown\n")[1].split("\n```\n")[0] + "\n"
+
+
+def gate_skill(phase):
+    """The skill of PHASE as forge/phases.json gives it: "forge-check secure", or "forge-improve"."""
+    parts = json.loads(template("forge", "phases.json"))["parts"]
+    return next(("forge-%s %s" % (skill, phase) for skill, names in parts.items() if phase in names), "forge-" + phase)
 
 
 def filled(path, **lines):
@@ -97,7 +106,7 @@ PLAN = filled("forge-plan/plan.md", Profile="static", PWA="no", Mode="clone")
 CASES = "| case | flow | type | steps | expected | auto | result |\n| --- | --- | --- | --- | --- | --- | --- |\n" \
         "| F01-H1 | book a slot | happy | pick 10:00 | booked | e2e | pass |\n" \
         "| F01-E1 | | edge: slot taken | | message | e2e | fail B001 |\n"
-TEST_PLAN = re.sub(r"(?m)^\| case \|.*\n(?:\|.*\n)*", CASES, filled("forge-test/test-plan.md"))
+TEST_PLAN = re.sub(r"(?m)^\| case \|.*\n(?:\|.*\n)*", CASES, filled("forge-check/test-plan.md"))
 SPEC = "import { test } from '@playwright/test';\ntest('F01-H1 book a slot', async ({ page }) => {});\n"
 TOKENS = json.dumps(dict(json.loads(template("forge-design", "tokens.json")),
                          font={"sans": "IBM Plex Sans, system-ui, sans-serif", "mono": "ui-monospace, monospace"}))
@@ -172,20 +181,20 @@ def work_branch(root, branch="forge/improve-20261027"):
 
 
 def copy_static_pack(root):
-    """The static profile's container files from forge-pack, as forge-pack copies them, RUN.md filled in,
+    """The static profile's container files from forge-build pack, as forge-build pack copies them, RUN.md filled in,
     in a project with the files its Dockerfile copies in."""
     for source, target in (("Dockerfile", "Dockerfile"), ("docker-compose.yml", "docker-compose.yml"),
                            ("nginx.conf", "nginx.conf"), ("dockerignore", ".dockerignore"),
                            ("env.example", ".env.example")):
         shutil.copy(os.path.join(STATIC, source), os.path.join(root, target))
-    write(root, "RUN.md", filled("forge-pack/templates/static/RUN.md"))
+    write(root, "RUN.md", filled("forge-build/templates/static/RUN.md"))
     write(root, "package.json", '{"name": "slotwise", "private": true}\n')
     write(root, "package-lock.json", '{"name": "slotwise", "lockfileVersion": 3, "packages": {}}\n')
 
 
 # What each phase leaves behind when it is finished, in every mode it runs in: enough for its exit checks.
 PASSING = {
-    "recon": lambda root: (write(root, "forge-work/recon.md", filled("forge-recon/recon-map.md")),
+    "recon": lambda root: (write(root, "forge-work/recon.md", filled("forge-research/recon-map.md")),
                            write(root, "forge-work/features.csv", FEATURES)),
     "compare": lambda root: write(root, "forge-work/compare.md", COMPARE),
     "plan": lambda root: (write(root, "forge-work/plan.md", PLAN),
@@ -195,7 +204,7 @@ PASSING = {
                             write(root, "forge-work/design/components.md", filled("forge-design/components.md"))),
     "build": lambda root: (write(root, "forge-work/build-log.md", BUILD_LOG), copy_static_pack(root),
                            write(root, "forge-work/features.csv", FEATURES),
-                           write(root, "forge-work/security.md", SECURITY)),  # forge-build Step 7 runs forge-secure
+                           write(root, "forge-work/security.md", SECURITY)),  # forge-build build Step 7 runs forge-check secure
     "dashboard": lambda root: write(root, "forge-work/dashboard.md", DASHBOARD),
     "motion": lambda root: (write(root, "forge-work/motion.md", MOTION),
                             write(root, "index.html", "<title>Slotwise</title>\n<main class=\"m-enter\">"
@@ -212,7 +221,7 @@ PASSING = {
                            write(root, "index.html", "<title>Slotwise</title>\n")),
     "launch": lambda root: (write(root, "forge-work/launch.md", filled("forge-launch/launch.md")),
                             write(root, "public/og.png", "not really a PNG\n"),
-                            write(root, "forge-work/brand.json", BRAND_JSON)),  # forge-brand's, for the sweep
+                            write(root, "forge-work/brand.json", BRAND_JSON)),  # forge-design brand's, for the sweep
     "secure": lambda root: (write(root, "forge-work/security.md", SECURITY),
                             write(root, "index.html", "<title>Slotwise</title>\n")),
     "pack": copy_static_pack,
@@ -325,7 +334,7 @@ class PhaseTests(Checks):
 
     def test_a_failure_says_which_skill_line_it_rests_on(self):
         out = self.assert_fails("diff", "forge-work/parity.md is missing")
-        self.assertIn("why: forge-diff, Step 4", out)
+        self.assertIn("why: forge-check diff, Step 4", out)
         self.finish("compare")
         self.assertNotIn("why:", self.assert_passes("compare"))
 
@@ -474,7 +483,7 @@ class PhaseTests(Checks):
 
     def test_launch_sweeps_its_pages_for_the_names_to_avoid(self):
         """Launch writes the public pages after brand ran its sweep: the original's or a rival's name on one
-        of them fails launch too. brand.json is forge-brand's, which comes before launch in both its modes."""
+        of them fails launch too. brand.json is forge-design brand's, which comes before launch in both its modes."""
         self.finish("launch")
         write(self.root, "pricing.html", "<p>Switching from Calendly? Bring your slots along.</p>\n")
         out = self.assert_fails("launch", "sweep.py . --config forge-work/brand.json exits 1: it found problems",
@@ -503,7 +512,7 @@ class PhaseTests(Checks):
                 name = "forge-work/%s.md" % phase
                 write(self.root, name, "# %s: Slotwise\nDate: 2026-10-27\n" % phase.title())
                 out = self.assert_fails(phase, "%s has no ## %s" % (name, titles))
-                self.assertIn("why: forge-%s, Output" % phase, out)
+                self.assertIn("why: %s, Output" % gate_skill(phase), out)
                 write(self.root, name, "# %s\n\n" % phase.title() + "".join("## %s\n" % title
                                                                             for title in titles.split(", ## ")))
                 self.assert_fails(phase, "%s has no text of its own under ## %s" % (name, titles))
@@ -517,18 +526,18 @@ class PhaseTests(Checks):
                               "why: forge-improve, Output")
 
     def test_the_report_in_each_skills_output_passes(self):
-        """The example in forge-audit's, forge-inspect's and forge-improve's Output passes as it is: its
-        findings are ### headings under ## Findings or ## Fixed. forge-compare's shows only the parts with a
+        """The example in forge-check audit's, forge-check inspect's and forge-improve's Output passes as it is: its
+        findings are ### headings under ## Findings or ## Fixed. forge-research compare's shows only the parts with a
         fixed shape; with its other sections, in the order its Output gives, it passes too."""
         for phase in ("audit", "inspect", "improve"):
             if phase == "improve" and not HAS_GIT:
                 continue  # its check runs gitguard.py, which needs git
             with self.subTest(phase=phase):
                 self.finish(phase)
-                write(self.root, "forge-work/%s.md" % phase, example("forge-" + phase))
+                write(self.root, "forge-work/%s.md" % phase, example(phase))
                 self.assert_passes(phase)
         others = ("Positioning", "What they hate", "What is missing", "What is unsolved", "Fix plan", "Angles")
-        write(self.root, "forge-work/compare.md", example("forge-compare").replace(
+        write(self.root, "forge-work/compare.md", example("compare").replace(
             "## Sources", "".join("## %s\n1. Written for this app.\n\n" % title for title in others) + "## Sources"))
         self.assert_passes("compare")
 
@@ -569,10 +578,10 @@ class PhaseTests(Checks):
             with self.subTest(text=text):
                 write(self.root, "forge-work/security.md", SECURITY.replace("Verdict: PASS\n", text))
                 self.assert_fails("secure", "needs exactly one line `Verdict: PASS`")
-        report = template("forge-secure", "SKILL.md").split("```markdown\n")[1].split("```\n")[0]
+        report = template("forge-check", "steps/secure.md").split("```markdown\n")[1].split("```\n")[0]
         report = re.sub(r"\d+ high", "0 high", report.replace("Verdict: FAIL", "Verdict: PASS"))
         write(self.root, "forge-work/security.md", report)
-        self.assert_passes("secure")  # forge-secure's own report format passes
+        self.assert_passes("secure")  # forge-check secure's own report format passes
 
     def test_pack(self):
         self.finish("pack")
@@ -624,9 +633,9 @@ class FindingTests(Checks):
         """recon.md with only the placeholders outside code filled in, and plan.md with only the one-line
         ones outside code: both passed. A template's placeholders count everywhere but in comments now."""
         self.finish("recon", "plan")
-        write(self.root, "forge-work/recon.md", outside_code(template("forge-recon", "recon-map.md")))
+        write(self.root, "forge-work/recon.md", outside_code(template("forge-research", "recon-map.md")))
         out = self.assert_fails("recon", "forge-work/recon.md still has",
-                                "placeholder(s) of ../forge-recon/recon-map.md", "{{goal}}", "{{Entity}}",
+                                "placeholder(s) of ../forge-research/recon-map.md", "{{goal}}", "{{Entity}}",
                                 "{{high | medium | guess}}")
         self.assertIn("Write this app's own facts in their place", out)
         plan = re.sub(r"(?m)^Profile: x$", "Profile: static", outside_code(template("forge-plan", "plan.md")))
@@ -656,8 +665,8 @@ class FindingTests(Checks):
         write(self.root, "forge-work/recon.md", "# Recon: x (web)\n")
         out = self.assert_fails("recon", "forge-work/recon.md has no ## Sources, ## Core loop, ## Screens, "
                                          "## Reference screenshots, ## Flows")
-        self.assertIn("why: forge-recon, Output: recon.md from the template, every section filled in", out)
-        recon = filled("forge-recon/recon-map.md")
+        self.assertIn("why: forge-research recon, Output: recon.md from the template, every section filled in", out)
+        recon = filled("forge-research/recon-map.md")
         only_the_example = recon.replace("## Components\n\nSlotwise: written for this app.", "## Components")
         write(self.root, "forge-work/recon.md", only_the_example)  # the template's Button row and nothing else
         self.assert_fails("recon", "no text of its own under ## Components")
@@ -697,7 +706,7 @@ class FindingTests(Checks):
         self.assert_passes("design", "--mode", "idea")  # idea mode has no original
 
     def test_n12_the_theme_command_is_filled_in(self):
-        """forge-design Step 3 fills in the theme.py command that forge-build and forge-brand run."""
+        """forge-design design Step 3 fills in the theme.py command that forge-build build and forge-design brand run."""
         self.finish("design")
         command = next(line for line in template("forge-design", "components.md").split("\n")
                        if line.startswith("Command:"))
@@ -712,17 +721,17 @@ class FindingTests(Checks):
         self.remove("forge-work/security.md")
         self.assert_fails("build", "forge-work/build-log.md has no table with the columns status and what",
                           "composecheck.py . exits 2: it could not check", "forge-work/security.md is missing",
-                          "why: forge-build, Step 7: /forge-secure has run")
+                          "why: forge-build build, Step 7: /forge-check secure has run")
         write(self.root, "forge-work/build-log.md", BUILD_LOG.split("| S01")[0])
         self.assert_fails("build", "build-log.md has no table with the columns status and what and a row")
 
     def test_n18_a_clone_that_shares_a_sentence_with_the_original(self):
         """The clone shared runs of words with the original and every gate passed. In clone mode build, brand
-        and launch run copycheck.py when forge-recon kept the original's text in forge-work/original-text/: a
+        and launch run copycheck.py when forge-research recon kept the original's text in forge-work/original-text/: a
         shared run of 6+ words fails until it is rewritten or, with the user's OK, in copy-allow.txt. Without
         the kept text the line says it skipped; idea mode, which has no original, never runs it."""
         sentence = "<main>\n<p>Zo zie je elke dag wat er moet gebeuren.</p>\n</main>\n"
-        for phase, why in (("build", "why: forge-build, Step 7"), ("brand", "why: forge-brand, Step 6"),
+        for phase, why in (("build", "why: forge-build build, Step 7"), ("brand", "why: forge-design brand, Step 6"),
                            ("launch", "why: forge-launch, Also for this skill")):
             with self.subTest(phase=phase):
                 shutil.rmtree(self.root, ignore_errors=True)
@@ -749,7 +758,7 @@ class FindingTests(Checks):
         shutil.rmtree(os.path.join(self.root, "e2e"))
         for mode in ("clone", "idea"):
             self.assert_fails("test", "no end-to-end spec: no file like e2e/**/*.spec.* or e2e/**/*.test.*",
-                              "why: forge-test, Step 3 and Output: one spec per flow in e2e/", args=("--mode", mode))
+                              "why: forge-check test, Step 3 and Output: one spec per flow in e2e/", args=("--mode", mode))
         write(self.root, "e2e/node_modules/pkg/x.spec.ts", SPEC)
         self.assert_fails("test", "no end-to-end spec", args=("--mode", "clone"))
         write(self.root, "e2e/flows/f01.test.js", SPEC)
@@ -783,7 +792,7 @@ class FindingTests(Checks):
 
     def test_improve_mode_finds_the_apps_playwright_setup_in_any_folder(self):
         """A monorepo keeps its Playwright setup next to the app it tests (apps/web/playwright.config.ts, the
-        specs beside it), and forge-test adds the specs there. One inside node_modules is not the app's."""
+        specs beside it), and forge-check test adds the specs there. One inside node_modules is not the app's."""
         self.finish("test")
         shutil.rmtree(os.path.join(self.root, "e2e"))
         write(self.root, "node_modules/some-kit/playwright.config.ts", "export default {};\n")
@@ -855,7 +864,7 @@ class FindingTests(Checks):
         self.finish("secure")
         write(self.root, "src/bad.ts", "const q = location.search;\n\neval(q);\n")
         out = self.assert_fails("secure", "codecheck.py . exits 1: it found problems", "src/bad.ts:3")
-        self.assertIn("why: forge-secure, Step 3 and The gate", out)
+        self.assertIn("why: forge-check secure, Step 3 and The gate", out)
         write(self.root, "forge-work/security.md", SECURITY.replace(
             "## Accepted risks\nNone.\n", "## Accepted risks\n- X002 [high] eval in src/bad.ts:3. The user said: "
                                           "\"ik accepteer dit\" (2026-10-27)\n"))
@@ -876,13 +885,13 @@ class FindingTests(Checks):
     def test_n43_run_md_and_nginx_conf(self):
         self.finish("plan", "pack")
         shutil.copy(os.path.join(STATIC, "RUN.md"), os.path.join(self.root, "RUN.md"))
-        self.assert_fails("pack", "RUN.md still has 1 placeholder(s) of ../forge-pack/templates/*/RUN.md",
+        self.assert_fails("pack", "RUN.md still has 1 placeholder(s) of ../forge-build/templates/*/RUN.md",
                           "line 1: {{App name}}")
         self.remove("RUN.md", "nginx.conf")
-        self.assert_fails("pack", "RUN.md is missing", "nginx.conf is missing", "why: forge-pack, Output: nginx.conf "
+        self.assert_fails("pack", "RUN.md is missing", "nginx.conf is missing", "why: forge-build pack, Output: nginx.conf "
                                                                                "for laravel and static")
         write(self.root, "forge-work/plan.md", PLAN.replace("Profile: static", "Profile: next"))
-        write(self.root, "RUN.md", filled("forge-pack/templates/next/RUN.md"))
+        write(self.root, "RUN.md", filled("forge-build/templates/next/RUN.md"))
         self.assertNotIn("nginx.conf is missing", self.run_main("pack")[1])  # next serves its pages itself
 
 
@@ -921,15 +930,15 @@ class SinceTests(Checks):
         self.assert_fails("diff", "forge-work/parity.md is older than the last go (%s)" % go,
                           "Run the phase's skill again in full", args=("--since", go))
         self.assert_passes("diff")  # without --since, its age is not checked
-        for name in ("bugs.md", "features.csv"):  # written before parity.md, as in forge-diff
+        for name in ("bugs.md", "features.csv"):  # written before parity.md, as in forge-check diff
             os.utime(os.path.join(self.root, "forge-work", name), (at, at))
         os.utime(os.path.join(self.root, "forge-work", "parity.md"), (at + 1, at + 1))
         self.assertIn("forge-work/parity.md is newer than the last go (%s)" % go,
                       self.assert_passes("diff", "--since", go))
 
     def test_a_parity_report_older_than_the_bugs_or_the_features_does_not_count(self):
-        """gate-6: a bug from diff's behaviour walk goes through forge-test's fix loop, which changes bugs.md,
-        and a missing must-have through forge-build, which changes features.csv. diff then runs again from
+        """gate-6: a bug from diff's behaviour walk goes through forge-check test's fix loop, which changes bugs.md,
+        and a missing must-have through forge-build build, which changes features.csv. diff then runs again from
         Step 1 and its Step 4 rewrites parity.md: an older parity.md holds the verdict from before."""
         self.finish("diff")
         go = "2026-10-27T09:51:44+00:00"
@@ -987,11 +996,11 @@ class SinceTests(Checks):
 
 
 class ScriptTests(Checks):
-    def fake_pack(self, source, script="forge-secure/secretscan.py"):
-        """A copy of the pack's forge and forge-secure folders with SCRIPT replaced by SOURCE."""
+    def fake_pack(self, source, script="forge-check/secretscan.py"):
+        """A copy of the pack's forge and forge-check secure folders with SCRIPT replaced by SOURCE."""
         pack = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, pack, ignore_errors=True)
-        for folder in ("forge", "forge-secure"):
+        for folder in ("forge", "forge-check"):
             shutil.copytree(os.path.join(ROOT, folder), os.path.join(pack, folder),
                             ignore=shutil.ignore_patterns("__pycache__"))
         with open(os.path.join(pack, script), "w", encoding="utf-8") as handle:

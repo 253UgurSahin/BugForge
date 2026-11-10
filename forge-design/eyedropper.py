@@ -2,7 +2,7 @@
 """Read exact colours off a screenshot, as an eyedropper does, and the grey of the same lightness.
 
 A hex value read off a screenshot by eye is a guess. In a screenshot at 100% zoom (deviceScaleFactor
-1, as forge-recon takes them) a flat area holds the very colour the page uses, so read the pixels.
+1, as forge-research recon takes them) a flat area holds the very colour the page uses, so read the pixels.
 
 Usage:
     python3 eyedropper.py forge-work/screens/S05.png                     the colours used most

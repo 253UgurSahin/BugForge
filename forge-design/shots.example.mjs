@@ -1,4 +1,4 @@
-// Screenshots of your own app for forge-design's look review (../forge-design/review.md).
+// Screenshots of your own app for forge-design design's look review (../forge-design/review.md).
 // Copy it to forge-work/design/shots.mjs and run it where Playwright is installed (e2e/ has it):
 //
 //   node forge-work/design/shots.mjs http://localhost:8080 forge-work/design/shots/round-1 / /login
@@ -6,7 +6,7 @@
 //
 // Each path gives a full-page PNG at 390px and 1440px wide, in light and in dark: OUT/<name>-390-light.png.
 // --no-dark leaves the dark shots out (an app without a dark theme). --state FILE signs in with a
-// Playwright storage state (the file forge-test's setup project writes). It only loads pages, as a
+// Playwright storage state (the file forge-check test's setup project writes). It only loads pages, as a
 // visitor would, and only from the base URL you give: run it against your own stack.
 import { chromium } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';

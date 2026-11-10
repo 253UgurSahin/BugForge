@@ -1,4 +1,4 @@
-"""Tests for forge-secure/supply.py: each supply-chain rule fires and stays quiet, the exit codes,
+"""Tests for forge-check/supply.py: each supply-chain rule fires and stays quiet, the exit codes,
 the JSON shape, the CycloneDX list, and that nothing is written through a symlink."""
 
 import contextlib
@@ -14,8 +14,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252, symlink  # noqa: E402
 
-supply = load("forge-secure", "supply")
-SCRIPT = os.path.join(ROOT, "forge-secure", "supply.py")
+supply = load("forge-check", "supply")
+SCRIPT = os.path.join(ROOT, "forge-check", "supply.py")
 NPM = "https://registry.npmjs.org/%s/-/%s-%s.tgz"
 
 
@@ -227,7 +227,7 @@ class ExitCodeTests(Project):
             self.assertIn(key, data["summary"])
 
     def test_every_rule_in_the_data_file_has_its_words(self):
-        with open(os.path.join(ROOT, "forge-secure", "supply.json"), encoding="utf-8") as handle:
+        with open(os.path.join(ROOT, "forge-check", "supply.json"), encoding="utf-8") as handle:
             data = json.load(handle)
         for rule, words in data["rules"].items():
             with self.subTest(rule=rule):

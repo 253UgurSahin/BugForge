@@ -1,4 +1,4 @@
-"""Tests for forge-secure/deps.py.
+"""Tests for forge-check/deps.py.
 
 The real auditors (npm, composer, pip-audit) are never run here. The parsers get canned JSON,
 the CLI tests swap deps.run_tool for a fake, and the run_tool tests put small fake auditors
@@ -22,7 +22,7 @@ from unittest import mock
 
 from _load import load, run_cp1252, symlink
 
-mod = load("forge-secure", "deps")
+mod = load("forge-check", "deps")
 
 NPM_REPORT = json.dumps({
     "auditReportVersion": 2,

@@ -3,7 +3,7 @@
 
 Every value lives in forge-work/design/tokens.json. This turns it into the CSS custom properties
 the components use, so nobody writes some 70 variables out by hand, and writes them again after
-every change to the tokens (forge-brand's palette included).
+every change to the tokens (forge-design brand's palette included).
 
 Usage:
     python3 theme.py forge-work/design/tokens.json --tailwind no              print the block

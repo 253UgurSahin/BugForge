@@ -1,4 +1,4 @@
-"""Tests for forge-dashboard/chart.py: every chart type is valid, accessible SVG; data is escaped,
+"""Tests for forge-design/chart.py: every chart type is valid, accessible SVG; data is escaped,
 never run; axis ticks are 1-2-5 steps; nonsense is refused with exit 2 and nothing is written."""
 
 import contextlib
@@ -15,8 +15,8 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, symlink  # noqa: E402
 
-chart = load("forge-dashboard", "chart")
-SCRIPT = os.path.join(ROOT, "forge-dashboard", "chart.py")
+chart = load("forge-design", "chart")
+SCRIPT = os.path.join(ROOT, "forge-design", "chart.py")
 TOKENS = os.path.join(ROOT, "forge-design", "tokens.json")
 SVG = "{http://www.w3.org/2000/svg}"
 MONTHS = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"]

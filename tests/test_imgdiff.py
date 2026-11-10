@@ -1,4 +1,4 @@
-"""Tests for forge-diff/imgdiff.py (ported from the original test_imgdiff.py, plus the forge
+"""Tests for forge-check/imgdiff.py (ported from the original test_imgdiff.py, plus the forge
 limits: 8-bit PNGs only with a clear message for anything else, big images read small, and
 --out never overwrites a screenshot). The original's pixel mode is gone, so its tests are too.
 The test PNG encoder has its own Paeth predictor, so a wrong one in imgdiff.py cannot hide."""
@@ -18,7 +18,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import load, run_cp1252, symlink  # noqa: E402
 
-imgdiff = load("forge-diff", "imgdiff")
+imgdiff = load("forge-check", "imgdiff")
 WHITE = (255, 255, 255)
 
 

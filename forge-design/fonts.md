@@ -1,6 +1,6 @@
 # Fonts, per profile
 
-How forge-design's Step 4 loads the open font it picked, self-hosted, and what `font.sans` in
+How forge-design design's Step 4 loads the open font it picked, self-hosted, and what `font.sans` in
 `forge-work/design/tokens.json` (so `--font-sans`) then holds. The examples use Inter; any open font
 on Fontsource works the same way. A heading font from the brief goes in a `font.display` token the
 same way. Keep the font's licence file next to its files, and read it: most open fonts are under

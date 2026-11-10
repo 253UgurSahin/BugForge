@@ -1,4 +1,4 @@
-"""Tests for forge-diff/parity.py (ported from the original test_parity.py, plus the forge rules:
+"""Tests for forge-check/parity.py (ported from the original test_parity.py, plus the forge rules:
 the exit code is the gate, values outside the contract stop the score, a skip needs a reason,
 a skipped must-have is never a quiet way past the gate, and scores are never rounded up)."""
 
@@ -15,9 +15,9 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252  # noqa: E402
 
-parity = load("forge-diff", "parity")
-SCRIPT = os.path.join(ROOT, "forge-diff", "parity.py")
-RECON_TEMPLATE = os.path.join(ROOT, "forge-recon", "features.csv")
+parity = load("forge-check", "parity")
+SCRIPT = os.path.join(ROOT, "forge-check", "parity.py")
+RECON_TEMPLATE = os.path.join(ROOT, "forge-research", "features.csv")
 
 MATRIX = """feature,area,priority,original,clone,notes
 Pick a time slot,booking page,must,yes,yes,
@@ -125,7 +125,7 @@ class Ported(TempFolder):
         self.assertEqual(run(done, "--fail-under", "80")[0], 1)
         self.assertEqual(run(done, "--fail-under", "10")[0], 0)
 
-    @unittest.skipUnless(os.path.isfile(RECON_TEMPLATE), "forge-recon/features.csv is not there yet")
+    @unittest.skipUnless(os.path.isfile(RECON_TEMPLATE), "forge-research/features.csv is not there yet")
     def test_shipped_template_parses(self):
         result = parity.score(parity.load(RECON_TEMPLATE))
         self.assertGreater(result["counted"], 0)
@@ -332,9 +332,9 @@ class Visual(TempFolder):
         self.assertEqual(run(self.path, "--visual", os.path.join(self.folder, "nope.json"))[0], 2)
 
     def test_reads_real_imgdiff_output(self):
-        """forge-diff Step 2 redirects imgdiff.py --json into S01.diff.json. That JSON is ASCII (other signs
+        """forge-check diff Step 2 redirects imgdiff.py --json into S01.diff.json. That JSON is ASCII (other signs
         as \\u escapes), so a cp1252 pipe (Windows) writes the bytes a UTF-8 one does."""
-        imgdiff = load("forge-diff", "imgdiff")
+        imgdiff = load("forge-check", "imgdiff")
         rows = [[(255, 255, 255)] * 40 for _ in range(30)]
         for y in range(5, 10):
             rows[y][5:30] = [(20, 20, 60)] * 25
@@ -358,7 +358,7 @@ class ConsoleTests(TempFolder):
         self.assertIn("- [must] caf\u00e9: Boek \\u2192 betaal (not built)", out)
 
     def test_markdown_is_utf_8_also_into_a_cp1252_pipe(self):
-        """forge-diff Step 4 redirects --markdown into parity.md, which the gate reads as UTF-8. On Windows
+        """forge-check diff Step 4 redirects --markdown into parity.md, which the gate reads as UTF-8. On Windows
         that redirect is a cp1252 pipe: --markdown writes UTF-8 there too, so the euro sign stays."""
         path = write(self.folder, "euro.csv", "feature,area,priority,original,clone,notes\n"
                      "Pick a time slot,booking page,must,yes,yes,\n"

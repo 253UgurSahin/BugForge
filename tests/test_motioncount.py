@@ -1,4 +1,4 @@
-"""Tests for forge-motion/motioncount.py: what counts as a place that moves, that motion on offer
+"""Tests for forge-design/motioncount.py: what counts as a place that moves, that motion on offer
 but on no element does not count, the exit codes and the JSON shape."""
 
 import contextlib
@@ -14,8 +14,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252  # noqa: E402
 
-motioncount = load("forge-motion", "motioncount")
-SCRIPT = os.path.join(ROOT, "forge-motion", "motioncount.py")
+motioncount = load("forge-design", "motioncount")
+SCRIPT = os.path.join(ROOT, "forge-design", "motioncount.py")
 APP_CSS = (".btn { transition: transform 120ms; }\n.card:hover { transition: box-shadow 200ms; }\n"
            "@media (prefers-reduced-motion: no-preference) {\n  .toast { animation: rise 200ms; }\n}\n"
            ".plain { color: red; transition: none; }\n/* .old { transition: all 1s; } */\n")
@@ -43,7 +43,7 @@ class Project(unittest.TestCase):
         return code, json.loads(out)
 
     def copy_motion_css(self):
-        shutil.copy(os.path.join(ROOT, "forge-motion", "motion.css"), os.path.join(self.root, "motion.css"))
+        shutil.copy(os.path.join(ROOT, "forge-design", "motion.css"), os.path.join(self.root, "motion.css"))
 
 
 class CountTests(Project):

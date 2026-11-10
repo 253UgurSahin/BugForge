@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Is a phase's work there, besides its report? The forge gate's checks of the work files: the feature
-list, the design tokens, the end-to-end specs, the screenshots forge-diff compared and the app's new
+list, the design tokens, the end-to-end specs, the screenshots forge-check diff compared and the app's new
 name. phasecheck.py runs it for the exit checks of a phase. Run it from the project root. It reads
 files; it changes nothing.
 
@@ -14,14 +14,14 @@ Usage:
 
 features FILE: features.csv in the contract: the header feature,area,priority,original,clone,notes,
   6 cells a row, values parity.py reads (empty is yes for original, no for clone), a feature name, a
-  reason for each skip; not only the example rows of ../forge-recon/features.csv; and a must-have
+  reason for each skip; not only the example rows of ../forge-research/features.csv; and a must-have
   that is not skipped. --theirs: one that the original has (original yes), so parity.py can score it.
 built FILE: each must-have is built (clone yes), or partial or skip with a note on what is missing or
   why, and at least one is built.
 tokens FILE TEMPLATE: the JSON FILE holds values of its own, not every value of TEMPLATE (keys that
   start with _ are notes).
 specs PATTERN...: a file like one of the patterns (** is any folders), outside node_modules.
-compared FOLDER: when FOLDER holds reference screenshots (S07.png, S07-mobile.png), forge-diff
+compared FOLDER: when FOLDER holds reference screenshots (S07.png, S07-mobile.png), forge-check diff
   compared them: one .diff.json at least, and each one a JSON object. No reference screenshot
   (recon could take none): nothing to compare.
 named FILE: the "name" in the JSON FILE (brand.json) is in a file of the app, in any case: outside
@@ -90,10 +90,10 @@ def check_features(name, theirs=False):
     body, failed = feature_rows(name)
     if failed:
         return failed
-    example = os.path.join(PACK, "forge-recon", "features.csv")
+    example = os.path.join(PACK, "forge-research", "features.csv")
     examples = [row for _, row in csv_rows(read(example))] if os.path.isfile(example) else []
     if body and all(row in examples for _, row in body):
-        return False, "%s has only example rows of ../forge-recon/features.csv, not this app's features" % name, []
+        return False, "%s has only example rows of ../forge-research/features.csv, not this app's features" % name, []
     musts = sum(1 for _, row in body if row[2].lower() == "must" and row[4].lower() != "skip"
                 and not (theirs and row[3].lower() == "no"))
     return musts > 0, "%s has the contract header and %d row(s) with priority must, not skipped%s" % (
@@ -133,7 +133,7 @@ def check_specs(*patterns):
         if found:
             return True, "end-to-end specs: %s" % found[0].replace(os.sep, "/"), []
     return False, "no end-to-end spec: no file like %s" % " or ".join(patterns), [
-        "Write one spec per flow, set up as the top of ../forge-test/e2e.example.spec.ts says."]
+        "Write one spec per flow, set up as the top of ../forge-check/e2e.example.spec.ts says."]
 
 
 def check_compared(folder):
@@ -142,7 +142,7 @@ def check_compared(folder):
     diffs = [name for name in names if name.endswith(".diff.json")]
     if shots and not diffs:
         return False, "%s has %d reference screenshot(s) and no .diff.json" % (folder, len(shots)), [
-            "Compare each reference screenshot with the clone's of the same name: ../forge-diff/imgdiff.py --json."]
+            "Compare each reference screenshot with the clone's of the same name: ../forge-check/imgdiff.py --json."]
     broken = []
     for name in diffs:
         try:
@@ -174,7 +174,7 @@ def check_named(config):
             except OSError:
                 continue
     return False, "the name %s from %s is in no file of the app" % (name or "(none)", config), [
-        "Put it in the app name setting, the titles, the manifest and the README (forge-brand Step 6)."]
+        "Put it in the app name setting, the titles, the manifest and the README (forge-design brand Step 6)."]
 
 
 def shown(path):

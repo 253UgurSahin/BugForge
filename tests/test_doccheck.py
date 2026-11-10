@@ -22,10 +22,10 @@ from test_phasecheck import BUGS, CASES, SPEC, filled, read, write  # noqa: E402
 
 doccheck = load("forge", "doccheck")
 SCRIPT = os.path.join(ROOT, "forge", "doccheck.py")
-TEMPLATES = [("forge-recon", "recon-map.md"), ("forge-plan", "plan.md"), ("forge-design", "components.md"),
-             ("forge-test", "test-plan.md"), ("forge-launch", "launch.md"), ("forge-pack", "templates/static/RUN.md"),
-             ("forge-pack", "templates/laravel/RUN.md"), ("forge-pack", "templates/django/RUN.md"),
-             ("forge-pack", "templates/next/RUN.md")]
+TEMPLATES = [("forge-research", "recon-map.md"), ("forge-plan", "plan.md"), ("forge-design", "components.md"),
+             ("forge-check", "test-plan.md"), ("forge-launch", "launch.md"), ("forge-build", "templates/static/RUN.md"),
+             ("forge-build", "templates/laravel/RUN.md"), ("forge-build", "templates/django/RUN.md"),
+             ("forge-build", "templates/next/RUN.md")]
 
 
 class Report(unittest.TestCase):
@@ -71,10 +71,10 @@ class PlaceholderTests(Report):
                     self.assertIn("1 placeholder(s)", out)
 
     def test_a_template_copied_as_it_is_fails_with_every_placeholder(self):
-        path = self.template("forge-recon", "recon-map.md")
+        path = self.template("forge-research", "recon-map.md")
         code, checks, out = self.check(read(path), "--template", path)
         self.assertEqual(code, 1)
-        self.assertIn("report.md still has %d placeholder(s) of ../forge-recon/recon-map.md"
+        self.assertIn("report.md still has %d placeholder(s) of ../forge-research/recon-map.md"
                       % len(doccheck.placeholders(read(path))), out)
         self.assertIn("line 1: {{app}}", out)
 
@@ -104,7 +104,7 @@ class PlaceholderTests(Report):
         (`--color-<role>`) and stays as it is (N21); a spec quotes <button> in code."""
         path = self.template("forge-design", "components.md")
         theme = read(path).split("## Theme")[1].split("## Fonts")[0]
-        theme = theme.replace("<the theme file for the profile, from forge-design Step 3>", "app/globals.css")
+        theme = theme.replace("<the theme file for the profile, from forge-design design Step 3>", "app/globals.css")
         done = "Profile: next. Tailwind: 4.\nFont: Inter (SIL OFL).\n\n## Theme\n" + theme.replace(
             "<4|3|no>", "4").replace("<the file above>", "app/globals.css") + \
             "\nA `<name>` in code, and `--breakpoint-<name>: <value>px;`.\n```\nButton\n  a11y  real <button>\n```\n"
@@ -115,7 +115,7 @@ class PlaceholderTests(Report):
         self.assertIn("<name>", out)
 
     def test_the_seed_password_stays_a_placeholder_of_the_command(self):
-        path = self.template("forge-test", "test-plan.md")
+        path = self.template("forge-check", "test-plan.md")
         self.assertNotIn("<the seed password>", doccheck.placeholders(read(path)))
 
     def test_templates_by_pattern(self):
@@ -127,21 +127,21 @@ class PlaceholderTests(Report):
         self.assertEqual(self.check("# Running Slotwise\n", "--template", "templates/*/RUN.md", "--no-sections")[0], 0)
 
     def test_a_pack_in_a_folder_with_brackets(self):
-        """phasecheck.py passes <pack>/forge/../forge-pack/templates/*/RUN.md. A [ in the pack's own path, as in
+        """phasecheck.py passes <pack>/forge/../forge-build/templates/*/RUN.md. A [ in the pack's own path, as in
         a folder named 'skills [work]', stays a [: only the * that phasecheck.json wrote is a wildcard."""
         pack = os.path.join(self.root, "skills [work]")
-        shutil.copytree(os.path.join(ROOT, "forge-pack", "templates"), os.path.join(pack, "forge-pack", "templates"))
+        shutil.copytree(os.path.join(ROOT, "forge-build", "templates"), os.path.join(pack, "forge-build", "templates"))
         os.makedirs(os.path.join(pack, "forge"))
         shutil.copy(SCRIPT, os.path.join(pack, "forge"))
-        pattern = os.path.join(pack, "forge", "..", "forge-pack", "templates", "*", "RUN.md")
-        done = filled("forge-pack/templates/static/RUN.md")
+        pattern = os.path.join(pack, "forge", "..", "forge-build", "templates", "*", "RUN.md")
+        done = filled("forge-build/templates/static/RUN.md")
         for text, code in ((done, 0), (done + "\n{{App name}}\n", 1)):
             with self.subTest(code=code):
                 write(self.root, "RUN.md", text)
                 result = run_cp1252(os.path.join(pack, "forge", "doccheck.py"), "RUN.md", "--template", pattern,
                                     "--no-sections", cwd=self.root)
                 self.assertEqual(result[0], code, result[1] + result[2])
-        self.assertIn("RUN.md still has 1 placeholder(s) of ../forge-pack/templates/*/RUN.md", result[1])
+        self.assertIn("RUN.md still has 1 placeholder(s) of ../forge-build/templates/*/RUN.md", result[1])
 
 
 class SectionTests(Report):
@@ -208,9 +208,9 @@ class CasesTests(Report):
     def test_a_table_in_a_code_block_or_only_the_examples_is_not_this_apps(self):
         code, checks, out = self.cases("```\n" + CASES + "```\n")
         self.assertIn("has no Cases table with rows", out)
-        path = os.path.join(ROOT, "forge-test", "test-plan.md")
+        path = os.path.join(ROOT, "forge-check", "test-plan.md")
         code, checks, out = self.cases(read(path), "--template", path, "--no-sections")
-        self.assertIn("has only the example rows of ../forge-test/test-plan.md", out)
+        self.assertIn("has only the example rows of ../forge-check/test-plan.md", out)
 
     def test_specs_for_the_cases_marked_e2e(self):
         code, checks, out = self.cases(CASES, "--specs", "e2e/**/*.spec.*")
@@ -226,7 +226,7 @@ class CasesTests(Report):
         self.assertIn("marks no case e2e, so it needs no end-to-end spec", out)
 
     def test_every_cases_table_counts(self):
-        """forge-test works per flow, so a plan may keep a Cases table per flow: the rows of each one count."""
+        """forge-check test works per flow, so a plan may keep a Cases table per flow: the rows of each one count."""
         header, first = "".join(CASES.splitlines(True)[:2]), CASES.replace("| e2e |", "| unit |")
         second = "\n### F02 cancel a booking\n\n" + header + "| F02-H1 | cancel | happy | | gone | %s | %s |\n"
         code, checks, out = self.cases(first + second % ("unit", "pass"), "--specs", "e2e/**/*.spec.*")

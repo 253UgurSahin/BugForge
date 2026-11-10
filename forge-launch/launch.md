@@ -75,7 +75,7 @@ Check against acm.nl (selling to consumers), the KvK and the Belastingdienst. No
       a month's notice.
 - [ ] Consumers, where the right of withdrawal applies: the withdrawal button works during the 14 days and sends an
       email receipt (EU rule from 19 June 2026: check the date of the Dutch law on acm.nl).
-- [ ] A data processing agreement with each processor (forge-secure's AVG checklist), and one offered to each
+- [ ] A data processing agreement with each processor (forge-check secure's AVG checklist), and one offered to each
       business customer whose clients' data the app holds.
 
 ## Launch checklist (the user's steps)
@@ -88,7 +88,7 @@ Check against acm.nl (selling to consumers), the KvK and the Belastingdienst. No
       IDs in the app's database and the Customer Portal set up again; live keys only in the server's `.env`; a
       live webhook endpoint with its own signing secret.
 - [ ] iDEAL becomes Wero: read Stripe's iDEAL to Wero migration page before going live.
-- [ ] Domain, TLS and a reverse proxy in front of the containers (RUN.md from forge-pack).
+- [ ] Domain, TLS and a reverse proxy in front of the containers (RUN.md from forge-build pack).
 - [ ] SMTP with SPF, DKIM and DMARC; a support address someone reads; a backup restored once.
 - [ ] The trademark checks still "to run" in brand.md.
 - [ ] First users: a beta list, the places competitors' unhappy users talk (compare.md), the first 10 users

@@ -1,4 +1,4 @@
-"""Tests for forge-secure/untrusted.py.
+"""Tests for forge-check/untrusted.py.
 
 Most tests call scan_text() on a string. The command-line tests write small
 files in a temporary folder. Invisible characters are written as escapes, so
@@ -20,8 +20,8 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # also run as tests.test_untrusted
 from _load import load  # noqa: E402
 
-mod = load("forge-secure", "untrusted")
-SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forge-secure", "untrusted.py")
+mod = load("forge-check", "untrusted")
+SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forge-check", "untrusted.py")
 
 ORDERS = "Text that tries to give an AI orders"
 ROLE = "Fake chat role marker"

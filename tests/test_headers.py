@@ -1,4 +1,4 @@
-"""Tests for forge-secure/headers.py.
+"""Tests for forge-check/headers.py.
 
 No real network: checks run on header lists, on saved header files, and on a
 small local web server on 127.0.0.1 that runs in a thread.
@@ -26,7 +26,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `python3 -m unittest tests.test_headers` works
 from _load import load, run_cp1252  # noqa: E402
 
-mod = load("forge-secure", "headers")
+mod = load("forge-check", "headers")
 
 HTTPS_URL = "https://example.com/"
 

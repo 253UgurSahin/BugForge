@@ -1,4 +1,4 @@
-"""Tests for forge-secure/secretscan.py.
+"""Tests for forge-check/secretscan.py.
 
 Fake secrets are glued together at runtime, so this file never contains a
 secret-looking literal: the repo itself is scanned with secretscan.py in CI.
@@ -19,7 +19,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import load, run_cp1252, symlink  # noqa: E402
 
-mod = load("forge-secure", "secretscan")
+mod = load("forge-check", "secretscan")
 
 STRIPE_LIVE = "sk_" + "live_" + "a1B2c3D4e5F6g7H8i9J0k1L2"
 STRIPE_RESTRICTED = "rk_" + "live_" + "Z9y8X7w6V5u4T3s2R1q0P9o8"

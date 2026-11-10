@@ -7,7 +7,7 @@ Decided by: {{the user, in their words | forge in auto mode, to change on reques
 <!-- Replace every {{...}}, then delete this comment. The brief is one page: short lines, real
      choices. A line that would fit any app ("clean and modern") is not a choice: write what this
      app does that another would not. Clone mode: the feel comes from this brief, the measurements
-     from the original's screenshots, the colours from forge-brand. -->
+     from the original's screenshots, the colours from forge-design brand. -->
 
 ## Who and where
 
@@ -52,7 +52,7 @@ Decided by: {{the user, in their words | forge in auto mode, to change on reques
 
 ## Motion
 
-- {{calm | lively | technical}}: what moves, and what it explains. Detail: /forge-motion
+- {{calm | lively | technical}}: what moves, and what it explains. Detail: /forge-design motion
 
 ## Signature
 

@@ -1,0 +1,287 @@
+/* forge-design motion: the CSS recipes of motion.md as small utility classes.
+ *
+ * Copy this file into the app next to the theme file and import it after the theme. It holds no
+ * times, curves, distances or colours of its own: it reads the variables theme.py writes from
+ * forge-work/design/tokens.json (--duration-*, --ease-*, --size-shift*, --color-*, --shadow-pop,
+ * --radius-sm, --size-ring). A variable that is missing makes the rule do nothing: add the token.
+ *
+ * Three parts:
+ *   1. always on: fades and colour changes, which are safe for everyone;
+ *   2. @media (prefers-reduced-motion: no-preference): everything that moves;
+ *   3. @media (prefers-reduced-motion: reduce): what replaces movement, so nothing is lost.
+ * Only transform and opacity move (plus grid-template-rows for the accordion and the stroke of a
+ * chart line). Classes start with m-. State comes from the markup: [open], [data-open="true"],
+ * .is-visible, [data-paused="true"]. Delete the recipes the app does not use.
+ */
+
+:root {
+  --m-press-scale: 0.97;                           /* a ratio, not a length: the one value set here */
+  --m-lift: calc(var(--size-shift-sm) * -0.5);     /* hover lift: half the small shift, upwards */
+  --m-rise: var(--size-shift);                     /* how far entering things travel */
+}
+
+/* ---------- 1. Always on: fades ---------- */
+
+@keyframes m-fade-in { from { opacity: 0; } }
+@keyframes m-fade-out { to { opacity: 0; } }
+
+/* Something appears (a toast, content after a skeleton). Fades for everyone, rises in part 2. */
+.m-enter { animation: m-fade-in var(--duration-base) var(--ease-standard) both; }
+/* Something leaves: faster than it came, and it accelerates away. Remove the node on animationend. */
+.m-leave { animation: m-fade-out var(--duration-fast) var(--ease-exit) both; }
+
+/* List stagger: children come in one after another. Capped at 8 steps: a long list must not make
+   people wait. Rows after the eighth arrive with it. */
+.m-stagger > * {
+  animation: m-fade-in var(--duration-base) var(--ease-standard) both;
+  animation-delay: calc(var(--m-index, 7) * var(--duration-stagger));
+}
+.m-stagger > :nth-child(1) { --m-index: 0; }
+.m-stagger > :nth-child(2) { --m-index: 1; }
+.m-stagger > :nth-child(3) { --m-index: 2; }
+.m-stagger > :nth-child(4) { --m-index: 3; }
+.m-stagger > :nth-child(5) { --m-index: 4; }
+.m-stagger > :nth-child(6) { --m-index: 5; }
+.m-stagger > :nth-child(7) { --m-index: 6; }
+
+/* Focus ring: shows at once, never fades in. Part 2 only lets it settle outwards. */
+.m-ring:focus-visible {
+  outline: var(--size-ring) solid var(--color-accent);
+  outline-offset: var(--size-ring);
+}
+
+/* Hover lift: the shadow sits on a layer of its own and only its opacity changes. */
+.m-lift { position: relative; }
+.m-lift::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: var(--shadow-pop);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-base) var(--ease-standard);
+}
+@media (hover: hover) {
+  .m-lift:hover::after { opacity: 1; }
+}
+.m-lift:focus-visible::after { opacity: 1; }
+
+/* Accordion: wrap the content in one child. Rows go from 0fr to 1fr, so no height is measured.
+   Closed content is hidden from the keyboard and screen readers once the close has finished. */
+.m-accordion {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--duration-base) var(--ease-move);
+}
+.m-accordion > * {
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  transition: visibility 0s linear var(--duration-base);
+}
+.m-accordion[data-open="true"] { grid-template-rows: 1fr; }
+.m-accordion[data-open="true"] > * { visibility: visible; transition-delay: 0s; }
+
+/* Modal and bottom sheet on a native <dialog>: fade for everyone. allow-discrete keeps the dialog
+   drawn while it leaves; browsers without it close at once, which is fine. */
+dialog.m-modal,
+dialog.m-sheet {
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-standard),
+              transform var(--duration-base) var(--ease-standard),
+              overlay var(--duration-base) allow-discrete,
+              display var(--duration-base) allow-discrete;
+}
+dialog.m-modal[open],
+dialog.m-sheet[open] { opacity: 1; }
+dialog.m-modal::backdrop,
+dialog.m-sheet::backdrop {
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-standard),
+              overlay var(--duration-base) allow-discrete,
+              display var(--duration-base) allow-discrete;
+}
+dialog.m-modal[open]::backdrop,
+dialog.m-sheet[open]::backdrop { opacity: 1; }
+@starting-style {
+  dialog.m-modal[open],
+  dialog.m-sheet[open],
+  dialog.m-modal[open]::backdrop,
+  dialog.m-sheet[open]::backdrop { opacity: 0; }
+}
+
+/* Scroll reveal with IntersectionObserver: the script adds .is-visible. Hidden only once the
+   script has set data-motion on <html>, so without JavaScript everything is simply there. */
+html[data-motion] .m-reveal {
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-standard),
+              transform var(--duration-slow) var(--ease-standard);
+}
+html[data-motion] .m-reveal.is-visible { opacity: 1; }
+
+/* Tab underline: one line as wide as the tab list, moved and scaled to sit under the selected
+   tab. The script sets --m-tab-x (px) and --m-tab-scale. It jumps for everyone, slides in part 2. */
+.m-tabs { position: relative; }
+.m-tabs__line {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: var(--size-ring);
+  background: var(--color-accent);
+  transform: translateX(var(--m-tab-x, 0)) scaleX(var(--m-tab-scale, 0));
+  transform-origin: left;
+}
+
+/* Count-up: digits of one width, so the number does not jiggle while it runs. */
+.m-count { font-variant-numeric: tabular-nums; }
+
+/* Skeleton: a quiet block for everyone, a moving sheen in part 2. Swap in content with .m-enter. */
+.m-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+/* Cursor glow: a soft light under the pointer. The script sets --m-glow-x and --m-glow-y. */
+.m-glow { position: relative; }
+.m-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle calc(var(--size-shift-lg) * 8) at var(--m-glow-x, 50%) var(--m-glow-y, 50%),
+              color-mix(in srgb, var(--color-accent) 16%, transparent), transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-base) var(--ease-standard);
+}
+@media (hover: hover) and (pointer: fine) {
+  .m-glow:hover::before { opacity: 1; }
+}
+
+/* Marquee: put the items in the track twice (the copy aria-hidden). It moves in part 2. */
+.m-marquee { overflow: hidden; }
+.m-marquee__track { display: flex; width: max-content; }
+
+/* Off-screen or paused by the user: the script sets data-paused on the element or a parent. */
+[data-paused="true"],
+[data-paused="true"] *,
+[data-paused="true"] *::before,
+[data-paused="true"] *::after { animation-play-state: paused !important; }
+
+/* ---------- 2. Movement: only for people who did not ask for less ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes m-rise-in { from { opacity: 0; transform: translateY(var(--m-rise)); } }
+  @keyframes m-sheen { to { transform: translateX(100%); } }
+  @keyframes m-marquee { to { transform: translateX(-50%); } }
+  @keyframes m-drift {
+    from { transform: translateY(var(--size-shift-lg)); }
+    to { transform: translateY(calc(var(--size-shift-lg) * -1)); }
+  }
+
+  .m-enter,
+  .m-stagger > * { animation-name: m-rise-in; }
+
+  /* Button press: down fast, back with the same curve. */
+  /* One rule for both, so an element with m-press and m-ring keeps both. An element whose own rule
+     already has a transition: add transform and outline-offset to that rule instead of these classes. */
+  .m-press,
+  .m-ring {
+    transition: transform var(--duration-fast) var(--ease-standard),
+      outline-offset var(--duration-fast) var(--ease-standard);
+  }
+  .m-press:active { transform: scale(var(--m-press-scale)); }
+
+  .m-lift { transition: transform var(--duration-base) var(--ease-standard); }
+  .m-lift:focus-visible { transform: translateY(var(--m-lift)); }
+  @media (hover: hover) {
+    .m-lift:hover { transform: translateY(var(--m-lift)); }
+  }
+
+  dialog.m-modal { transform: translateY(var(--m-rise)); }
+  dialog.m-sheet { transform: translateY(100%); }
+  dialog.m-modal[open],
+  dialog.m-sheet[open] { transform: none; }
+  @starting-style {
+    dialog.m-modal[open] { transform: translateY(var(--m-rise)); }
+    dialog.m-sheet[open] { transform: translateY(100%); }
+  }
+
+  .m-tabs__line { transition: transform var(--duration-base) var(--ease-move); }
+
+  html[data-motion] .m-reveal { transform: translateY(var(--m-rise)); }
+  html[data-motion] .m-reveal.is-visible { transform: none; }
+
+  /* Chart draw-on: give the <path> pathLength="1". The line draws when .is-visible arrives. */
+  html[data-motion] .m-draw { stroke-dasharray: 1; stroke-dashoffset: 1; }
+  html[data-motion] .m-draw.is-visible {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset var(--duration-slower) var(--ease-move);
+  }
+  /* Chart bars: they grow from the baseline. */
+  html[data-motion] .m-grow {
+    transform: scaleY(0);
+    transform-box: fill-box;
+    transform-origin: bottom;
+    transition: transform var(--duration-slow) var(--ease-standard);
+    transition-delay: calc(var(--m-index, 0) * var(--duration-stagger));
+  }
+  html[data-motion] .m-grow.is-visible { transform: none; }
+
+  .m-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--color-border), transparent);
+    transform: translateX(-100%);
+    animation: m-sheen var(--duration-pulse) var(--ease-move) infinite;
+  }
+
+  .m-marquee__track { animation: m-marquee var(--duration-loop) linear infinite; }
+  .m-marquee:hover .m-marquee__track,
+  .m-marquee:focus-within .m-marquee__track { animation-play-state: paused; }
+
+  /* Page transition between documents: a short cross-fade. Same-origin pages only; browsers that
+     do not know it navigate as always. */
+  @view-transition { navigation: auto; }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: var(--duration-base);
+    animation-timing-function: var(--ease-standard);
+  }
+
+  /* Scroll-driven, where the browser has it; elsewhere the element just stands still. */
+  @supports (animation-timeline: view()) {
+    .m-reveal-scroll {
+      animation: m-rise-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 60%;
+    }
+    /* Parallax done safely: decoration only, a few pixels, never text. */
+    .m-parallax {
+      animation: m-drift linear both;
+      animation-timeline: view();
+    }
+  }
+}
+
+/* ---------- 3. Reduced motion: a fade or nothing, and no information lost ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  /* The stagger becomes one fade: nobody waits for rows. */
+  .m-stagger > * { animation-delay: 0s; }
+
+  /* The marquee stands still and scrolls by hand, so every item can still be read. */
+  .m-marquee { overflow-x: auto; }
+  .m-marquee__track { animation: none; }
+
+  /* No page transition, also when a script calls document.startViewTransition(). */
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+
+  /* Smooth scrolling is movement too. */
+  html { scroll-behavior: auto; }
+}

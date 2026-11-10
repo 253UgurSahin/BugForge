@@ -1,4 +1,4 @@
-"""Tests for forge-secure/codecheck.py (quick first-pass check for risky code)."""
+"""Tests for forge-check/codecheck.py (quick first-pass check for risky code)."""
 
 import ast
 import io
@@ -15,8 +15,8 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # also lets "-m unittest tests.test_codecheck" work
 from _load import load, run_cp1252, symlink  # noqa: E402
 
-codecheck = load("forge-secure", "codecheck")
-SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forge-secure", "codecheck.py")
+codecheck = load("forge-check", "codecheck")
+SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forge-check", "codecheck.py")
 SPEC_SKIP_DIRS = {".git", "node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".next",
                   ".nuxt", "out", "coverage", "storage/framework", ".cache", ".idea", ".vscode"}
 

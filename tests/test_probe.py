@@ -1,4 +1,4 @@
-"""Tests for forge-secure/probe.py.
+"""Tests for forge-check/probe.py.
 
 No real network: a small web server on 127.0.0.1 (port 0, in a thread) plays an app. Each test switches on the
 holes it wants, so every check is shown to fire and to stay quiet. A public-looking target must be refused
@@ -23,7 +23,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `python3 -m unittest tests.test_probe` works
 from _load import ROOT, load, run_cp1252  # noqa: E402
 
-mod = load("forge-secure", "probe")
+mod = load("forge-check", "probe")
 mod.PAUSE = 0  # the pause between requests is for real apps, not for the tests
 
 ALL_CHECKS = ["exposed_file", "dir_listing", "debug_page", "reflected_input", "sql_error", "open_redirect", "cors",
@@ -300,7 +300,7 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("could not reach", err)
 
     def test_command_line(self):
-        script = os.path.join(ROOT, "forge-secure", "probe.py")
+        script = os.path.join(ROOT, "forge-check", "probe.py")
         code, out, _ = run_cp1252(script, "--help")
         self.assertEqual(code, 0)
         for words in ["Usage:", "Exit codes:", "--paths", "--max-requests", "--fail-on"]:

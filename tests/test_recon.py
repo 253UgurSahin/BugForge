@@ -1,4 +1,4 @@
-"""Tests for forge-recon's template, recon-map.md.
+"""Tests for forge-research recon's template, recon-map.md.
 
 The recon gate checks forge-work/recon.md with forge/doccheck.py against this template: a recon.md
 fails while it still has one of the template's own placeholders, of any length and also when it is
@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittes
 from _load import ROOT, load  # noqa: E402
 
 doccheck = load("forge", "doccheck")
-TEMPLATE = os.path.join(ROOT, "forge-recon", "recon-map.md")
+TEMPLATE = os.path.join(ROOT, "forge-research", "recon-map.md")
 GATE = os.path.join(ROOT, "forge", "phasecheck.json")
 PLACEHOLDER = re.compile(r"\{\{.*?\}\}", re.S)
 COMMENT = re.compile(r"<!--.*?-->", re.S)
@@ -57,7 +57,7 @@ class ReconTemplateTests(unittest.TestCase):
 
     def test_the_recon_gate_checks_recon_md_against_this_template(self):
         checks = [entry["check"] for entry in json.loads(read(GATE))["recon"]]
-        self.assertTrue(any(check[:2] == ["doc", "forge-work/recon.md"] and "../forge-recon/recon-map.md" in check
+        self.assertTrue(any(check[:2] == ["doc", "forge-work/recon.md"] and "../forge-research/recon-map.md" in check
                             for check in checks), checks)
 
     def test_filled_in_it_passes(self):

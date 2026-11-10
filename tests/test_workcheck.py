@@ -1,5 +1,5 @@
 """Tests for forge/workcheck.py, run on its own: the feature list as recon, plan and build need it, tokens that
-are still the template's, the end-to-end specs, the screenshots forge-diff compared and the app's new name.
+are still the template's, the end-to-end specs, the screenshots forge-check diff compared and the app's new name.
 The gate's use of each is tested in test_phasecheck.py. Every test works in its own folder."""
 
 import contextlib
@@ -51,9 +51,9 @@ class FeatureTests(Work):
         write(self.root, "features.csv", FEATURES.replace("must,yes", "must,no"))
         self.assertEqual(self.check("features", "features.csv", "--theirs")[0], 1)
         self.assertEqual(self.check("features", "features.csv")[0], 0)  # idea mode: the user's own
-        write(self.root, "features.csv", read(os.path.join(ROOT, "forge-recon", "features.csv")))
+        write(self.root, "features.csv", read(os.path.join(ROOT, "forge-research", "features.csv")))
         code, check, _ = self.check("features", "features.csv")
-        self.assertIn("only example rows of ../forge-recon/features.csv", check["what"])
+        self.assertIn("only example rows of ../forge-research/features.csv", check["what"])
 
     def test_built(self):
         write(self.root, "features.csv", FEATURES)

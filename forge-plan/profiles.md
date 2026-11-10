@@ -3,14 +3,14 @@
 The one reference for the four stack profiles and the PWA toggle, used by forge-plan, -build, -test
 and -pack. Everything runs in the user's own compose stack: no managed hosting or database.
 
-**Versions checked 27 October 2026** (stable or LTS, and forge-pack's image tags). Recheck after
+**Versions checked 27 October 2026** (stable or LTS, and forge-build pack's image tags). Recheck after
 three months: `npm view next version`, `pip index versions django`, `composer show -a laravel/framework`.
 
 ## How to pick a profile
 
 Ask only what the user has not already told you, one question at a time:
 
-1. Is there an existing codebase? Use the profile `python3 ../forge-audit/detect.py .` names: forge
+1. Is there an existing codebase? Use the profile `python3 ../forge-check/detect.py .` names: forge
    does not move an app to another stack. It names `none` (Rails, Flask, ...): stop and tell the user.
 2. Does whoever maintains it know PHP, Python or TypeScript already? Prefer that one.
 3. Does it need accounts, a database, payments or emails? If not: static.
@@ -165,7 +165,7 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
 ## next: Node/TypeScript + Postgres (Next.js, self-hosted)
 
 - **Versions**: Next.js 16.4.3 with React 19 and the App Router, Node 24 LTS `node:24-alpine`
-  (maintenance LTS until 30 April 2028, the tag forge-pack's templates use), PostgreSQL 18
+  (maintenance LTS until 30 April 2028, the tag forge-build pack's templates use), PostgreSQL 18
   `postgres:18-alpine`, Drizzle ORM 0.45 with drizzle-kit 0.31 and the `pg` driver 8, Better Auth
   1.7, zod 4 for input validation.
 - **Start**: `npx create-next-app@latest app` (TypeScript, App Router, Tailwind CSS 4), then
@@ -188,7 +188,7 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   Behind a reverse proxy, set Better Auth's `advanced.ipAddress` proxy settings, or every visitor
   shares one rate-limit bucket.
 - **Database**: Drizzle schema in TypeScript; `npx drizzle-kit generate` writes SQL to `drizzle/`,
-  which `migrate()` in `instrumentation.ts` runs when the server starts (forge-pack has it). The
+  which `migrate()` in `instrumentation.ts` runs when the server starts (forge-build pack has it). The
   PostgreSQL rules above go in a custom migration (`npx drizzle-kit generate --custom`). Times:
   `timestamp({ withTimezone: true })`; money: `integer` cents. Better Auth's tables: comment out
   `import "server-only"` in the modules lib/auth.ts imports (its CLI refuses it), run its CLI at the
@@ -238,7 +238,7 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
 - **Stripe**: a secret key never lives in a browser bundle, so Stripe Payment Links (made in the
   Dashboard, test mode), fulfilled by hand. Reacting to a payment needs a webhook: a server profile.
 - **Keep on**: the CSP, `X-Content-Type-Options`, `Referrer-Policy` and `frame-ancestors` headers in
-  forge-pack's nginx.conf; the framework's escaping; no source maps in production unless asked for.
+  forge-build pack's nginx.conf; the framework's escaping; no source maps in production unless asked for.
 
 **Classic mistakes**
 1. API keys in `VITE_` variables: every `VITE_` variable ends up in the JavaScript anyone can read.

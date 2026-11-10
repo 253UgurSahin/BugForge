@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Find text the clone shares with the original: runs of 6 or more words in a row.
 
-Clean-room proof for forge-build: every word of the clone is written fresh, so 6+ words in a row
+Clean-room proof for forge-build build: every word of the clone is written fresh, so 6+ words in a row
 that it shares with the original's pages are their copy, or written from memory of it. Labels
 that match by what they do ("Add a plant") are shorter. Japanese, Chinese and Thai are written
 without spaces, so they are compared clause by clause: the check is weak there. The original's
@@ -101,11 +101,11 @@ def load_original(size):
                     for i in range(len(found) - size + 1):
                         runs.setdefault(tuple(found[i:i + size]), set()).add(name[:-4])
     if not kept and not os.path.isdir(TEXT_DIR):
-        raise ValueError("there is no %s: forge-recon keeps the original's text there (its Step 2). With no "
+        raise ValueError("there is no %s: forge-research recon keeps the original's text there (its Step 2). With no "
                          "page saved (a secondhand recon) there is nothing to compare: say so at the checkpoint"
                          % TEXT_DIR)
     if not kept:
-        raise ValueError("%s holds no text of the original: save its pages again as forge-recon Step 2 says (it "
+        raise ValueError("%s holds no text of the original: save its pages again as forge-research recon Step 2 says (it "
                          "deletes them after recon.md) and run pagetext.py on them, or ask the user" % TEXT_DIR)
     return runs
 

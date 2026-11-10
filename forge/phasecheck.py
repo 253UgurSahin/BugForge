@@ -11,7 +11,7 @@ Usage:
 
 --since TIME: the phase's report must be newer than TIME, the last go before the phase, so a report from
 before test's fixes, from the build or from an earlier round does not count: test-plan.md (test),
-parity.md (diff; also newer than bugs.md and features.csv, which the fix loop and forge-build change),
+parity.md (diff; also newer than bugs.md and features.csv, which the fix loop and forge-build build change),
 security.md (secure), audit.md, inspect.md and improve.md, all in forge-work/.
 --until TIME: the phase's own go, once it is done: a bugs.md or features.csv changed later is a later phase's.
 --mode MODE: clone, idea or improve, for the checks that differ by mode (where test's specs are).
@@ -155,7 +155,7 @@ def accepted(root, name):
 
 def check_scan(root, report, script, *args):
     """A scanner, as check_run runs it. Its exit 1 passes too when REPORT names risks the user accepted:
-    forge-secure lets the user accept one specific risk (The gate). Secrets never: they use check_run."""
+    forge-check secure lets the user accept one specific risk (The gate). Secrets never: they use check_run."""
     result = run_script(root, script, *args)
     answer = ran(*result)
     if result[0] != 1 or not accepted(root, report):
@@ -164,14 +164,14 @@ def check_scan(root, report, script, *args):
 
 
 def check_counts(root, name):
-    """The Counts line of forge-secure's report. With Verdict: PASS, a critical or high finding counted
-    there needs the user's acceptance under ## Accepted risks (forge-secure, The gate)."""
+    """The Counts line of forge-check secure's report. With Verdict: PASS, a critical or high finding counted
+    there needs the user's acceptance under ## Accepted risks (forge-check secure, The gate)."""
     text = UNSEEN.sub("", read_text(root, name))
     lines = re.findall(r"(?im)^[ \t>*_]*counts[ \t*_]*:(.*)$", text)
     numbers = [re.search(r"(\d+)\s*%s" % word, lines[0]) if len(lines) == 1 else None
                for word in ("critical", "high")]
     if not all(numbers):
-        return False, "%s needs one line `Counts: 0 critical, 0 high, 1 medium, 0 low`, as in forge-secure's " \
+        return False, "%s needs one line `Counts: 0 critical, 0 high, 1 medium, 0 low`, as in forge-check secure's " \
                       "report (found: %s)" % (name, " / ".join(line.strip() for line in lines)[:80] or "none")
     serious = sum(int(number.group(1)) for number in numbers)
     if serious and re.search(r"(?m)^Verdict: PASS[ \t]*$", text) and not accepted(root, name):
@@ -191,7 +191,7 @@ def check_fresh(root, name, since, until, *inputs):
     later = [other for other in inputs if os.path.isfile(os.path.join(root, other))
              and written < os.path.getmtime(os.path.join(root, other)) <= end]
     if later:
-        return False, "%s is older than %s, which the fix loop or forge-build changed after it. Run the " \
+        return False, "%s is older than %s, which the fix loop or forge-build build changed after it. Run the " \
                       "phase's skill again from its first step, so it writes a new one" % (name, " and ".join(later))
     also = " and than " + " and ".join(inputs) + (" at its go (%s)" % until if until else "") if inputs else ""
     return True, "%s is newer than the last go (%s)%s" % (name, since, also)
@@ -216,7 +216,7 @@ def mode_of(root):
 
 
 def profile_of(root):
-    """The profile on plan.md's one Profile: line, or None: no plan.md (forge-pack on its own), no line."""
+    """The profile on plan.md's one Profile: line, or None: no plan.md (forge-build pack on its own), no line."""
     try:
         found = re.findall(r"(?im)^[ \t>#*_]*profile[ \t*_]*:(.*)$",
                            UNSEEN.sub("", read_text(root, "forge-work", "plan.md")))

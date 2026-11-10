@@ -1,4 +1,4 @@
-"""Tests for forge-dashboard/dashcheck.py: each rule on the ## Numbers table fires and does not fire,
+"""Tests for forge-design/dashcheck.py: each rule on the ## Numbers table fires and does not fire,
 the exit codes 0, 1 and 2, the JSON shape, and that a table it cannot read is never a pass."""
 
 import contextlib
@@ -13,8 +13,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252  # noqa: E402
 
-dashcheck = load("forge-dashboard", "dashcheck")
-SCRIPT = os.path.join(ROOT, "forge-dashboard", "dashcheck.py")
+dashcheck = load("forge-design", "dashcheck")
+SCRIPT = os.path.join(ROOT, "forge-design", "dashcheck.py")
 HEADER = "| number | definition | source | unit | period | compared with | form |\n| --- | --- | --- | --- | --- | --- | --- |\n"
 GOOD = [
     "| Revenue | paid orders, refunds taken off | `orders` where status = paid | EUR | this month | last month | tile + line |",
@@ -240,7 +240,7 @@ class SkillAgrees(unittest.TestCase):
     """The table the skill tells Claude to write is the table this script reads."""
 
     def test_the_skill_shows_the_same_columns(self):
-        with open(os.path.join(ROOT, "forge-dashboard", "SKILL.md"), encoding="utf-8") as handle:
+        with open(os.path.join(ROOT, "forge-design", "steps", "dashboard.md"), encoding="utf-8") as handle:
             skill = handle.read()
         self.assertIn("| " + " | ".join(dashcheck.COLUMNS) + " |", skill)
         example = skill[skill.index("```markdown"):].split("```")[1].replace("markdown\n", "", 1)

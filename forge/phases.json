@@ -1,0 +1,17 @@
+{
+  "_about": "The phases of forge, read by gate.py. modes: the phases of each mode, in order. optional: may be skipped with the user's reason; secure never. added: newer than some projects, so a state from before them records neither and is not damaged. asks: auto mode never records these, the go is the user's own each time. parts: the skill that holds each phase as a part (its steps are in ../forge-<skill>/steps/<phase>.md); a phase that is not listed is a skill of its own, forge-<phase>.",
+  "modes": {
+    "clone": ["recon", "compare", "plan", "design", "build", "dashboard", "motion", "test", "diff", "brand", "launch", "secure", "pack"],
+    "idea": ["compare", "plan", "design", "build", "dashboard", "motion", "test", "brand", "launch", "secure", "pack"],
+    "improve": ["audit", "inspect", "improve", "test", "secure"]
+  },
+  "optional": ["compare", "inspect", "dashboard", "motion"],
+  "added": ["dashboard", "motion"],
+  "asks": ["secure"],
+  "parts": {
+    "research": ["recon", "compare"],
+    "design": ["design", "brand", "dashboard", "motion"],
+    "build": ["build", "pack"],
+    "check": ["test", "diff", "secure", "audit", "inspect"]
+  }
+}

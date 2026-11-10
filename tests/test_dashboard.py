@@ -1,4 +1,4 @@
-"""Tests for forge-dashboard/dashboard.example.html: the example page is self-contained (no external
+"""Tests for forge-design/dashboard.example.html: the example page is self-contained (no external
 request of any kind), every chart in it has a title, and its example numbers add up."""
 
 import os
@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT  # noqa: E402
 
-PAGE = os.path.join(ROOT, "forge-dashboard", "dashboard.example.html")
+PAGE = os.path.join(ROOT, "forge-design", "dashboard.example.html")
 # Where a page can ask for something from outside: src, href and the like, url() and @import in CSS.
 EXTERNAL = re.compile(r"""(?:\b(?:src|href|srcset|action|poster|data|xlink:href)\s*=\s*["']?\s*|url\(\s*["']?\s*|@import\s+["']?\s*)"""
                       r"""(?:https?:)?//""", re.IGNORECASE)

@@ -1,4 +1,4 @@
-"""Tests for forge-inspect/getpage.py.
+"""Tests for forge-check/getpage.py.
 
 No real network: the one GET goes to a small web server on 127.0.0.1 that runs in a thread, and the
 DNS and certificate errors are made up with mock.
@@ -23,7 +23,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `python3 -m unittest tests.test_getpage` works
 from _load import load, run_cp1252  # noqa: E402
 
-mod = load("forge-inspect", "getpage")
+mod = load("forge-check", "getpage")
 
 PAGE = "<!doctype html><html lang='en'><head><title>A page</title></head><body><h1>Hi</h1></body></html>"
 BIG_BODY = 64 * 1024 * 1024  # bytes: far more than socket buffers hold

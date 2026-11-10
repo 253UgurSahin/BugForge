@@ -1,4 +1,4 @@
-"""Tests for forge-test/walkcheck.py: every rule fires and stays quiet, one problem at several widths
+"""Tests for forge-check/walkcheck.py: every rule fires and stays quiet, one problem at several widths
 is one finding, the budget, the bug blocks (which bugs.py must read), and the exit codes 0, 1 and 2."""
 
 import contextlib
@@ -14,9 +14,9 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252  # noqa: E402
 
-walkcheck = load("forge-test", "walkcheck")
-bugs = load("forge-test", "bugs")
-SCRIPT = os.path.join(ROOT, "forge-test", "walkcheck.py")
+walkcheck = load("forge-check", "walkcheck")
+bugs = load("forge-check", "bugs")
+SCRIPT = os.path.join(ROOT, "forge-check", "walkcheck.py")
 WIDTHS, SCHEMES = [390, 768, 1440], ["light", "dark"]
 ROUTES = [{"name": "S01-home", "path": "/", "as": None}, {"name": "S03-dashboard", "path": "/dashboard", "as": "alice"}]
 

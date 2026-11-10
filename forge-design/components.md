@@ -6,10 +6,10 @@ Icons: <Lucide (ISC) | Heroicons (MIT) | Tabler Icons (MIT)>, as <package | SVG 
 
 ## Theme
 
-File: <the theme file for the profile, from forge-design Step 3>
+File: <the theme file for the profile, from forge-design design Step 3>
 Command: python3 ../forge-design/theme.py forge-work/design/tokens.json --tailwind <4|3|no> --write <the file above>
 
-Values live only in `forge-work/design/tokens.json`. forge-build writes the file above from it with
+Values live only in `forge-work/design/tokens.json`. forge-build build writes the file above from it with
 the command above, which follows the mapping below (names only, so it never goes stale). After any
 change to tokens.json, run it again, then `python3 ../forge-design/contrast.py
 forge-work/design/tokens.json`. Components use these variables, never raw hex or px.
@@ -54,7 +54,7 @@ Animations sit inside `@media (prefers-reduced-motion: no-preference)`.
 
 ## Fonts and icons
 
-- `font.sans` in tokens.json (so `--font-sans`) holds: <the value forge-design Step 4 gives this profile>
+- `font.sans` in tokens.json (so `--font-sans`) holds: <the value forge-design design Step 4 gives this profile>
 - Font files and their licence file live in: <path>
 - No font or icon CDN. After scaffolding, this search of the sources (binary files, dependencies
   and build output skipped) finds nothing:
@@ -62,11 +62,11 @@ Animations sit inside `@media (prefers-reduced-motion: no-preference)`.
 
 ## Original brand colours
 
-Clone mode only (idea mode: write none). Never used; listed for forge-brand's sweep: their accent,
+Clone mode only (idea mode: write none). Never used; listed for forge-design brand's sweep: their accent,
 a second brand colour, and the tinted colours their text, lines or backgrounds had.
 
 - <#hex> (their accent)
 
 ## Components
 
-One block per component, as in forge-design Step 5.
+One block per component, as in forge-design design Step 5.
