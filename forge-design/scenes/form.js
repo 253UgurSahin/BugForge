@@ -3,10 +3,12 @@
  *
  * Families of thin luminous strands run along a tube that follows a knot from the torus family,
  * and a slow field of noise bends the whole thing so it never reads as a textbook knot. It breathes
- * (one breath in about 8 seconds), turns once in about 75 seconds and leans a few degrees toward
- * the pointer. Near strands are wide and bright, far ones thin, dim and cooler, so it reads as a
- * volume. A few pulses of light run along strands and a handful of nodes glow where strands cross.
- * On a dark page it glows (additive light); on a light page it becomes an ink drawing.
+ * (one breath in about 8 seconds), turns once in about 75 seconds and leans up to about 7 degrees
+ * toward the pointer. Near strands are wide and bright, far ones thin, dim and cooler, so it reads
+ * as a volume. A few pulses of light run along strands and a handful of nodes glow where strands
+ * cross. On a dark page it glows (additive light). On a light page it becomes an ink drawing: near
+ * strands in a heavier, deeper ink, far ones thinner in the same colour, the pulses short dark
+ * strokes that travel along a strand, the nodes small open rings of ink.
  *
  *   import { mount } from "./scenes/form.js";
  *   const form = mount(document.querySelector(".hero-scene"), { side: "right" });
@@ -17,23 +19,28 @@
  * Options (all optional; stage.js options such as quality pass straight through):
  *   side       "right" (default), "left" or "centre". On a wide screen the form sits on that side and
  *              runs off the edge, leaving the other side calm for a headline. On a phone (narrow
- *              container) it always sits low and large under the text, and dimmer.
- *   scale      1. Size of the form against that layout.
- *   strands    160. Strands at high quality; medium draws 75 percent, low half.
+ *              container) it always sits low and large and dimmer: its upper arcs pass behind the
+ *              text at about 40 percent, the rest fills the bottom edge.
+ *   scale      1. Size of the form against that layout, kept within 0.3 to 3.
+ *   strands    160. Strands at high quality, kept within 12 to 400; medium draws 75 percent, low half.
  *   speed      1. Speed of turning, breathing and pulses. 0 holds the motion (the pointer still works).
  *   seed       1. Any number: another bend of the noise, another layout of strands and nodes.
  *   shapes     ["ring", "knot", "coil"]. The three shapes setProgress walks through, picked from
  *              "ring" (a wide band that goes round twice and crosses itself), "knot" (a trefoil
- *              rope), "coil" (a tight coil round a ring), "star" (a five-lobed knot) and "bloom"
+ *              rope), "coil" (a loose coil of nine round turns about a ring), "star" (a five-lobed knot) and "bloom"
  *              (a wide seven-lobed flower). Every shape winds twice round its axis, so any two
- *              morph into each other without a seam.
+ *              morph into each other without a seam. Between two shapes the tube draws in a little
+ *              and the line changes mostly in the middle, so one shape's windings never crowd
+ *              onto the other's wide tube.
  *   intensity  1. Brightness on dark, ink strength on light.
  *   stillTime  6. The moment the reduced-motion still shows.
  *
  * setProgress(p)    0..1, eased: morphs through the three shapes (pair it with stage.progressOf).
  * setData(values)   a list of numbers 0..1 spread along the form, start to end of the loop: the tube
- *                   bulges and brightens where they are high and pinches and dims where they are low;
- *                   [] or null takes it back. Eased.
+ *                   bulges (up to 1.6 times) and brightens where they are high and pinches and dims
+ *                   where they are low; [] or null takes it back. Eased. The loop has 32 places;
+ *                   each takes the highest value of the part of the list it covers, so a single
+ *                   peak in a long list is never lost.
  * setPointer(x, y)  -1..1, y up: lean toward that point as the real pointer would.
  * pause(), resume(), destroy(), stage: as stage.js describes.
  *
@@ -41,10 +48,10 @@
  * until the first frame and again when WebGL is missing. Make it by mounting with { still: true }
  * at the size of the hero and taking a screenshot: that is the reduced-motion frame.
  *
- * Cost: one draw call of camera-facing strips and one of a dozen points. High: 160 strands x 460
- * segments (about 150k vertices, each reading 3D simplex noise twice) with a soft glow; medium
- * 120 x 360; low 80 x 260 with a narrower glow. No textures, no render targets. It pauses off
- * screen and in a hidden tab (stage.js).
+ * Cost: one draw call of camera-facing strips and one of 10, 12 or 14 points (low, medium, high).
+ * High: 160 strands x 460 segments (about 150k vertices, each reading 3D simplex noise twice) with
+ * a soft glow; medium 120 x 360; low 80 x 260 with a narrower glow. No textures, no render targets.
+ * It pauses off screen and in a hidden tab (stage.js).
  */
 import * as THREE from "three";
 import { createStage } from "./stage.js";
@@ -59,7 +66,7 @@ import { stageUniforms, common, simplex3D, grain } from "./glsl.js";
 const SHAPES = {
   ring: { knot: [2, 1, 1.05, 0.45], tube: [0.3, 0.08, 0, 1], follow: 0, bend: 1.0, tilt: 0.5 },
   knot: { knot: [2, 3, 0.98, 0.46], tube: [0.25, 0.25, 2, 0], follow: 0, bend: 1.0, tilt: 0.45 },
-  coil: { knot: [2, 36, 1.25, 0.16], tube: [0.05, 0.05, 1, 0], follow: 1, bend: 0.35, tilt: 0.8, reach: 0.5 },
+  coil: { knot: [2, 18, 1.32, 0.3], tube: [0.14, 0.14, 1, 0], follow: 1, bend: 0.35, tilt: 0.62, reach: 0.45 },
   star: { knot: [2, 5, 1.0, 0.42], tube: [0.17, 0.17, 3, 0], follow: 0, bend: 0.8, tilt: 0.5 },
   bloom: { knot: [2, 7, 0.95, 0.5], tube: [0.12, 0.12, 1, 0], follow: 0, bend: 0.8, tilt: 0.35 },
 };
@@ -71,7 +78,9 @@ ${stageUniforms}
 ${common}
 ${simplex3D}
 uniform vec4 uKnot[3], uTube[3];
-uniform vec3 uWeights;   // how much of each shape: they add up to 1
+uniform vec3 uWeights;   // how much of each shape's line: they add up to 1
+uniform vec3 uTubeWeights; // the same for the tube round it, which may change ahead of the line
+uniform float uNarrow;   // 1, less while two shapes cross: the tube draws in so the two do not tangle
 uniform vec3 uFollow;    // per shape: 1 when the frame follows the winding
 uniform float uData[${DATA_SLOTS}], uSwell;   // uSwell: 0 without data
 uniform float uClock, uBend;                  // uClock: seconds times speed
@@ -88,7 +97,7 @@ float dataAt(float s) {
 // How far the tube swells with the data at s: pinched where low, bulging where high.
 float dataSwell(float s) {
   float level = smoothstep(0.05, 0.95, dataAt(s));
-  return mix(1.0, mix(0.15, 2.4, level), uSwell);
+  return mix(1.0, mix(0.35, 1.6, level), uSwell);
 }
 // The noise is read on a small circle that goes round once per breath (8 seconds), so the bending
 // moves and comes back to where it was.
@@ -116,7 +125,7 @@ vec3 strandPoint(float s, vec4 strand, out vec3 skin) {
     ddZ -= w * k.w * k.y * k.y * sb;
     turn += w * k.x;
     wind += w * k.y * uFollow[i];
-    tube += w * uTube[i];
+    tube += uTubeWeights[i] * uTube[i];
   }
   vec3 radial = vec3(cos(turn * t), sin(turn * t), 0.0), across = vec3(-radial.y, radial.x, 0.0);
   vec3 c = rho * radial + vec3(0.0, 0.0, z);
@@ -139,10 +148,12 @@ vec3 strandPoint(float s, vec4 strand, out vec3 skin) {
   c += (radial * n.x * 0.2 + vec3(0.0, 0.0, n.y * 0.05)) * uBend;
   // Breathing: everything swells a little, once every 8 seconds; data swells it where it is high.
   float breath = sin(uClock * TAU / 8.0);
-  float swell = (1.0 + 0.07 * breath + 0.09 * n.z) * dataSwell(s);
-  // Never wider than the bend of the line allows: a tube wider than its turn folds into spikes.
-  float widest = max(tube.x, tube.y) * swell;
-  swell *= min(1.0, 0.7 / max(curvature * widest, 0.0001));
+  float swell = (1.0 + 0.07 * breath + 0.09 * n.z) * dataSwell(s) * uNarrow;
+  // Never wider than the bend of the line allows: a tube wider than its turn folds into spikes. A
+  // smooth minimum, not a hard one, so the width never turns a corner between two neighbours, with
+  // room left for the extra bend the noise adds.
+  float limit = 0.6 / max(curvature * max(tube.x, tube.y), 0.0001);
+  swell = swell / pow(1.0 + pow(swell / limit, 4.0), 0.25);
   // Round the tube: the strand's angle grows along the loop, so it winds as a helix. The section is
   // an ellipse (a flat band for the ring) that may itself turn along the loop.
   float angle = strand.x + t * (tube.z + strand.z);
@@ -155,8 +166,9 @@ vec3 strandPoint(float s, vec4 strand, out vec3 skin) {
 // Calm where the headline is: fade the form out toward the side of the screen away from it.
 const calm = `
 uniform vec4 uCalm;      // xy: toward where the form sits on screen, zw: the fade from calm to full
+uniform float uCalmLow;  // how much is left on the calm side
 float calmAt(vec2 pixel) {
-  return mix(0.05, 1.0, smoothstep(uCalm.z, uCalm.w, dot(pixel / uResolution - 0.5, uCalm.xy) + 0.5));
+  return mix(uCalmLow, 1.0, smoothstep(uCalm.z, uCalm.w, dot(pixel / uResolution - 0.5, uCalm.xy) + 0.5));
 }`;
 
 // A pulse: a bright head and a tail behind it, x in loop fractions behind (negative) or ahead.
@@ -209,7 +221,9 @@ void main() {
   float taper = sqrt(sin(PI * aLocal.x));
   float level = smoothstep(0.1, 0.9, dataAt(s));
   float data = mix(1.0, mix(0.45, 2.0, level), uSwell);
-  float pixels = uWidth * data * (1.0 + 0.7 * pulse) * (1.0 + 0.6 * lead) * mix(1.75, 0.6, far) * taper
+  // On light a pulse is a heavier stroke of ink, so it swells more than the glow does on dark.
+  float pixels = uWidth * data * (1.0 + mix(1.8, 0.7, uDark) * pulse) * (1.0 + 0.6 * lead)
+               * mix(mix(2.1, 1.75, uDark), mix(0.5, 0.6, uDark), far) * taper
                * projectionMatrix[1][1] * uResolution.y * 0.5 / depth;
   float core = max(pixels, uPixelRatio);
   float halo = uDark * uHalo * uPixelRatio * (1.0 + 1.5 * pulse) * mix(1.2, 0.6, far);
@@ -218,10 +232,12 @@ void main() {
   gl_Position = c0;
   vAcross = aLocal.y * extent;
   vCore = core * 0.5;
-  // Brighter where the surface turns away (its normal across the view): the rims of the tube.
+  // Brighter where the surface turns away (its normal across the view): the rims of the tube. On
+  // light the back keeps more of its ink: thinner lines of the same colour, not a pale haze.
   vec3 normal = normalize(normalMatrix * skin);
   float rim = 1.0 - abs(dot(normal, normalize(-m0.xyz)));
-  vAlpha = uIntensity * (pixels / core) * mix(0.3, 1.0, rim * rim) * mix(1.0, 0.16, far) * (1.0 + 0.5 * lead)
+  vAlpha = uIntensity * (pixels / core) * mix(mix(0.55, 0.3, uDark), 1.0, rim * rim)
+         * mix(1.0, mix(0.34, 0.16, uDark), far) * (1.0 + 0.5 * lead)
          * mix(1.0, mix(0.06, 2.0, level), uSwell)
          * smoothstep(0.0, 0.16, aLocal.x) * smoothstep(1.0, 0.84, aLocal.x) * endOn;
   vKind = aSpan.z;
@@ -247,14 +263,17 @@ void main() {
   float haloWidth = max(uHalo, 0.01) * uPixelRatio * (1.0 + 1.5 * pulse) * mix(1.2, 0.6, vFar);
   float glow = uDark * (0.18 + 0.5 * pulse) * exp(-d * d / (haloWidth * haloWidth)) * step(0.01, uHalo);
   float calm = calmAt(gl_FragCoord.xy);
-  // On light the second accent is a little deeper, so a pale pink or orange stays ink and not candy.
-  vec3 ink = vKind > 0.5 ? uAccent2 * mix(0.82, 1.0, uDark) : uAccent;
-  // The far side recedes: darker and cooler on dark (toward the muted text colour), greyer on light.
-  ink = mix(ink, mix(uMuted * 0.5, uMuted, 1.0 - uDark), vFar * mix(0.4, 0.55, uDark));
-  // On dark, a pulse runs white-hot toward the text colour; on light it is a darker, denser stroke.
-  vec3 color = mix(ink, mix(ink * 0.6, uText, uDark), min(pulse * mix(0.6, 0.85, uDark), 1.0));
-  float alpha = (lineCover + glow) * vAlpha * calm * (1.0 + pulse * mix(1.6, 6.0, uDark))
-              * (1.0 + vKind * mix(0.9, 0.5, uDark));
+  vec3 ink = vKind > 0.5 ? uAccent2 : uAccent;
+  // The far side recedes. On dark it turns darker and cooler, toward the muted text colour. On light
+  // it keeps its colour and the near side gets the weight: a deeper ink in front.
+  ink = mix(ink, uMuted * 0.5, vFar * 0.55 * uDark);
+  ink *= mix(mix(0.7, 1.0, vFar), 1.0, uDark);
+  // On dark, a pulse runs white-hot toward the text colour; on light it is a dark, heavy stroke.
+  vec3 color = mix(ink, mix(ink * 0.35, uText, uDark), min(pulse * mix(0.9, 0.85, uDark), 1.0));
+  // The second accent is one thread in seven: on light it stays a little lighter than the first, so
+  // it reads as an occasional thread and not the heaviest line.
+  float alpha = (lineCover + glow) * vAlpha * calm * (1.0 + pulse * mix(2.5, 6.0, uDark))
+              * (1.0 + vKind * mix(-0.1, 0.5, uDark));
   gl_FragColor = vec4(color, min(alpha, 1.0));
   #include <colorspace_fragment>
   gl_FragColor.rgb += dither(gl_FragCoord.xy) * gl_FragColor.a;
@@ -291,12 +310,12 @@ void main() {
   float core = 1.0 - smoothstep(1.8 * px, 2.8 * px, r);
   float light = core + 0.85 * exp(-r * r / (40.0 * px * px)) + 0.3 * exp(-r * r / (260.0 * px * px));
   light *= 1.0 - smoothstep(vSize * 0.4, vSize * 0.5, r);
-  // Light: a solid ink dot of about 6 pixels with a darker middle.
-  float inkDot = 1.0 - smoothstep(2.5 * px, 3.2 * px, r);
-  float inkCore = 1.0 - smoothstep(0.6 * px, 1.4 * px, r);
+  // Light: an open ring of ink about 9 pixels across, soft at its edges, round a small dot.
+  float ring = 1.0 - smoothstep(0.9 * px, 1.7 * px, abs(r - 0.27 * vSize));
+  float inkDot = max(ring, 0.8 * (1.0 - smoothstep(0.9 * px, 1.7 * px, r)));
   float calm = calmAt(gl_FragCoord.xy);
-  float alpha = mix(inkDot * 0.95, min(light, 1.0), uDark) * vAlpha * calm * min(uIntensity * 2.2, 1.0);
-  vec3 color = mix(mix(uAccent, uAccent * 0.45, inkCore), mix(uAccent, uText, 0.35 + 0.6 * core), uDark);
+  float alpha = mix(inkDot * 0.9, min(light, 1.0), uDark) * vAlpha * calm * min(uIntensity * 2.2, 1.0);
+  vec3 color = mix(uAccent * 0.5, mix(uAccent, uText, 0.35 + 0.6 * core), uDark);
   gl_FragColor = vec4(color, alpha);
   #include <colorspace_fragment>
   gl_FragColor.rgb += dither(gl_FragCoord.xy) * alpha;
@@ -337,14 +356,20 @@ function makeNodes(strands, wanted, seed) {
   const rand = random(seed + 17);
   const a = strands.filter((s) => s.family === 0), b = strands.filter((s) => s.family === 1);
   const nodes = [];
-  for (let tries = 0; tries < 600 && nodes.length < wanted && a.length && b.length; tries++) {
+  const gap = 0.5 / wanted;   // spread them along the loop
+  for (let tries = 0; tries < 2000 && nodes.length < wanted && a.length && b.length; tries++) {
     const i = a[Math.floor(rand() * a.length)], j = b[Math.floor(rand() * b.length)];
-    // angle_i + 2 pi s turns_i = angle_j + 2 pi s turns_j + 2 pi m, solved for s.
-    const m = Math.floor(rand() * 4) - 1;
-    const s = (m - (i.angle - j.angle) / (Math.PI * 2)) / (i.turns - j.turns);
-    const inside = (k) => s > k.start + k.length * 0.1 && s < k.start + k.length * 0.45; // drawn at every reach
-    if (!inside(i) || !inside(j)) continue;
-    const gap = 0.6 / wanted;   // spread them along the loop
+    // Only where both strands are drawn at every reach and away from their faded ends.
+    const lo = Math.max(i.start + i.length * 0.15, j.start + j.length * 0.15);
+    const hi = Math.min(i.start + i.length * 0.36, j.start + j.length * 0.36);
+    if (hi <= lo) continue;
+    // angle_i + 2 pi s turns_i = angle_j + 2 pi s turns_j + 2 pi m, solved for s: every crossing of
+    // the pair in [lo, hi] has a whole m between the values at the two ends; take one at random.
+    const dt = i.turns - j.turns, da = (i.angle - j.angle) / (Math.PI * 2);
+    const m0 = lo * dt + da, m1 = hi * dt + da;
+    const first = Math.ceil(Math.min(m0, m1)), last = Math.floor(Math.max(m0, m1));
+    if (last < first) continue;
+    const s = (first + Math.floor(rand() * (last - first + 1)) - da) / dt;
     if (nodes.some((node) => Math.abs(((node.s - s) % 1 + 1.5) % 1 - 0.5) < gap)) continue;
     nodes.push({ strand: i, s, seed: rand() });
   }
@@ -395,6 +420,8 @@ export function mount(container, options = {}) {
   if (stage.failed) return stage.handle();
   const num = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
   const speed = Math.max(0, num(o.speed, 1)), seed = num(o.seed, 1);
+  const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
+  const strandCount = clamp(Math.round(num(o.strands, 160)), 12, 400), scale = clamp(num(o.scale, 1), 0.3, 3);
   const shapes = [0, 1, 2].map((i) => SHAPES[(o.shapes || [])[i]] || SHAPES[["ring", "knot", "coil"][i]])
     .map((shape) => ({ reach: 1, ...shape, thick: Math.max(shape.tube[0], shape.tube[1]) }));
   const seedRand = random(seed + 5);
@@ -404,7 +431,8 @@ export function mount(container, options = {}) {
     uKnot: { value: shapes.map((s) => new THREE.Vector4(...s.knot)) },
     uTube: { value: shapes.map((s) => new THREE.Vector4(...s.tube)) },
     uFollow: { value: new THREE.Vector3(...shapes.map((s) => s.follow)) },
-    uWeights: { value: new THREE.Vector3(1, 0, 0) }, uBend: { value: 1 }, uClock: { value: 0 },
+    uWeights: { value: new THREE.Vector3(1, 0, 0) }, uTubeWeights: { value: new THREE.Vector3(1, 0, 0) },
+    uNarrow: { value: 1 }, uCalmLow: { value: 0.05 }, uBend: { value: 1 }, uClock: { value: 0 },
     uData: { value: new Array(DATA_SLOTS).fill(0.5) }, uSwell: { value: 0 },
     uSeed: { value: new THREE.Vector3(seedRand() * 40, seedRand() * 40, seedRand() * 40) },
     uFade: { value: new THREE.Vector2(7, 11) }, uCalm: { value: new THREE.Vector4(1, 0, 0.3, 0.52) },
@@ -430,10 +458,10 @@ export function mount(container, options = {}) {
     intensity = num(o.intensity, 1) * dim * (stage.tokens.dark ? 0.5 : 0.62) * stage.quality.pick(1.55, 1.2, 1);
   };
   const setNodeSize = () => {
-    shared.uNodeSize.value = stage.tokens.dark ? (phone ? 30 : 40) : 8;
+    shared.uNodeSize.value = stage.tokens.dark ? (phone ? 30 : 40) : 15;
   };
   stage.onQuality((quality) => {
-    const count = Math.max(12, Math.round(num(o.strands, 160) * quality.pick(0.5, 0.75, 1)));
+    const count = Math.max(12, Math.round(strandCount * quality.pick(0.5, 0.75, 1)));
     const list = makeStrands(count, seed);
     strands.geometry.dispose();
     strands.geometry = buildStrandGeometry(list, quality.pick(260, 360, 460));
@@ -455,19 +483,20 @@ export function mount(container, options = {}) {
     const view = stage.viewSize(9);
     phone = size.aspect < 0.8;
     const sign = o.side === "left" ? -1 : o.side === "centre" || o.side === "center" ? 0 : 1;
-    const scale = num(o.scale, 1);
     let x = 0, y = 0, diameter;
-    if (phone) {             // low and large under the text, its top fading out before the text ends
-      diameter = Math.max(view.width * 1.5, view.height * 0.5) * scale;
-      y = -view.height * 0.4;
-      dim = 0.55;
-      shared.uCalm.value.set(0, -1, 0.66, 0.82);
+    if (phone) {             // low and large: its upper arcs pass dimmed behind the text, the rest fills the bottom
+      diameter = Math.max(view.width * 1.85, view.height * 0.58) * scale;
+      y = -view.height * 0.23;
+      dim = 0.7;
+      shared.uCalm.value.set(0, -1, 0.6, 0.86);
+      shared.uCalmLow.value = 0.4;
     } else {                 // to one side, running off the edge
       diameter = Math.min(view.height * 1.18, view.width * 0.82) * scale;
       x = sign * (view.width * 0.5 - diameter * 0.3);
       y = -view.height * 0.02;
       dim = sign === 0 ? 0.75 : 1;
       shared.uCalm.value.set(sign, 0, sign === 0 ? -1 : 0.28, sign === 0 ? 0 : 0.55);
+      shared.uCalmLow.value = 0.05;
     }
     place.position.set(x, y, 0);
     place.scale.setScalar(diameter / 4);  // the shapes are about 4 units across
@@ -487,13 +516,24 @@ export function mount(container, options = {}) {
     morph = ease(morph, stage.progressEased * 2, 2.2);
     const w = [0, 1, 2].map((i) => Math.max(0, 1 - Math.abs(morph - i)));
     const smooth = w.map((v) => v * v * (3 - 2 * v)), total = smooth[0] + smooth[1] + smooth[2] || 1;
-    shared.uWeights.value.set(smooth[0] / total, smooth[1] / total, smooth[2] / total);
-    const mixed = (key) => (smooth[0] * shapes[0][key] + smooth[1] * shapes[1][key] + smooth[2] * shapes[2][key]) / total;
+    const tube = smooth.map((v) => v / total);
+    // The line changes mostly in the middle of a crossing (the cube sharpens it), the tube evenly, and
+    // the tube draws in while they cross: a wide tube never carries the next shape's tight windings,
+    // which would crowd into ruffles. cross is 0 on a shape and 1 halfway between two.
+    const cubed = tube.map((v) => v * v * v), cubedTotal = cubed[0] + cubed[1] + cubed[2] || 1;
+    const line = cubed.map((v) => v / cubedTotal);
+    const cross = Math.min(1, 2 * (1 - tube[0] * tube[0] - tube[1] * tube[1] - tube[2] * tube[2]));
+    shared.uWeights.value.set(...line);
+    shared.uTubeWeights.value.set(...tube);
+    shared.uNarrow.value = 1 - 0.4 * cross;
+    const mixed = (key, k = line) => k[0] * shapes[0][key] + k[1] * shapes[1][key] + k[2] * shapes[2][key];
     const tilt = mixed("tilt");
     shared.uBend.value = mixed("bend");
     shared.uReach.value = mixed("reach");
-    // A thin tube packs its strands close together: draw each fainter so it does not burn out.
-    shared.uIntensity.value = intensity * (0.5 + 0.5 * THREE.MathUtils.smoothstep(mixed("thick"), 0.05, 0.22));
+    // A thin tube packs its strands close together: draw each fainter so it does not burn out, and a
+    // little fainter again mid-crossing, where two shapes share the strands.
+    shared.uIntensity.value = intensity * (1 - 0.2 * cross)
+      * (0.5 + 0.5 * THREE.MathUtils.smoothstep(mixed("thick", tube) * shared.uNarrow.value, 0.05, 0.22));
     leanX = ease(leanX, stage.pointer.x, 1.6);
     leanY = ease(leanY, stage.pointer.y, 1.6);
     shared.uSwell.value = swell = ease(swell, swellTarget, 2.5);
@@ -503,16 +543,24 @@ export function mount(container, options = {}) {
     // about 7 degrees toward the pointer.
     form.rotation.set(-tilt + 0.06 * Math.sin(clock * 0.13), 0.32 + 0.05 * Math.sin(clock * 0.09),
                       seed * 1.7 + clock * (Math.PI * 2) / 75);
-    place.rotation.set(-leanY * 0.12, leanX * 0.16, 0);
+    place.rotation.set(-leanY * 0.12, leanX * 0.12, 0);   // 0.12 radians: about 7 degrees
   });
 
   return stage.handle({
     setData(values) {
       const list = Array.from(values || [], Number).filter(Number.isFinite).map((v) => Math.min(1, Math.max(0, v)));
       swellTarget = list.length ? 1 : 0;
-      for (let i = 0; i < DATA_SLOTS; i++) {   // spread the list along the loop, reading between its values
-        const at = list.length > 1 ? (i / DATA_SLOTS) * list.length : 0, k = Math.floor(at);
-        dataTarget[i] = list.length ? list[k % list.length] + (list[(k + 1) % list.length] - list[k % list.length]) * (at - k) : 0.5;
+      // Spread the list round the loop. Each slot takes the highest value of the stretch of the list it
+      // covers (read as a line between the values, and round the loop), so a single peak never falls
+      // between two slots, however long or short the list.
+      const n = list.length;
+      const at = (x) => { const k = Math.floor(x), f = x - k, a = list[((k % n) + n) % n]; return a + (list[(((k + 1) % n) + n) % n] - a) * f; };
+      for (let i = 0; i < DATA_SLOTS; i++) {
+        if (!n) { dataTarget[i] = 0.5; continue; }
+        const lo = ((i - 0.5) / DATA_SLOTS) * n, hi = ((i + 0.5) / DATA_SLOTS) * n;
+        let top = Math.max(at(lo), at(hi));
+        for (let k = Math.ceil(lo); k <= hi; k++) top = Math.max(top, at(k));
+        dataTarget[i] = top;
       }
       stage.invalidate();
     },

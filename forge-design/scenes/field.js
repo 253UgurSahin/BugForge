@@ -5,8 +5,10 @@
  * dark gaps. Every position is worked out on the graphics chip from four random numbers per point
  * and the time, through curl noise (a flow that never piles up), so the processor moves nothing.
  * Depth reads as a camera lens does: points in front of the focus are large, soft and faint, points
- * behind it small and sharp. Colour runs from --color-accent to --color-accent-2 through the volume.
- * On a light page the points are ink: darker in the core, pale and soft in front, thin at the edge.
+ * behind it small and sharp. Colour runs from --color-accent to --color-accent-2 through the volume,
+ * on a dark page as a mingling of the two, on a light page as a short, clean gradient.
+ * On a light page the points are ink in the accents' own colours: deeper in the core, thin at the
+ * edge, and the large soft points in front all but vanish, so nothing reads as a stain.
  * The pointer opens a hollow in the flow: the points part round it with a turn in its edge, and the
  * channel it leaves closes again slowly behind it.
  *
@@ -30,9 +32,11 @@
  * setProgress(p), 0..1: the formations, each with a soft transition where the points leave one
  *   after the other from left to right and swirl a little on the way: 0 cloud, 0.25 ring, 0.5 wave
  *   sheet, 0.75 grid (a lattice of still nodes that breathes), held to 1. Feed it the scroll:
- *   field.stage.progressOf(section).
- * setData(values): numbers 0..1 (any length, resampled to 64), eased in over about a second. In the
- *   wave they ARE the relief: hills and troughs from left to right, like a tide chart. In the cloud
+ *   field.stage.progressOf(section). A still frame (reduced motion, or paused) shows the nearest
+ *   formation whole, never a transition halfway, and is drawn again when that formation changes.
+ * setData(values): numbers 0..1 (any length, resampled to 64), eased in over about a second (at once
+ *   in a still frame). In the wave they ARE the relief: hills and troughs from left to right, like a
+ *   tide chart. In the cloud
  *   they swell and pinch the ribbon along its length, in the ring they bulge it, in the grid they
  *   lift the columns towards the viewer. An empty list goes back to the free shape.
  * setPointer(x, y), pause(), resume(), destroy(), stage: as stage.js describes.
@@ -253,7 +257,9 @@ void main() {
   float alpha = uAlpha * fade / (grow * grow) * 1.8 * min(1.0, pow(pixels / least, 2.0));
   gl_PointSize = clamp(pixels, least, 64.0 * uPixelRatio);   // a cap: a huge disc costs much and adds nothing
   alpha *= 1.0 - mix(0.5, 0.65, dark) * far;
-  alpha *= mix(1.0, mix(0.1, 0.55, dark), dust) * mix(1.0, mix(0.2, 0.09, dark), gas) * (1.0 + 1.2 * spark);
+  // On a light page a blurred near point would be a grey blot, a stain on the paper: it all but goes.
+  alpha *= mix(1.0 - 0.96 * smoothstep(0.04, 0.45, blur), 1.0, dark);
+  alpha *= mix(1.0, mix(0.1, 0.55, dark), dust) * mix(1.0, mix(0.07, 0.09, dark), gas) * (1.0 + 1.2 * spark);
   alpha *= mix(0.8 + 0.2 * sin(t * 1.3 + s.w * 60.0), thread > 0.0 ? mix(0.3, 0.45, dark) : mix(0.75, 0.4, dark) / gridSize, order);   // twinkle; none in the grid
   // On a light page ink only gathers where the shape is dense: the edge thins out to a quiet haze.
   alpha *= mix(mix(0.12, 1.5, smoothstep(0.05, 0.85, core)), 1.0, max(dark, order));
@@ -270,12 +276,15 @@ void main() {
   // Colour: accent on the left of the volume, second accent on the right. Each point mostly takes
   // one of the two (a random shift decides where it changes), so the middle is a mingling of both
   // colours and never the grey a half-and-half mix of two opposite colours gives.
-  float hue = smoothstep(0.4, 0.6, (p.x + 3.2) / 6.4 + 0.45 * (rnd(s, 4u) - 0.5));
+  // On a light page the change is a clean, short gradient instead, a little further right so the
+  // dense knot of the cloud keeps the first accent: there a mingling of dots of both colours reads as
+  // pepper and salt, and a long blend of two opposite colours as mud. The blend is kept narrow.
+  float hue = smoothstep(mix(0.545, 0.4, dark), mix(0.635, 0.6, dark), (p.x + 3.2) / 6.4 + mix(0.04, 0.45, dark) * (rnd(s, 4u) - 0.5));
   vec3 color = mix(uAccent, uAccent2, hue);
-  // On a light page: ink. Deeper in the core, paler (more water than ink) in front of the focus,
-  // far away and in the wash of the gas.
-  vec3 ink = color * mix(mix(0.72, 0.4, smoothstep(0.3, 0.95, core)), 0.55, order);
-  ink = mix(mix(ink, color, gas), uBg, clamp(0.85 * sqrt(blur) + 0.3 * far + 0.3 * gas, 0.0, 0.85));   // gas: a clear, pale wash
+  // On a light page: ink in the accent's own colour, a little deeper in the core, paler far away and
+  // in the wash of the gas. Never mixed towards grey: a near point fades out (above), it does not pale.
+  vec3 ink = color * mix(mix(0.95, 0.68, smoothstep(0.3, 0.95, core)), 0.8, order);
+  ink = mix(mix(ink, color, gas), uBg, 0.3 * far + 0.25 * gas);
   vColor = mix(ink, color, dark);
   vAlpha = clamp(alpha, 0.0, 1.0);
   vBlur = gas > 0.5 ? 2.0 : blur;
@@ -414,6 +423,10 @@ export function mount(container, options = {}) {
 
   stage.onFrame((time, delta) => {
     const p = stage.pointer, still = stage.still;
+    // A frame drawn while the loop stands (reduced motion, or paused) is a picture on its own: it
+    // shows the nearest formation whole, never a transition caught halfway, and new data at once.
+    const frozen = still || !stage.running;
+    if (frozen) uniforms.uProgress.value = Math.round(stage.progressEased * 4) / 4;
     // The wake opens while a pointer is over the field and closes slowly when it leaves. Its tail
     // follows the pointer about a second behind, so a moving pointer leaves a channel that closes.
     const wakeGoal = p.inside && !still ? 1 : 0;
@@ -424,7 +437,7 @@ export function mount(container, options = {}) {
     uniforms.uTrail.value.copy(trail);
     uniforms.uSwirl.value = 1.1 + 0.35 * Math.sin(time * 0.45) + Math.min(1, p.speed * 0.5) * 0.6;
     // Data eases towards its new values in about a second.
-    const k = still ? 1 : 1 - Math.exp(-delta * 2.5);
+    const k = frozen || delta === 0 ? 1 : 1 - Math.exp(-delta * 2.5);
     for (let i = 0; i < DATA; i++) dataNow[i] += (dataGoal[i] - dataNow[i]) * k;
     dataOn += (dataOnGoal - dataOn) * k;
     uniforms.uDataOn.value = dataOn;
@@ -440,7 +453,9 @@ export function mount(container, options = {}) {
     setProgress(value) {
       stage.setProgress(value);
       const stop = Math.round(stage.progress * 4);
-      if (stop !== shownStop) { shownStop = stop; stage.invalidate(); }   // a still frame shows the new formation
+      // A still or paused frame shows the nearest formation whole (see onFrame), so it only needs
+      // drawing again when the scroll passes halfway to the next one.
+      if (stop !== shownStop) { shownStop = stop; stage.invalidate(); }
     },
     setData(values) {
       const list = Array.from(values || [], Number).filter(Number.isFinite);
