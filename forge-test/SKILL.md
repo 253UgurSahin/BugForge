@@ -56,8 +56,7 @@ the app's main flows yourself (F01, F02...) and add a case for every fix in impr
 case (F01-H1 happy, F01-E3 edge, F01-N2 negative) and mark it `e2e`, `unit` or `manual`. Per flow:
 
 - **Happy path**: the steps, and what the user should see at the end.
-- **Edge cases** that apply. Go down "The edge list" in walk.md for every flow: empty, too long and
-  wrong input, double click, back, offline, a second user's data (invisible: 403 or 404) and more.
+- **Edge cases** that apply: go down "The edge list" in walk.md for every flow, all of it.
 - **Negative cases**: wrong password, too many login attempts, card `4000 0000 0000 0002` declined,
   **Fail** on the iDEAL test page, a webhook event sent twice, permission denied, a deleted record.
 - `PWA: yes`, or a static app that works offline: the cases under "PWA and offline" in walk.md.
@@ -116,6 +115,7 @@ Every bug gets a heading in `forge-work/bugs.md` in exactly the form below. `../
 reads it and is strict: the file starts with `# Bugs`, the only other `##` heading is `## To check`,
 and `[high]` or `[open]` go in bug headings only. UTF-8, also with no bugs (a line "No bugs found.").
 ```markdown
+# Bugs
 ## B001 [high] [open] Booking fails when the guest's name has an accent
 case: F01-E4   screen: S03   build: 3f2a1c9   browser: Chromium, 390px wide
 steps: open /u/demo/30min, pick 10:00, type the name "Zoë", confirm

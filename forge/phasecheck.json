@@ -97,6 +97,8 @@
     {"check": ["work", "specs", "e2e/**/*.spec.*", "e2e/**/*.test.*"],
      "modes": ["clone", "idea"],
      "why": "forge-test, Step 3 and Output: one spec per flow in e2e/"},
+    {"check": ["run", "forge-test/walkcheck.py", "forge-work/test/walk.json"], "when": "forge-work/test/walk.json",
+     "why": "forge-test, Output: walk.json, on which walkcheck.py exits 0"},
     {"check": ["run", "forge-test/bugs.py", "forge-work/bugs.md"],
      "why": "forge-test, Output: bugs.md, on which bugs.py exits 0"}
   ],
