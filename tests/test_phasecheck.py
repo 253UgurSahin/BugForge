@@ -143,6 +143,16 @@ INSPECT = "# Inspect: slotwise.example\nDate: 2026-10-27   Pages: 1   Mode: own 
           "has no label.\n\n## What was checked\n- Pages: https://slotwise.example/. headers.py, pagecheck.py\n\n" \
           "## Findings\n### I001 [medium] The email field has no label\nwhere: https://slotwise.example/, line 40\n\n" \
           "## Not checked\n- Lighthouse: Chrome is not installed.\n"
+DASHBOARD = "# Dashboard: Slotwise\nDate: 2026-10-27\n\n## Audience\nThe salon owner, each morning.\n\n" \
+            "## Numbers\n| number | definition | source | unit | period | compared with | form |\n" \
+            "|---|---|---|---|---|---|---|\n| Bookings | confirmed bookings | bookings.status | count | this week | " \
+            "last week | number with a sparkline |\n\n## Layout\nStandard density, 12 columns, one column at 390px.\n\n" \
+            "## Charts\nBookings per day: a line, drawn by chart.py.\n\n## States\nEmpty: how to add a booking.\n\n" \
+            "## Checks\ndashcheck.py exit 0. A second user sees none of the first user's numbers.\n"
+MOTION = "# Motion: Slotwise\nDate: 2026-10-27\n\n## Direction\nCalm: motion only where a state changes.\n\n" \
+         "## Inventory\n| screen | moment | motion | why |\n|---|---|---|---|\n| S03 | booking saved | toast slides " \
+         "in | feedback |\n\n## Tokens\nduration fast 120ms, base 200ms; ease out.\n\n## Libraries\nNone: CSS " \
+         "only.\n\n## Checks\nmotioncheck.py exit 0. Reduced motion checked at 390px and 1440px.\n"
 IMPROVE = "# Improve: Slotwise\nDate: 2026-10-27   Branch: forge/improve-20261027   Started from: main at 3f2a1c9\n" \
           "Picked: A001. The user said: \"fix A001\"\n\n## To do\n## Fixed\n### A001 [high] Any logged-in user can " \
           "open any invoice\ncommit: 9b1e2f4 fix(A001): check the owner first\n\n## Skipped\n## For you\n" \
@@ -180,10 +190,14 @@ PASSING = {
     "plan": lambda root: (write(root, "forge-work/plan.md", PLAN),
                           write(root, "forge-work/features.csv", FEATURES)),
     "design": lambda root: (write(root, "forge-work/design/tokens.json", TOKENS),
+                            write(root, "forge-work/design/brief.md", filled("forge-design/brief.md")),
                             write(root, "forge-work/design/components.md", filled("forge-design/components.md"))),
     "build": lambda root: (write(root, "forge-work/build-log.md", BUILD_LOG), copy_static_pack(root),
                            write(root, "forge-work/features.csv", FEATURES),
                            write(root, "forge-work/security.md", SECURITY)),  # forge-build Step 7 runs forge-secure
+    "dashboard": lambda root: write(root, "forge-work/dashboard.md", DASHBOARD),
+    "motion": lambda root: (write(root, "forge-work/motion.md", MOTION),
+                            write(root, "index.html", "<title>Slotwise</title>\n")),
     "test": lambda root: (write(root, "forge-work/test-plan.md", TEST_PLAN), write(root, "forge-work/bugs.md", BUGS),
                           write(root, "e2e/f01-book.spec.ts", SPEC)),
     "diff": lambda root: (write(root, "forge-work/features.csv", FEATURES), write(root, "forge-work/bugs.md", BUGS),

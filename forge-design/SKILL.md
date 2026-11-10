@@ -1,25 +1,26 @@
 ---
 name: forge-design
 description: >-
-  Builds the design system for the app forge is making: colour roles, type
-  scale, spacing, radius, shadows, layout and every component with its
-  states, as design tokens plus component specs. In clone mode it measures
-  the original's screenshots into roles and never takes its logo, icons,
-  images, fonts, copy or brand colour; in idea mode it designs fresh from the
-  plan. Writes forge-work/design/tokens.json and components.md, with the
-  tokens as CSS custom properties (plus a Tailwind theme where the stack
-  profile uses Tailwind), a self-hosted open font and an open icon set, and
-  checks every text and background pair for WCAG AA contrast. Use after
-  /forge-plan, or when the user says "design the app", "match the design",
-  "rebuild the design system", "get the colours and fonts", "make it look
-  like X", "design tokens" or "check the contrast".
+  Builds the design system for the app forge is making, or gives the user's
+  own app a new look: a one-page design brief with a concept of its own (no
+  generic template look), colour roles, type scale, spacing, radius, shadows,
+  layout and every component with its states, as design tokens plus component
+  specs. In clone mode it measures the original's screenshots into roles and
+  never takes its logo, icons, images, fonts, copy or brand colour. Writes
+  forge-work/design/brief.md, tokens.json and components.md, with the tokens
+  as CSS custom properties (plus a Tailwind theme where the profile uses
+  Tailwind), a self-hosted open font and an open icon set, checks every text
+  and background pair for WCAG AA contrast, and after the build reviews
+  screenshots of the app itself in rounds. Use after /forge-plan, or when the
+  user says "design the app", "make it look professional", "modern design",
+  "redesign my app", "review the design", "match the design", "design
+  tokens", "check the contrast", "maak het mooier" or "nieuw design".
 ---
 
 # forge-design
 
-Reads `forge-work/plan.md`, and in clone mode `forge-work/recon.md` and the screenshots in
-`forge-work/screens/`. Writes `forge-work/design/tokens.json` and `forge-work/design/components.md`.
-Clone mode: `forge-work/recon.md` exists. Idea mode: it does not.
+Reads `forge-work/plan.md`, and in clone mode (`forge-work/recon.md` exists) the screenshots in
+`forge-work/screens/`. Writes `forge-work/design/brief.md`, `tokens.json` and `components.md`.
 
 ## Ground rules
 
@@ -29,12 +30,12 @@ Read `../forge/rules.md` once per session. In short:
 - Only public pages and the user's own accounts. Active tests only where `../forge-secure/scope.py` allows.
 - Clean-room: rebuild what an app does, never copy its code, assets, copy or brand.
 - Never print, paste or commit secrets. Never touch a server: forge only builds containers.
-- Stop at every checkpoint and wait for the user's go.
+- Stop at every checkpoint and wait for the user's go; in auto mode, stop where `../forge/rules.md` section 7 says.
 
 ## What you never take
 
-You rebuild the system: colour roles, scales, how a form or a modal behaves. Those are not ownable.
-From the original you never take (rules.md section 4):
+You rebuild the system (colour roles, scales, how a form behaves): those are not ownable. From the
+original you never take (rules.md section 4):
 
 - its logo, icons, illustrations, photos or sounds, and no tracing them (open icons: Step 4);
 - a font it pays for (an open font, self-hosted: Step 4);
@@ -46,16 +47,23 @@ From the original you never take (rules.md section 4):
   `python3 ../forge-design/eyedropper.py --grey "#1e4d3b"`. List all their colours under `## Original
   brand colours`. The signature colour plus the signature layout is trade dress.
 
+## The brief: a look of its own
+
+Before any token, copy `../forge-design/brief.md` to `forge-work/design/brief.md` and fill it in:
+who uses the app and when, a concept from the product's own world, type, colour, density, shape,
+the signature detail, and what it stays away from ("The generic look" in `../forge-design/review.md`).
+Ask the user one question: two or three apps or sites whose look they like, and what about each
+(auto mode: decide from plan.md and say it can change). Learn the principle, never take the pixels.
+Every later choice is tested against the brief; a choice with no reason in it is a default: change it.
+
 ## Step 1: measure, do not guess
 
 Clone mode: hex values read off a screenshot by eye are guesses; read the pixels instead. recon's
 shots are at 100% zoom, so `python3 ../forge-design/eyedropper.py forge-work/screens/S05.png` lists
 the colours used most and where, `--box x,y,w,h` those in one part (a button, a heading) and `x,y`
-one pixel. A state with no shot (hover, focus ring) gets one the same way. No screenshots: ask the
-user to read the colours with an eyedropper (DevTools colour picker, Digital Color Meter on macOS
-set to sRGB, PowerToys Color Picker on Windows) and paste them. Sizes come from the shots too. List
-each value you estimate yourself under `_notes` in tokens.json. Idea mode: from plan.md; ask the
-user for two or three apps whose look they like, then design fresh.
+one pixel. No screenshots: ask the user to read the colours with an eyedropper (DevTools, Digital
+Color Meter, PowerToys Color Picker) and paste them. Sizes come from the shots too. List each value
+you estimate yourself under `_notes` in tokens.json. Idea mode: from plan.md and the brief.
 
 - **Colour roles**, not colours: bg, surface, border, border-input, text, text-muted, accent,
   on-accent, danger, success, warning. Count the greys the app really uses: usually 5 to 7.
@@ -82,11 +90,10 @@ of it. Dividers and card borders are decoration and need no pair. Then:
 python3 ../forge-design/contrast.py forge-work/design/tokens.json
 ```
 
-WCAG AA is the floor: 4.5:1 for normal text, 3:1 for large text and UI parts, and the level the
-European Accessibility Act points to for most consumer web shops since June 2025 (not legal advice).
-Exit 1: a pair fails (the output names the nearest passing colour) or a text colour is in no pair;
-fix it in the tokens, never per component, until it exits 0. Exit 2: the file is wrong (no `pairs`
-list, an unknown or doubled name, a colour that is not `#rgb` or `#rrggbb`). The gate runs it too.
+WCAG AA is the floor: 4.5:1 for normal text, 3:1 for large text and UI parts (the level the European
+Accessibility Act points to for most consumer web shops since June 2025; not legal advice). Exit 1:
+a pair fails (the output names the nearest passing colour) or a text colour is in no pair; fix it in
+the tokens, never per component. Exit 2: the file is wrong (the output says how). The gate runs it too.
 
 ## Step 3: the theme, per profile
 
@@ -103,33 +110,20 @@ again. Read `Profile:` in plan.md:
 
 The laravel and next installers ship Tailwind 4 today; forge-build confirms the major version in
 package.json. Copy `../forge-design/components.md` to `forge-work/design/components.md` and fill in
-its header, theme file and theme.py command. Its `## Theme` maps every token group (colours, fonts,
-type, spacing, radius, shadows, motion, layout, sizes, dark theme, breakpoints) to a CSS variable by
-name, never by value, for plain CSS and Tailwind 4 and 3: theme.py writes that. With `PWA: yes`, the
-manifest's `theme_color` and `background_color` and the `theme-color` meta tag take token values.
+its header, theme file and theme.py command. Its `## Theme` maps every token group to a CSS variable
+by name, never by value, for plain CSS and Tailwind 4 and 3: theme.py writes that. With `PWA: yes`,
+the manifest's `theme_color` and `background_color` and the `theme-color` meta tag take token values.
 
 ## Step 4: fonts and icons
 
-- **Font**: an open one with the original's job (Inter, IBM Plex Sans, Source Serif 4: all SIL Open
-  Font License), self-hosted with its licence file. A font CDN sends every visitor's IP address to a
-  third party (AVG/GDPR). What `font.sans` in tokens.json (so `--font-sans`) holds, per profile:
-  - laravel, static: `"Inter Variable"` from Fontsource (`npm install @fontsource-variable/inter`,
-    imported in the main JS or CSS file). laravel may instead keep the skeleton's `fonts` option of
-    laravel-vite-plugin with your font in it (`bunny("Inter", ...)` gives `"Inter"`): it downloads
-    the files at build time and serves them from the app.
-  - next: Fontsource too (`npm install @fontsource-variable/inter`), loaded in `app/layout.tsx` with
-    `localFont({ src: "../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
-    variable: "--font-inter", weight: "100 900" })` from `next/font/local` (one more `../` under
-    `src/app/`); put that class on `<html>` so `:root` sees it; `font.sans` is then
-    `var(--font-inter), system-ui, sans-serif`. `next/font/google` fetches the font during
-    `next build`, which fails offline or behind a proxy: only when the build machine reaches Google.
-  - django: the .woff2 files from the font's official release in `static/fonts/`, with `@font-face`
-    rules (`font-display: swap`) whose `font-family` is exactly the first name in `font.sans`.
+- **Font**: open ones that fit the brief (SIL Open Font License or alike: Inter, IBM Plex Sans,
+  Source Serif 4, Fraunces, Space Grotesk), self-hosted with the licence file; read the licence of
+  the files you install. A font CDN sends every visitor's IP address to a third party (AVG/GDPR).
+  How each profile loads it, and what `font.sans` then holds: `../forge-design/fonts.md`.
 - **Icons**: one set for the whole app, with its licence: Lucide (ISC), Heroicons (MIT) or Tabler
   Icons (MIT), as its package or as SVG files in the repo with the licence file.
-- **No font or icon CDN.** Some Laravel skeletons and starter kits link fonts.bunny.net in a Blade
-  layout. components.md carries the search for font and icon CDNs that forge-build runs after
-  scaffolding; it must find nothing.
+- **No font or icon CDN.** components.md carries the search for them that forge-build runs after
+  scaffolding (some Laravel starter kits link fonts.bunny.net); it must find nothing.
 
 ## Step 5: component specs
 
@@ -145,22 +139,30 @@ Button
   used on   S02, S07, S09
 ```
 
-Every state the recon saw, plus focus, disabled, loading, error and empty. Keyboard and screen
+Every state the recon saw, plus focus, disabled, loading, error and empty; keyboard and screen
 reader behaviour is part of the spec. Targets are at least 24 by 24px (WCAG 2.2 AA), 44px for the
 main actions on mobile. Build on the stack's accessible component base if it has one (shadcn/ui in
-Laravel's React starter kit), else native elements (`button`, `dialog`, `input` with a `label`).
-forge-build builds them first, on a development-only `/design` page with every state.
+Laravel's React starter kit), else native elements. forge-build builds them first, on a `/design` page.
+
+## The look review and a redesign
+
+`../forge-design/review.md` has both. **The look review**: after forge-build's vertical slice and at
+its end, take screenshots of the app itself (`../forge-design/shots.example.mjs`: 390px and 1440px,
+light and dark), look at each, score it against the brief, fix in the tokens or the component, and
+go again, up to three rounds, in `forge-work/design/review.md`. **A redesign** gives the user's own
+app a new look without changing what it does: a work branch, shots before, the brief, old values
+mapped to tokens, the theme first, then one component per commit, its tests passing after each.
 
 ## Output
 
-`forge-work/design/tokens.json`, on which contrast.py exits 0, and `forge-work/design/components.md`
-from the template with every `<...>` filled in, but those in the `## Theme` code block (it is the
-mapping), for example `Profile: next. Tailwind: 4. Font: Inter (SIL OFL, Fontsource with
-next/font/local). Icons: Lucide (ISC), as a package.` In clone mode, its `## Original brand colours`
-lists the original's colours for forge-brand's sweep; nothing ever uses them.
+`forge-work/design/brief.md` from its template with every `{{...}}` filled in; `tokens.json`, on
+which contrast.py exits 0; and `components.md` from the template with every `<...>` filled in, but
+those in the `## Theme` code block (it is the mapping), for example `Profile: next. Tailwind: 4.
+Font: Inter (SIL OFL, Fontsource with next/font/local). Icons: Lucide (ISC), as a package.` In clone
+mode, its `## Original brand colours` lists the original's colours for forge-brand's sweep only.
 
 ## Next
 
-Checkpoint: tell the user in at most 5 plain lines the palette (roles, accent placeholder), the font
-and icon set with their licences, how many components are specced and the contrast result. Wait for
-the user's go. Then `/forge-build`, or back to `/forge` when the orchestrator runs the phases.
+Checkpoint: tell the user in at most 5 plain lines the brief's concept and signature, the palette
+(roles, accent placeholder), the font and icon set with their licences, how many components are
+specced and the contrast result. Wait for the user's go. Then `/forge-build`, or back to `/forge`.

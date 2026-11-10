@@ -28,7 +28,7 @@ Read `../forge/rules.md` once per session. In short:
 - Only public pages and the user's own accounts. Active tests only where `../forge-secure/scope.py` allows.
 - Clean-room: rebuild what an app does, never copy its code, assets, copy or brand.
 - Never print, paste or commit secrets. Never touch a server: forge only builds containers.
-- Stop at every checkpoint and wait for the user's go.
+- Stop at every checkpoint and wait for the user's go; in auto mode, stop where `../forge/rules.md` section 7 says.
 
 Also for this skill: one app, at most one database, all in the user's compose stack (profiles.md).
 Only official public APIs with the user's own keys, never the original's private endpoints, bundles

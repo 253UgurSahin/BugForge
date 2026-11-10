@@ -79,12 +79,13 @@ class Project(unittest.TestCase):
 
 class TableTests(unittest.TestCase):
     def test_modes_and_phases_follow_the_spec(self):
-        self.assertEqual(gate.MODES["clone"], ["recon", "compare", "plan", "design", "build", "test", "diff",
-                                               "brand", "launch", "secure", "pack"])
-        self.assertEqual(gate.MODES["idea"], ["compare", "plan", "design", "build", "test", "brand", "launch",
-                                              "secure", "pack"])
+        self.assertEqual(gate.MODES["clone"], ["recon", "compare", "plan", "design", "build", "dashboard",
+                                               "motion", "test", "diff", "brand", "launch", "secure", "pack"])
+        self.assertEqual(gate.MODES["idea"], ["compare", "plan", "design", "build", "dashboard", "motion", "test",
+                                              "brand", "launch", "secure", "pack"])
         self.assertEqual(gate.MODES["improve"], ["audit", "inspect", "improve", "test", "secure"])
-        self.assertEqual(set(gate.OPTIONAL), {"compare", "inspect"})
+        self.assertEqual(set(gate.OPTIONAL), {"compare", "inspect", "dashboard", "motion"})
+        self.assertEqual((gate.ADDED, gate.ASKS), (("dashboard", "motion"), ("secure",)))
 
     def test_every_phase_has_checks_a_skill_and_secure_is_everywhere(self):
         for mode, phases in gate.MODES.items():
@@ -327,7 +328,7 @@ class DoneTests(Project):
             with self.subTest(words=repr(words)):
                 code, out, _ = self.gate("done", "recon", "--approved", words)
                 self.assertEqual(code, 1)
-                self.assertIn("REFUSED: --approved needs the user's own words of go", out)
+                self.assertIn("REFUSED: --approved and --auto need the user's own words", out)
         self.assertEqual(self.state()["phases"], {})
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             self.gate("done", "recon")
@@ -401,7 +402,7 @@ class FreshReportTests(Project):
         self.gate("init", "--mode", "idea")
         self.approve("compare", "plan", "design", "build")  # forge-build runs forge-secure at its end
         self.age("forge-work/security.md")  # so this report is from then, before test, brand and launch
-        self.approve("test", "brand", "launch")
+        self.approve("dashboard", "motion", "test", "brand", "launch")
         code, out, _ = self.gate("done", "secure", "--approved", "go")
         self.assertEqual(code, 1)
         self.assertIn("forge-work/security.md is older than the last go (%s)" % self.state()["phases"]["launch"]["at"],
@@ -429,7 +430,7 @@ class FreshReportTests(Project):
         launch, secure or pack finds goes through test's fix loop and changes bugs.md: that is a later
         phase's work, so diff's check still passes (forge/SKILL.md: go back to the phase you came from)."""
         self.gate("init", "--mode", "clone")
-        self.approve("recon", "compare", "plan", "design", "build", "test", "diff")
+        self.approve("recon", "compare", "plan", "design", "build", "dashboard", "motion", "test", "diff")
         write(self.root, "forge-work/bugs.md", read(os.path.join(self.root, "forge-work", "bugs.md")) +
               "\n## B007 [high] [fixed] Found by forge-secure\nfixed in: 7d6e5f4\n")
         later = datetime.datetime.fromisoformat(self.state()["phases"]["diff"]["at"]).timestamp() + 5
@@ -441,7 +442,7 @@ class FreshReportTests(Project):
         """done records a new go, so it checks as a first record: a second run of diff (its Next, after the
         fix loop) must write parity.md after the bugs it found, whatever its old go said."""
         self.gate("init", "--mode", "clone")
-        self.approve("recon", "compare", "plan", "design", "build", "test", "diff")
+        self.approve("recon", "compare", "plan", "design", "build", "dashboard", "motion", "test", "diff")
         write(self.root, "forge-work/bugs.md", read(os.path.join(self.root, "forge-work", "bugs.md")) +
               "\n## B015 [high] [fixed] Found in the second walk\nfixed in: 7d6e5f4\n")
         later = datetime.datetime.fromisoformat(self.state()["phases"]["diff"]["at"]).timestamp() + 5
@@ -457,7 +458,7 @@ class FreshReportTests(Project):
     def test_a_parity_report_from_before_tests_go_does_not_count(self):
         """test's fix loop changes the clone, so diff must score it after test's go (N26, N27)."""
         self.gate("init", "--mode", "clone")
-        self.approve("recon", "compare", "plan", "design", "build", "test")
+        self.approve("recon", "compare", "plan", "design", "build", "dashboard", "motion", "test")
         self.finish("diff")
         self.age("forge-work/parity.md")  # written before test's fixes
         code, out, _ = self.gate("done", "diff", "--approved", "go")
@@ -508,7 +509,7 @@ class SkipTests(Project):
             with self.subTest(phase=phase):
                 code, out, _ = self.gate("skip", phase, "--reason", "not needed")
                 self.assertEqual(code, 1)
-                self.assertIn("REFUSED: %s cannot be skipped. Only compare and inspect may be." % phase, out)
+                self.assertIn("REFUSED: %s cannot be skipped. Only compare, inspect, dashboard, motion may be." % phase, out)
         self.assertEqual(self.state()["phases"], {})
 
     def test_skip_refuses_no_reason_out_of_order_and_other_modes(self):
@@ -527,6 +528,90 @@ class SkipTests(Project):
         self.assertEqual(list(self.state()["phases"]), ["recon"])
 
 
+class AutoModeTests(Project):
+    """Auto mode: the user asked once, in their own words, for the phases to run on without a go each."""
+    ASK = "doe alles zelf, stop alleen waar het moet"
+
+    def test_auto_records_the_users_ask_and_goes_on(self):
+        self.gate("init", "--mode", "improve")
+        self.finish("audit")
+        code, out, err = self.gate("done", "audit", "--auto", self.ASK)
+        self.assertEqual((code, err), (0, ""), out)
+        self.assertEqual(self.state()["phases"]["audit"]["approved"], "auto mode: " + self.ASK)
+        self.assertIn("Next: inspect. Auto mode: run /forge-inspect, fix what fails (rules.md 7)", out)
+        self.assertIn("done inspect --auto", out)
+        self.assertIn("skip inspect --reason", out)
+        self.assertNotIn("wait for their go", out)
+        self.assertIn("Auto mode", self.gate("status")[1])
+
+    def test_auto_still_needs_passing_checks_words_and_the_order(self):
+        self.gate("init", "--mode", "improve")
+        code, out, _ = self.gate("done", "audit", "--auto", self.ASK)  # no audit.md yet
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED: audit stays open until every check passes.", out)
+        self.finish("audit", "improve")
+        for words in ("", " ", "<ask>", "TEXT", "\u200b"):
+            with self.subTest(words=words):
+                self.assertEqual(self.gate("done", "audit", "--auto", words)[0], 1)
+        code, out, _ = self.gate("done", "improve", "--auto", self.ASK)
+        self.assertEqual(code, 1)
+        self.assertIn("improve comes after audit, inspect", out)
+        self.assertEqual(self.state()["phases"], {})
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            self.gate("done", "audit", "--auto", self.ASK, "--approved", "go")  # one or the other
+
+    def test_secure_always_needs_the_users_own_go(self):
+        self.gate("init", "--mode", "improve")
+        self.finish("audit")
+        self.gate("done", "audit", "--auto", self.ASK)
+        self.gate("skip", "inspect", "--reason", "no live site")
+        for phase in ("improve", "test"):
+            self.finish(phase)
+            self.assertEqual(self.gate("done", phase, "--auto", self.ASK)[0], 0)
+        self.finish("secure")
+        code, out, _ = self.gate("done", "secure", "--auto", self.ASK)
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED: secure always needs the user's own go for it: --approved", out)
+        self.assertNotIn("secure", self.state()["phases"])
+        _, out, _ = self.gate("status")
+        self.assertIn("Next: secure. Run /forge-secure", out)  # the plain step: show the checkpoint and wait
+        self.assertIn("wait for their go", out)
+        self.assertEqual(self.gate("done", "secure", "--approved", "ja, veilig genoeg")[0], 0)
+
+    def test_secures_own_go_leaves_auto_mode_on_and_a_plain_go_turns_it_off(self):
+        self.gate("init", "--mode", "idea")
+        for phase in gate.MODES["idea"][:-2]:
+            self.finish(phase)
+            self.assertEqual(self.gate("done", phase, "--auto", self.ASK)[0], 0, phase)
+        self.finish("secure")
+        code, out, _ = self.gate("done", "secure", "--approved", "go")
+        self.assertEqual(code, 0, out)
+        self.assertIn("Next: pack. Auto mode:", out)  # the user's go for secure did not end auto mode
+        self.gate("init", "--mode", "idea", "--force")
+        self.finish("compare", "plan")
+        self.gate("done", "compare", "--auto", self.ASK)
+        self.assertIn("Next: plan. Auto mode:", self.gate("status")[1])
+        _, out, _ = self.gate("done", "plan", "--approved", "go, maar vanaf nu vraag je het weer")
+        self.assertIn("Next: design. Run /forge-design", out)
+        self.assertNotIn("Auto mode", out)
+        self.assertTrue(self.gate("status", "--json")[1])
+
+    def test_a_state_from_before_dashboard_and_motion_is_not_damaged(self):
+        go = {"status": "done", "approved": "go", "at": "2026-10-27T09:51:44+00:00"}
+        phases = {phase: go for phase in ("compare", "plan", "design", "build", "test")}
+        self.write_state({"version": 1, "mode": "idea", "phases": phases, "started": "2026-10-27T09:00:00+00:00"})
+        code, out, err = self.gate("status")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("Next: dashboard.", out)  # the user runs or skips the two new phases, then goes on
+        self.finish("brand")
+        code, out, _ = self.gate("done", "brand", "--approved", "go")
+        self.assertEqual(code, 1)
+        self.assertIn("brand comes after dashboard, motion", out)
+        for phase in ("dashboard", "motion"):
+            self.assertEqual(self.gate("skip", phase, "--reason", "built before forge had it")[0], 0)
+        self.assertEqual(self.gate("done", "brand", "--approved", "go")[0], 0)
+
+
 class StatusTests(Project):
     def test_status_in_plain_words(self):
         self.gate("init", "--mode", "clone")
@@ -536,7 +621,7 @@ class StatusTests(Project):
         self.assertEqual((code, err), (0, ""))
         lines = out.splitlines()
         self.assertTrue(lines[0].startswith("forge, clone mode, started "))
-        table = [line.split()[:2] for line in lines[2:13]]
+        table = [line.split()[:2] for line in lines[2:15]]
         self.assertEqual(table, [["done", "recon"], ["skipped", "compare"], ["next", "plan"]]
                          + [["waiting", phase] for phase in gate.MODES["clone"][3:]])
         self.assertIn('approved: "go"', lines[2])

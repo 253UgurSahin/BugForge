@@ -67,10 +67,36 @@ are reference only and never ship.
 - Money stays with the user: Stripe test mode only. Live keys are the user's
   job.
 
-## 7. Checkpoints and git
+## 7. Checkpoints, auto mode and git
 
 - At every checkpoint, show a short summary and wait for the user's go.
   Silence is not a yes.
+- **Auto mode** is on only after the user asks for it in this chat, in their
+  own words ("run it all", "do not stop after each phase", "doe alles
+  zelf"). A phase whose exit checks pass is then recorded with
+  `gate.py done <phase> --auto '<those words>'` and the work goes on. The
+  checkpoint's lines are still shown, as a report. It is off again as soon
+  as the user says so.
+- In auto mode you still stop and wait for:
+  - the go of the secure phase, which is always the user's own;
+  - a `Verdict: FAIL`, an accepted risk, a `[wontfix]`, a rotated secret;
+  - the scope question of rule 3;
+  - a choice only the user can make and that is costly to undo: the app's
+    name, the stack profile when the plan leaves two open, prices;
+  - a fix that turns out bigger than it looked, or a failure that three
+    tries did not fix;
+  - anything these rules forbid.
+- Choices that are cheap to change you make yourself in auto mode, and
+  write down with the reason in the phase's report: the optional phases
+  (run each one unless the user said which to leave out), the vertical
+  slice, the design and motion direction.
+- **Fixing on your own**, in every mode, inside a phase: a failed test, exit
+  check, scan or build is yours to fix without asking. Read the failure,
+  fix the cause, run it again: up to three tries per failure. Never by
+  weakening the check: no test skipped, deleted or loosened, no severity
+  lowered, no `forge:allow`, `[wontfix]`, `copy-allow.txt` line or accepted
+  risk the user did not ask for, no file written only to pass. After three
+  tries, stop, say what you tried and ask.
 - Work on a branch, never directly on `main` or `master`. Small commits, each
   with a message that says what and why.
 - Never force-push, rewrite history, or delete files you did not create

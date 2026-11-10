@@ -15,9 +15,14 @@ changes the rest:
 - **Stripe with iDEAL**, in test mode only.
 - **Safety is a gate.** Scripts check secrets, risky code, dependencies, headers, trackers and the
   container setup, and the work stops until they pass.
-- **You decide.** A checkpoint after every phase. Nothing moves on without your go.
+- **A look of its own.** A design brief with a concept, not a template; the app is then judged
+  from screenshots of itself, in rounds. Dashboards and motion are phases of their own.
+- **Tested like a user would.** A browser walks every page at phone, tablet and desktop width, in
+  light and dark: console errors, broken links, accessibility, speed against a budget, edge cases.
+- **You decide.** A checkpoint after every phase, or auto mode: say "run it all" and it goes from
+  phase to phase on its own and fixes what fails. The security go is always yours.
 
-BugForge has 15 skills, the forge skills: `/forge` runs a whole project, and each of the other 14
+BugForge has 17 skills, the forge skills: `/forge` runs a whole project, and each of the other 16
 does one phase. Each script is standard-library Python 3.9+ with tests.
 
 ## Quick start
@@ -30,8 +35,8 @@ does one phase. Each script is standard-library Python 3.9+ with tests.
    - `/forge improve this app` (improve mode)
 
 Claude asks a few questions, runs the first phase, shows you a checkpoint of at most 5 lines plus
-the gate's result, and waits. Say "go" to continue, or ask for changes first. Say "where were we"
-in a new session to pick up where you left off.
+the gate's result, and waits. Say "go" to continue, or ask for changes first. Say "run it all on
+your own" for auto mode (below). Say "where were we" in a new session to pick up where you left off.
 
 ## How /forge works
 
@@ -39,13 +44,13 @@ in a new session to pick up where you left off.
 
 | mode | you give | phases, in order |
 | --- | --- | --- |
-| clone | the URL of an app to rebuild | recon, compare\*, plan, design, build, test, diff, brand, launch, secure, pack |
-| idea | an idea in your own words | compare\*, plan, design, build, test, brand, launch, secure, pack |
+| clone | the URL of an app to rebuild | recon, compare\*, plan, design, build, dashboard\*, motion\*, test, diff, brand, launch, secure, pack |
+| idea | an idea in your own words | compare\*, plan, design, build, dashboard\*, motion\*, test, brand, launch, secure, pack |
 | improve | your own repo | audit, inspect\*, improve, test, secure |
 
 \* optional: skipped only when you say so, and your reason is recorded. secure is never skipped.
-In improve mode, `/forge-compare` (competitors) and `/forge-pack` (containers) are there when you
-ask for them.
+In improve mode, `/forge-compare` (competitors), `/forge-design` (a redesign), `/forge-dashboard`,
+`/forge-motion` and `/forge-pack` (containers) are there when you ask for them.
 
 Each phase is one skill: recon is `/forge-recon`, pack is `/forge-pack`. You can also call any
 skill on its own.
@@ -75,8 +80,23 @@ python3 $FORGE/forge/gate.py init --mode idea --about 'a booking app for my salo
 python3 $FORGE/forge/gate.py status          # every phase and the next step (--json)
 python3 $FORGE/forge/gate.py check plan      # the exit checks of one phase (--json)
 python3 $FORGE/forge/gate.py done plan --approved 'ja, ga door'
-python3 $FORGE/forge/gate.py skip compare --reason 'no rivals worth reading'   # compare and inspect only
+python3 $FORGE/forge/gate.py done plan --auto 'run it all on your own'        # auto mode; refused for secure
+python3 $FORGE/forge/gate.py skip compare --reason 'no rivals worth reading'   # the phases with a * only
 ```
+
+### Auto mode
+
+Say it in your own words ("run it all", "do not stop after each phase", "doe alles zelf") and
+BugForge goes from phase to phase without waiting. The gate still runs every exit check, and
+records each phase with the words you asked for auto mode with. It still stops for:
+
+- the go of the secure phase, always, and any `Verdict: FAIL`;
+- a risk to accept, a bug to leave unfixed, a secret to rotate;
+- a choice only you can make and that is costly to undo: the app's name, prices, a domain of yours;
+- a failure it could not fix in three tries, or a fix that turns out bigger than it looked.
+
+In every mode a failed test, check or scan is fixed at its cause, never by loosening the check.
+Say "stop after each phase again" to turn auto mode off.
 
 `init --force` starts over: it forgets every approval, and test, diff, secure, audit, inspect and
 improve run again, since their reports must be newer than the new start.
@@ -115,17 +135,19 @@ it out of git and out of every image.
 
 | skill | what it does |
 | --- | --- |
-| `/forge` | Runs a whole project, phase by phase, with the gate and your go after each phase. |
+| `/forge` | Runs a whole project, phase by phase, with the gate and your go after each phase, or straight through in auto mode. |
 | `/forge-recon` | Maps an app from public pages and your own account: screens, flows, components, data model, feature list. |
 | `/forge-compare` | Puts 2 to 5 competitors side by side and ranks what their users complain about and miss. |
 | `/forge-plan` | Picks the stack profile and PWA with you; writes the schema, routes, payments and build order. |
-| `/forge-design` | Design tokens and component specs, open fonts and icons, WCAG AA contrast checked. |
+| `/forge-design` | A design brief with a concept of its own, design tokens and component specs, open fonts and icons, WCAG AA contrast checked; reviews screenshots of the built app in rounds; redesigns an app you already have. |
 | `/forge-build` | Scaffolds with the official installer, then builds screen by screen: auth, data access, Stripe with iDEAL, email, jobs. In clone mode it checks that no text is copied from the original. |
-| `/forge-test` | Test plan, unit and Playwright tests against the local stack, a bug list and a fix loop. |
+| `/forge-dashboard` | Dashboards on the app's own data: the few numbers that matter, each traced to its source, accessible charts, every state, and a second user who sees none of it. |
+| `/forge-motion` | Motion that explains: transitions, micro-interactions, scroll and page transitions, a generative hero visual. CSS first, a library only when needed and never from a CDN, reduced motion always. |
+| `/forge-test` | Test plan, unit and Playwright tests against the local stack; a walk of every page at three widths in light and dark (console, links, accessibility, speed budget, layout), edge cases, screenshots compared between rounds, a bug list and a fix loop. |
 | `/forge-diff` | Scores the clone against the original: features, layout and behaviour. |
 | `/forge-brand` | Your own name, palette, logo brief and voice, plus the trademark checks to run; sweeps out the original's name. |
 | `/forge-launch` | Landing page, prices in EUR with VAT, privacy policy, terms, cookie check, basic SEO, launch checklist. |
-| `/forge-secure` | The security gate: secrets, risky code, dependencies, headers, trackers, AVG/GDPR. Verdict PASS or FAIL. |
+| `/forge-secure` | The security gate: secrets, risky code and where input flows, dependencies and supply chain, headers, active probes and an access check on your own running app, trackers, AVG/GDPR, an OWASP Top 10 coverage table. Verdict PASS or FAIL. |
 | `/forge-pack` | Fits the container templates to the app, checks them and runs the stack until it is healthy. |
 | `/forge-audit` | Reads your own codebase without changing it: stack, size, tests, end-of-life versions, bugs, security, speed. |
 | `/forge-inspect` | Looks at a live URL like a visitor: headers, SEO, accessibility, speed, PWA tags. Active checks only on your own app. |
@@ -212,8 +234,9 @@ python3 forge-design/contrast.py forge-design/tokens.json
 - Copy another app's code, logo, images, fonts, text or brand.
 - Print, paste or commit a secret, or open your `.env` while fixing your code.
 - Commit on main, force-push, merge or push without your go.
-- Mark a phase done on its own, invent reviews, testimonials, prices or quotes, or give legal advice:
-  the legal and trademark parts are checklists to verify.
+- Mark a phase done on its own (auto mode: only after you asked for it, only when the checks pass,
+  and never the secure phase), loosen a test or a scan to get through, invent reviews, testimonials,
+  prices or quotes, or give legal advice: the legal and trademark parts are checklists to verify.
 
 The full rules: [`forge/rules.md`](forge/rules.md).
 
