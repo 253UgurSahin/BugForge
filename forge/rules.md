@@ -120,36 +120,56 @@ are reference only and never ship.
 ## 9. Show the result
 
 A change the user cannot see has not happened. This holds for every skill
-that changes an app, and most of all for design and motion.
+that changes an app, and most of all for design and motion. The usual
+reasons a user sees nothing, each of which has happened:
+
+- the work is on a branch, or in a git worktree or copy, that is not the
+  folder their local server runs in;
+- they look at a built version (`next build` then `next start`, a compiled
+  bundle, containers) that was not rebuilt;
+- their system asks for reduced motion (Windows: "Animation effects" off;
+  macOS: "Reduce motion"), so every animation is replaced by its still
+  version, as it should be;
+- the effect is too small or too short to notice, or only plays on a click
+  path they did not take (a reload shows nothing).
+
+So, every time:
 
 - **Know what the user looks at.** Before you change anything, find out
   what serves their local URL: a dev server that reloads by itself, a built
-  app that needs a rebuild (`next build` then `next start`, a compiled
-  bundle), or containers; from which folder and which git branch; and
-  whether a service worker or another cache sits in front of it. Write that
-  at the top of the report. When you cannot tell, ask one question: "How do
-  you open the app, and at which address?"
+  app, or containers; from which folder and git branch (`git branch
+  --show-current`, `git worktree list`); and whether a service worker or
+  another cache sits in front. Write it at the top of the report. When you
+  cannot tell, ask one question: "How do you open the app, and at which
+  address?"
 - **Before.** Take screenshots of every screen you will touch, from that
   URL, before the first change.
 - **Say what is happening.** At the start: what you will do, in which
   order, and roughly how long. When the first screen is done: show it,
   before and after. Then one line per finished screen. Never work in
   silence for long, and never say "done" with nothing to look at.
-- **Make it show.** The work is on a branch: say which, and make the
-  running app serve that branch. Restart or rebuild what serves the URL.
-  A service worker: bump its cache name or unregister it in development,
-  and say so. Then load the very URL the user uses.
+- **Make it show.** Say which branch the work is on, and bring it to where
+  the user looks: when you work in the folder their server runs in, the
+  dev server shows it; a built app or containers: rebuild and restart
+  them; a worktree or copy: start the app from your folder on a free port
+  and give that address, or give the one command that switches their
+  folder to the branch. A service worker: say whether it is active and
+  bump its cache when it holds old files. Then load the URL yourself.
 - **After, and proof.** Take the same screenshots again, and frames over
   time on screens that should move. `python3 ../forge-design/changed.py
   <before> <after>` must say VISIBLE CHANGE, and `--moves` on the frames
   that something moves. "No visible change" is never a finished run: find
-  out why (the wrong branch, no rebuild, a cache, an effect too small to
-  see) and fix that first.
+  out which of the reasons above it is and fix that first.
+- **Record it.** For motion, record a short clip of the best moments
+  (`../forge-design/shots.example.mjs --video`): it shows the motion
+  whatever the user's system settings are.
 - **Hand it over.** Tell the user in plain words: the branch the work is
-  on, that their local address shows it now (or the one command that makes
-  it show), where to click to see the best moment first, the paths of the
-  before and after images and of the recorded clip, and how to go back
-  (`git switch <their branch>`). Merging and deploying stay their step.
+  on; the address that shows it now; where to click, in order, to see the
+  best moment first (motion often plays when a screen opens, not on a
+  reload); that a system set to reduced motion shows the calm version, and
+  how to check that setting; the paths of the before and after images and
+  of the clip; and how to go back (`git switch <their branch>`). Merging
+  and deploying stay their step.
 
 ## 10. Levels
 

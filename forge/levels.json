@@ -1,0 +1,319 @@
+{
+  "_about": "The forge levels, read by level.py: the one place for every level name and requirement. One scale, 1 to 5, in four domains; a level includes every level below it. Per domain: about and about_nl (the line above its table), floor (the lowest level inside a forge project, that is where forge-work/state.json exists; left out: no floor) and its five levels. Per level: name (English), nl (Dutch), aliases (other words that mean it, lower case, either language), summary and summary_nl (one line a non-expert understands), includes (what this level adds to the one below), built_with (look only), evidence (glob patterns from the project root, ** is any folders: level.py check wants a file that holds something for each one, of this level and of every level below it), evidence_how (how that evidence comes about) and evidence_or (words: a line of the report that holds them and then the reason, in three words or more, counts in place of this level's evidence).",
+  "domains": {
+    "look": {
+      "about": "design, motion and 3D. Each level includes the ones below it.",
+      "about_nl": "ontwerp, beweging en 3D. Elk niveau bevat de lagere niveaus.",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Subtle",
+          "nl": "Subtiel",
+          "aliases": ["calm", "rustig", "minimal", "minimaal", "minimum"],
+          "summary": "Clean and calm. Every button, link and field reacts when you point at it or press it.",
+          "summary_nl": "Strak en rustig. Elke knop, link en elk veld reageert als je erop wijst of drukt.",
+          "includes": ["a clean, consistent design system", "feedback on every control: hover, focus, press", "fades"],
+          "built_with": "CSS only",
+          "evidence": []
+        },
+        {
+          "level": 2,
+          "name": "Polished",
+          "nl": "Verzorgd",
+          "aliases": ["polish", "gepolijst", "netjes"],
+          "summary": "+ content glides in, pages change smoothly, numbers count up, messages slide in and out.",
+          "summary_nl": "+ inhoud schuift in beeld, pagina's wisselen vloeiend, getallen tellen op, meldingen schuiven in en uit.",
+          "includes": [
+            "content arrives: enter, stagger",
+            "page transitions",
+            "numbers count up",
+            "skeleton to content",
+            "toasts and dialogs move in and out",
+            "micro-interactions on every control"
+          ],
+          "built_with": "CSS, View Transitions, Web Animations API",
+          "evidence": []
+        },
+        {
+          "level": 3,
+          "name": "Expressive",
+          "nl": "Expressief",
+          "aliases": ["lively", "levendig"],
+          "summary": "+ scrolling tells a story, cards tilt with real depth, charts draw themselves, one moment only this app has.",
+          "summary_nl": "+ scrollen vertelt een verhaal, kaarten kantelen in 3D, grafieken tekenen zich, een moment dat alleen deze app heeft.",
+          "includes": [
+            "scroll storytelling: reveals, sticky scenes, parallax layers",
+            "springs",
+            "charts that draw and morph",
+            "real depth with CSS 3D: tilting cards, layered panels, perspective",
+            "one signature moment built for this app only"
+          ],
+          "built_with": "+ CSS 3D, scroll-driven animation; scenes/depth.js of the scene kit",
+          "evidence": []
+        },
+        {
+          "level": 4,
+          "name": "Showpiece",
+          "nl": "Showpiece",
+          "aliases": ["show piece", "pronkstuk"],
+          "summary": "+ a living 3D scene made for this app that follows your pointer, and 3D cards, objects and charts.",
+          "summary_nl": "+ een levende 3D-scene voor deze app die je aanwijzer volgt, en kaarten, objecten en grafieken in 3D.",
+          "includes": [
+            "a WebGL hero scene made for this app's concept: a generative form, a particle field, a shader atmosphere or a contour field",
+            "cursor-reactive light and depth",
+            "3D inside the interface: cards, objects, charts",
+            "depth while scrolling",
+            "Three.js installed without asking again (npm, local, never a CDN), loaded lazily and only on the screens that use it",
+            "a still poster for weak devices, for no WebGL and for reduced motion"
+          ],
+          "built_with": "+ Three.js (installed locally), the scene kit",
+          "evidence": []
+        },
+        {
+          "level": 5,
+          "name": "Cinematic",
+          "nl": "Cinematisch",
+          "aliases": ["cinema", "film", "filmisch", "4d", "max", "maximal", "maximaal", "maximum"],
+          "summary": "+ a 3D journey as you scroll, like a film; the forms react to you and to the app's live data.",
+          "summary_nl": "+ een 3D-reis bij het scrollen, als een film; de vormen reageren op jou en op de live data van de app.",
+          "includes": [
+            "a scroll-driven 3D journey: a camera that moves through chapters",
+            "custom shaders",
+            "GPU particles",
+            "forms that react to the pointer and to the app's live data",
+            "screens that change in 3D space"
+          ],
+          "built_with": "+ the whole scene kit, composed",
+          "evidence": []
+        }
+      ]
+    },
+    "dashboard": {
+      "about": "how rich the dashboard on the app's own data is. Each level includes the ones below it.",
+      "about_nl": "hoe rijk het dashboard op de eigen data van de app is. Elk niveau bevat de lagere niveaus.",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Subtle",
+          "nl": "Subtiel",
+          "aliases": ["calm", "rustig", "minimal", "minimaal", "minimum"],
+          "summary": "Calm: 3 to 5 key numbers, one chart and one table.",
+          "summary_nl": "Rustig: 3 tot 5 kerncijfers, een grafiek en een tabel.",
+          "includes": ["3 to 5 numbers", "one chart", "one table", "calm"],
+          "evidence": []
+        },
+        {
+          "level": 2,
+          "name": "Polished",
+          "nl": "Verzorgd",
+          "aliases": ["polish", "gepolijst", "netjes"],
+          "summary": "+ tiles with the change and a small trend line, 2 or 3 charts, a period filter, every state designed.",
+          "summary_nl": "+ tegels met het verschil en een kleine trendlijn, 2 of 3 grafieken, een periodefilter, elke toestand ontworpen.",
+          "includes": ["tiles with delta and sparkline", "2 or 3 charts", "a period filter", "every state designed"],
+          "evidence": []
+        },
+        {
+          "level": 3,
+          "name": "Expressive",
+          "nl": "Expressief",
+          "aliases": ["lively", "levendig"],
+          "summary": "+ charts that draw in and morph, click through to detail, compare periods, a heat map, live refresh.",
+          "summary_nl": "+ grafieken die zich tekenen en vervormen, doorklikken, periodes vergelijken, een heatmap, live bijwerken.",
+          "includes": [
+            "charts that draw in and morph between periods",
+            "drill-down",
+            "comparison",
+            "a value matrix or heat map",
+            "live refresh"
+          ],
+          "evidence": []
+        },
+        {
+          "level": 4,
+          "name": "Showpiece",
+          "nl": "Showpiece",
+          "aliases": ["show piece", "pronkstuk"],
+          "summary": "+ a dense control-room screen: live readouts, linked panels, one crosshair over all charts, charts with depth.",
+          "summary_nl": "+ een vol controlekamerscherm: live meetwaarden, gekoppelde panelen, een kruisdraad over alle grafieken, met diepte.",
+          "includes": [
+            "a dense HUD composition",
+            "a readout strip",
+            "panels joined by leader lines",
+            "a crosshair linked across charts",
+            "3D-styled charts: CSS 3D or canvas",
+            "a sequence log"
+          ],
+          "evidence": []
+        },
+        {
+          "level": 5,
+          "name": "Cinematic",
+          "nl": "Cinematisch",
+          "aliases": ["cinema", "film", "filmisch", "4d", "max", "maximal", "maximaal", "maximum"],
+          "summary": "+ your data as a 3D landscape, the camera moves when you filter; a plain table stays one key away.",
+          "summary_nl": "+ je data als 3D-landschap, de camera beweegt als je filtert; een gewone tabel blijft een toets weg.",
+          "includes": [
+            "a WebGL data scene: the app's own data as a 3D field (scenes/datascape.js of the scene kit)",
+            "the camera moves when a filter changes",
+            "a plain table of the same data is always one key press away"
+          ],
+          "evidence": []
+        }
+      ]
+    },
+    "test": {
+      "about": "how deep the testing goes. Each level includes the ones below it.",
+      "about_nl": "hoe diep het testen gaat. Elk niveau bevat de lagere niveaus.",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Quick",
+          "nl": "Snel",
+          "aliases": ["fast", "vlug", "smoke", "minimal", "minimaal", "minimum"],
+          "summary": "The app starts, the main flow works once, no error in the browser console. Takes minutes.",
+          "summary_nl": "De app start, de belangrijkste flow werkt een keer, geen fout in de browserconsole. Duurt minuten.",
+          "includes": ["the app starts", "the main flow works once", "no console error", "minutes"],
+          "evidence": []
+        },
+        {
+          "level": 2,
+          "name": "Basic",
+          "nl": "Basis",
+          "aliases": [],
+          "summary": "+ every user flow tested the way it should go, plus unit tests for the logic that matters.",
+          "summary_nl": "+ elke gebruikersflow getest zoals het hoort te gaan, plus unittests voor de logica die telt.",
+          "includes": ["a happy-path spec per flow", "unit tests for the logic that matters"],
+          "evidence": []
+        },
+        {
+          "level": 3,
+          "name": "Standard",
+          "nl": "Standaard",
+          "aliases": ["normal", "normaal", "gewoon"],
+          "summary": "+ wrong and odd input, every page walked at 3 widths in light and dark, no user sees another's data.",
+          "summary_nl": "+ foute en vreemde invoer, elke pagina bekeken op 3 breedtes in licht en donker, geen gebruiker ziet andermans data.",
+          "includes": [
+            "edge and negative cases",
+            "the walk: every page, 3 widths, light and dark (errors, links, axe, layout, speed)",
+            "the second-user access check"
+          ],
+          "evidence": ["forge-work/test/walk.json"],
+          "evidence_how": "Run the walk of forge-check test (its walk spec): it writes this file after every page."
+        },
+        {
+          "level": 4,
+          "name": "Thorough",
+          "nl": "Grondig",
+          "aliases": ["deep", "diep", "uitgebreid"],
+          "summary": "+ every form with empty, long and odd input, speed limits, screenshots compared, offline, keyboard only.",
+          "summary_nl": "+ elk formulier met lege, lange en vreemde invoer, snelheidsgrenzen, schermen vergeleken, offline, alleen toetsenbord.",
+          "includes": [
+            "the edge helpers on every form",
+            "the speed budget enforced",
+            "screenshots compared between rounds",
+            "offline and PWA",
+            "a keyboard-only pass"
+          ],
+          "evidence": ["e2e/**/edge*.spec.*", "forge-work/test/shots/r1/*.png", "forge-work/test/shots/r2/*.png"],
+          "evidence_how": "Write the edge spec from forge-check's edge example, one group per form. Walk twice, with FORGE_ROUND=r1 and after the fixes with FORGE_ROUND=r2: each round keeps its screenshots in a folder of its own."
+        },
+        {
+          "level": 5,
+          "name": "Exhaustive",
+          "nl": "Uitputtend",
+          "aliases": ["max", "maximal", "maximaal", "maximum"],
+          "summary": "+ every page in every state, hostile and huge input, two tabs, time zones, slow networks, all run 3 times.",
+          "summary_nl": "+ elke pagina in elke toestand, vijandige en enorme invoer, twee tabbladen, tijdzones, trage netwerken, alles 3 keer.",
+          "includes": [
+            "every route in every state",
+            "hostile and oversized input on every field (own app only)",
+            "two tabs at once",
+            "time zones and DST",
+            "a slow-network matrix",
+            "each spec run three times to catch flakes"
+          ],
+          "evidence": []
+        }
+      ]
+    },
+    "secure": {
+      "about": "how deep the security check goes. Each level includes the ones below it.",
+      "about_nl": "hoe diep de beveiligingscontrole gaat. Elk niveau bevat de lagere niveaus.",
+      "floor": 3,
+      "levels": [
+        {
+          "level": 1,
+          "name": "Quick",
+          "nl": "Snel",
+          "aliases": ["fast", "vlug", "minimal", "minimaal", "minimum"],
+          "summary": "Leaked secrets and risky code. Only on its own, never inside a forge project.",
+          "summary_nl": "Gelekte geheimen en riskante code. Alleen los, nooit binnen een forge-project.",
+          "includes": ["secrets (secretscan)", "risky code (codecheck)", "only on its own, never as a forge phase"],
+          "evidence": []
+        },
+        {
+          "level": 2,
+          "name": "Basic",
+          "nl": "Basis",
+          "aliases": [],
+          "summary": "+ known holes in the app's packages, the site's security headers, trackers. Also only on its own.",
+          "summary_nl": "+ bekende lekken in de pakketten van de app, de beveiligingsheaders van de site, trackers. Ook alleen los.",
+          "includes": ["dependencies", "headers", "trackers"],
+          "evidence": []
+        },
+        {
+          "level": 3,
+          "name": "Standard",
+          "nl": "Standaard",
+          "aliases": ["normal", "normaal", "gewoon"],
+          "summary": "+ input traced to risky code, package origins, framework checks, AVG/GDPR, OWASP. The least in a forge project.",
+          "summary_nl": "+ invoer gevolgd tot riskante code, herkomst van pakketten, framework-checks, AVG, OWASP. Minimum in een forge-project.",
+          "includes": [
+            "flowcheck",
+            "supply chain with an SBOM",
+            "the framework checks",
+            "the AVG/GDPR list",
+            "the OWASP coverage table",
+            "the floor inside a forge project: the secure phase never runs below this level"
+          ],
+          "evidence": ["forge-work/sbom.json"],
+          "evidence_how": "Run supply.py with --sbom forge-work/sbom.json: it writes the list of every locked package."
+        },
+        {
+          "level": 4,
+          "name": "Thorough",
+          "nl": "Grondig",
+          "aliases": ["deep", "diep", "uitgebreid"],
+          "summary": "+ your running app probed, two users tried on each other's data, semgrep, container checks.",
+          "summary_nl": "+ je draaiende app afgetast, twee gebruikers op elkaars data geprobeerd, semgrep, container-controles.",
+          "includes": [
+            "the active probe on the running app (own app only)",
+            "the two-user access check on the running app (own app only)",
+            "semgrep when installed",
+            "the container checks"
+          ],
+          "evidence": ["forge-work/security/probe.json", "forge-work/security/authz.json"],
+          "evidence_how": "Run probe.py and authz.py with --json on the user's own running app, and save what each prints in its file.",
+          "evidence_or": "no running app"
+        },
+        {
+          "level": 5,
+          "name": "Exhaustive",
+          "nl": "Uitputtend",
+          "aliases": ["max", "maximal", "maximaal", "maximum"],
+          "summary": "+ a threat model per way in, every route against every role, abuse limits, secrets in old commits, attack stories.",
+          "summary_nl": "+ een dreigingsmodel per ingang, elke route tegen elke rol, misbruiklimieten, geheimen in oude commits, aanvalsverhalen.",
+          "includes": [
+            "a threat model per entry point by reading the code: auth, session, payment, upload",
+            "an access matrix of every route against every role",
+            "abuse and rate-limit cases",
+            "a scan of the git history for secrets",
+            "a licence review",
+            "each finding with the attack told as a story"
+          ],
+          "evidence": []
+        }
+      ]
+    }
+  }
+}
