@@ -202,7 +202,7 @@ PASSING = {
                                   "<ul class=\"m-stagger\"><li class=\"m-lift\">10:00</li></ul></main>\n"),
                             write(root, "src/style.css", "@media (prefers-reduced-motion: no-preference) {\n" + "".join(
                                 "  .%s { transition: opacity 200ms; }\n" % name
-                                for name in ("btn", "card", "toast", "dialog", "tab")) + "}\n")),
+                                for name in ("btn", "card", "toast", "dialog", "tab", "m-enter", "m-stagger", "m-lift")) + "}\n")),
     "test": lambda root: (write(root, "forge-work/test-plan.md", TEST_PLAN), write(root, "forge-work/bugs.md", BUGS),
                           write(root, "e2e/f01-book.spec.ts", SPEC)),
     "diff": lambda root: (write(root, "forge-work/features.csv", FEATURES), write(root, "forge-work/bugs.md", BUGS),

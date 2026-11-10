@@ -185,10 +185,14 @@ html[data-motion] .m-reveal.is-visible { opacity: 1; }
   .m-stagger > * { animation-name: m-rise-in; }
 
   /* Button press: down fast, back with the same curve. */
-  .m-press { transition: transform var(--duration-fast) var(--ease-standard); }
+  /* One rule for both, so an element with m-press and m-ring keeps both. An element whose own rule
+     already has a transition: add transform and outline-offset to that rule instead of these classes. */
+  .m-press,
+  .m-ring {
+    transition: transform var(--duration-fast) var(--ease-standard),
+      outline-offset var(--duration-fast) var(--ease-standard);
+  }
   .m-press:active { transform: scale(var(--m-press-scale)); }
-
-  .m-ring { transition: outline-offset var(--duration-fast) var(--ease-standard); }
 
   .m-lift { transition: transform var(--duration-base) var(--ease-standard); }
   .m-lift:focus-visible { transform: translateY(var(--m-lift)); }

@@ -45,14 +45,14 @@ Also for this skill:
   files, 3D models or shaders, and no hero rebuilt from a screenshot. A reference gives a mood.
 - **No CDN, no hosted player, no tracker.** Every script, font, model and animation file is in the
   repo or installed with npm and served by the app.
-- **The user's own app**: no forge-work design files is fine. Find the stack with
-  `python3 ../forge-audit/detect.py .`, follow the app's own CSS variables and conventions, work on
-  a branch (`python3 ../forge/gitguard.py` exits 0) and change no behaviour.
+- **The user's own app**: no forge-work design files, plan or containers is fine: start it the way
+  it runs now, read its screens, follow its own CSS variables (`../forge-audit/detect.py .` names
+  the stack), work on a branch (`../forge/gitguard.py` exits 0), keep `forge-work/` out of git.
 
 ## Step 1: direction and inventory
 
-1. Read the tokens' `motion` group, components.md and every built screen (run the stack:
-   `docker compose up -d --build --wait`; clone mode: the notes on motion in recon.md are a mood).
+1. Read the tokens' `motion` group, components.md and every built screen, in the running app (a
+   forge app: `docker compose up -d --build --wait`; clone mode: recon.md's motion notes are a mood).
 2. The feel comes from what the user said: **calm** (fades and small moves), **lively** (springy
    controls, staggered lists, counting numbers) or **technical-HUD** (thin glowing lines, drawn
    charts, a slow wireframe hero on a dark screen). Nothing said: pick the one that fits the app,
@@ -71,15 +71,18 @@ Add the keys of motion.md section 2 with the values of the chosen direction: `sl
 `shift` and `shift-lg` in `size`. Keep `fast`, `base` and `ease`. Then run the theme.py command
 under `## Theme` in components.md: it writes `--duration-*`, `--ease-*` and `--size-shift*`.
 Components and scripts use those variables (scripts through `getComputedStyle`), never a raw
-`200ms` or `cubic-bezier(...)`. Own app without tokens: the same names in its main stylesheet.
+`200ms` or `cubic-bezier(...)`. Own app without tokens: every variable motion.css reads (its top
+lists them, lengths in px) goes in the app's main stylesheet; a missing one fails silently.
 
 ## Step 3: build in layers
 
 Copy `../forge-motion/motion.css` next to the theme file and load it after the theme (laravel:
 `resources/css/motion.css`, imported in `app.css` right after the other imports; django:
 `static/css/motion.css`, linked after `tokens.css`; next: imported in `app/layout.tsx` after
-`globals.css`; static: imported in `src/main.*`). A rule in it does nothing until an element carries its class: the work is
-putting the classes and scripts into the app's own templates and components. **The baseline**, built
+`globals.css`; static: imported in `src/main.*`, or with no bundler a `<link>` on every page). A
+rule in it does nothing until an element carries its class: the work is putting the classes and
+scripts into the app's own templates and components. An element whose own rule has a `transition`
+gets the new property added to that rule, not a class that would replace it. **The baseline**, built
 in every app, on each screen it fits: buttons and links (press and hover), cards and rows (hover
 lift), the page's main content on load (enter), lists and grids (stagger), dialogs, menus and
 toasts (enter and leave), loading (skeleton to content), numbers on a dashboard (count-up), charts
@@ -107,8 +110,8 @@ scrubbed or pinned to scroll, Three.js for real 3D, Lottie for a file the user o
    file in `node_modules/<package>/`), never from memory. One that is not a standard open licence
    (GSAP's own), or an animation or model file: the user decides; show the conditions and wait.
 4. Lazy-load it per profile as motion.md section 5 shows, check reduced motion in the script,
-   pause it off-screen and in hidden tabs, and clean up when the page goes away.
-5. Write a row in `## Libraries`: package, version, licence as read, why, size added, where loaded.
+   pause it off-screen and in hidden tabs, clean up when the page goes away, and write a row in
+   `## Libraries`: package, version, licence as read, why, size added, where loaded.
 
 ## Step 5: the hero visual
 
@@ -126,11 +129,9 @@ Its top says when Three.js fits better. The canvas is decoration (`aria-hidden="
 - **No flashing** more than three times a second. What moves by itself for over 5 seconds has a
   pause, and loops stop off-screen and in hidden tabs.
 - **Only `transform` and `opacity` animate** (but an accordion's grid rows and a chart's stroke).
-- **Budget**: no long task over 50ms caused by animation; 60 frames a second on a mid-range phone
-  (DevTools: 390px wide, 4x CPU slowdown); all motion script in the first load under 15 KB gzip; a
-  lazy hero chunk under 150 KB gzip. Over budget: simplify the effect, do not raise the budget.
-- **Focus is never lost** in a transition: after a dialog closes it returns to its button, after a
-  page transition it is on the new page's heading. Keyboard and screen reader order do not change.
+- **Budget**: no long task over 50ms from animation; 60 frames a second on a mid-range phone (390px,
+  4x CPU slowdown); motion script in the first load under 15 KB gzip, a lazy hero under 150 KB.
+- **Focus is never lost**: a closed dialog returns it to its button; keyboard order does not change.
 
 ## Step 7: check, then commit
 
@@ -140,14 +141,13 @@ Its top says when Three.js fits better. The canvas is decoration (`aria-hidden="
    components, not only stylesheets and forge-work. Then `python3 ../forge-motion/motioncheck.py .
    --fail-on medium` must exit 0; a false positive gets `forge:allow` only with the user's OK.
 2. In the browser, each screen of the inventory at 390px and 1440px, with reduced motion off and
-   on (Playwright: `reducedMotion: "reduce"` in the context; DevTools: Rendering, "Emulate CSS
-   prefers-reduced-motion"). Look for: no console errors, nothing hidden for good, focus in the
-   right place, no layout jump, the budget of Step 6. Keep evidence in `forge-work/motion-shots/`:
-   a screenshot per screen and setting, and for the hero and page transitions three frames taken
-   200ms apart.
+   on (Playwright: `reducedMotion: "reduce"` in the context). Look for: no console errors, nothing
+   hidden for good, focus in the right place, no layout jump, the budget of Step 6. Evidence in
+   `forge-work/motion-shots/`: a screenshot per screen and setting, and for the hero and page
+   transitions three frames 200ms apart.
 3. The app's tests still pass. `python3 ../forge-secure/secretscan.py .` exits 0. Clone mode:
-   `python3 ../forge-build/copycheck.py` exits 0. Commit per screen or effect with what and why:
-   `motion: S03 dashboard count-up and chart draw-on`.
+   `python3 ../forge-build/copycheck.py` exits 0. Commit the shared layer (tokens, motion.css,
+   scripts) first, then per screen or effect: `motion: S03 dashboard count-up and chart draw-on`.
 
 ## Output
 

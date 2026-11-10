@@ -6,8 +6,9 @@ on a screen will move, and fails when there are too few. A place counts when it 
 
 - a rule in a stylesheet (or a <style> block) with a transition or an animation, on a selector of
   the app's own (.btn, .card:hover, dialog[open]);
-- a motion class put on an element in a template or component: the m- classes of forge-motion's
-  motion.css (m-enter, m-stagger, m-lift ...), or Tailwind's transition and animate- classes;
+- a motion class put on an element in a template or component: an m- class that a stylesheet of
+  the app has a moving rule for (forge-motion's motion.css: m-enter, m-stagger, m-lift ...), or
+  Tailwind's transition and animate- classes;
 - a script that animates: element.animate(), startViewTransition, an IntersectionObserver, or a
   requestAnimationFrame loop.
 
@@ -75,11 +76,11 @@ def count_styles(css, name, places, offered, offset=0):
 
 def count_markup(text, name, places, used):
     for match in CLASSES.finditer(text):
-        found = MOTION_CLASS.findall(next(group for group in match.groups() if group is not None))
+        found = sorted(set(MOTION_CLASS.findall(next(group for group in match.groups() if group is not None))))
         used.update(item for item in found if item.startswith("m-"))
         if found:
             places.append({"file": name, "line": line_of(text, match.start()), "kind": "motion class",
-                           "what": " ".join(sorted(set(found)))[:80]})
+                           "what": " ".join(found)[:80], "names": found})
 
 
 def count_path(root):
@@ -112,6 +113,10 @@ def count_path(root):
                 for match in SCRIPTED.finditer(code):
                     places.append({"file": name, "line": line_of(text, match.start()), "kind": "script",
                                    "what": match.group(0).strip(" ([{")[:80]})
+    for place in places:  # an m- class counts only when a stylesheet of the app has a moving rule for it
+        names = [item for item in place.pop("names", [place["what"]]) if not item.startswith("m-") or item in offered]
+        place["what"] = " ".join(names)[:80]
+    places = [place for place in places if place["what"]]
     return {"places": places, "unused": sorted(offered - used), "unread": unread, "files_read": files,
             "files_moving": len({place["file"] for place in places})}
 

@@ -81,9 +81,17 @@ class CountTests(Project):
         self.assertIn("m-lift", data["unused"])
 
     def test_words_that_only_look_like_motion_classes_do_not_count(self):
+        self.copy_motion_css()
         self.write("index.html", '<p class="am-enter team-stagger animate-none no-transition-x">x</p>\n'
                                  '<p>class="m-enter" in the text is no attribute of this tag</p>\n')
         self.assertEqual(len(self.report()[1]["places"]), 1)  # only the quoted attribute in the second line
+
+    def test_an_m_class_with_no_moving_rule_in_the_app_does_not_count(self):
+        self.write("index.html", '<main class="m-enter m-made-up"><p class="m-foo transition">x</p></main>\n')
+        places = self.report()[1]["places"]
+        self.assertEqual([place["what"] for place in places], ["transition"])  # no stylesheet has .m-enter here
+        self.copy_motion_css()
+        self.assertEqual([place["what"] for place in self.report()[1]["places"]], ["m-enter", "transition"])
 
     def test_scripts_that_animate(self):
         self.write("src/main.js", "el.animate([{ opacity: 0 }, { opacity: 1 }], 200);\n"
