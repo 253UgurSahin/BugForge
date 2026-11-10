@@ -150,7 +150,7 @@ it out of git and out of every image. The reports you will read most:
 | `/forge-design` | A design brief with a concept of its own, design tokens and component specs, open fonts and icons, WCAG AA contrast checked; reviews screenshots of the built app in rounds; redesigns an app you already have. |
 | `/forge-build` | Scaffolds with the official installer, then builds screen by screen: auth, data access, Stripe with iDEAL, email, jobs. In clone mode it checks that no text is copied from the original. |
 | `/forge-dashboard` | Dashboards on the app's own data: the few numbers that matter, each traced to its source, accessible charts, every state, and a second user who sees none of it. |
-| `/forge-motion` | Motion that explains: transitions, micro-interactions, scroll and page transitions, a generative hero visual. CSS first, a library only when needed and never from a CDN, reduced motion always. |
+| `/forge-motion` | Puts motion into the app's own files, and proves it with a count before and after: transitions, micro-interactions, scroll and page transitions, a generative hero visual. CSS first, a library only when needed and never from a CDN, reduced motion always. |
 | `/forge-test` | Test plan, unit and Playwright tests against the local stack; a walk of every page at three widths in light and dark (console, links, accessibility, speed budget, layout), edge cases, screenshots compared between rounds, a bug list and a fix loop. |
 | `/forge-diff` | Scores the clone against the original: features, layout and behaviour. |
 | `/forge-brand` | Your own name, palette, logo brief and voice, plus the trademark checks to run; sweeps out the original's name. |
@@ -220,6 +220,7 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 | `chart.py DATA.json --type line\|area\|bar\|spark\|donut [--tokens TOKENS.json] [--title T] [--out FILE] [--json]` | one accessible inline SVG chart from data, no dependencies; 0 or 2 |
 | `dashcheck.py DASHBOARD.md [--json] [--fail-on L]` | the numbers table of forge-work/dashboard.md: a definition, a source and a unit for each, no invented data, no misleading chart form |
 | `shots.example.mjs BASE_URL OUT_DIR [--no-dark] [--state FILE] [PATH...]` | Node with Playwright, not Python: screenshots of your own app at 390px and 1440px, light and dark, for the look review |
+| `motioncount.py PATH [--min N] [--json]` | does the app really move? counts the motion wired into its own stylesheets, templates and scripts, and lists motion classes no element uses; 1 = too few |
 | `motioncheck.py PATH [--json] [--fail-on L]` | motion in the app's code: no reduced-motion rule, layout properties animated, endless loops, an animation library from a CDN |
 | `parity.py FEATURES.csv [--visual JSON...] [--json \| --markdown] [--fail-under N]` | feature parity score; 1 = a must-have is missing |
 | `imgdiff.py ORIGINAL.png CLONE.png [--out DIFF.png] [--json]` | layout score of two screenshots, colour ignored; 0 or 2 |

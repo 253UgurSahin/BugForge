@@ -198,7 +198,11 @@ PASSING = {
                            write(root, "forge-work/security.md", SECURITY)),  # forge-build Step 7 runs forge-secure
     "dashboard": lambda root: write(root, "forge-work/dashboard.md", DASHBOARD),
     "motion": lambda root: (write(root, "forge-work/motion.md", MOTION),
-                            write(root, "index.html", "<title>Slotwise</title>\n")),
+                            write(root, "index.html", "<title>Slotwise</title>\n<main class=\"m-enter\">"
+                                  "<ul class=\"m-stagger\"><li class=\"m-lift\">10:00</li></ul></main>\n"),
+                            write(root, "src/style.css", "@media (prefers-reduced-motion: no-preference) {\n" + "".join(
+                                "  .%s { transition: opacity 200ms; }\n" % name
+                                for name in ("btn", "card", "toast", "dialog", "tab")) + "}\n")),
     "test": lambda root: (write(root, "forge-work/test-plan.md", TEST_PLAN), write(root, "forge-work/bugs.md", BUGS),
                           write(root, "e2e/f01-book.spec.ts", SPEC)),
     "diff": lambda root: (write(root, "forge-work/features.csv", FEATURES), write(root, "forge-work/bugs.md", BUGS),

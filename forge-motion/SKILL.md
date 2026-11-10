@@ -19,10 +19,11 @@ description: >-
 
 # forge-motion
 
-An optional phase after build (and the dashboard phase, when there is one) and before test, in clone
-and idea mode. On its own it works on the user's own app. Reads `forge-work/design/tokens.json`,
-`design/components.md`, `plan.md` and the built screens. Writes the motion into the app and
-`forge-work/motion.md`. Numbers, recipes and the library table: `../forge-motion/motion.md`.
+Changes the app: when it ends, things on the screens move that did not move before. A plan, a
+report or a copied stylesheet that no element uses is a failed run. An optional phase after build
+(and dashboard) and before test in clone and idea mode; on its own it works on the user's own app.
+Reads `forge-work/design/tokens.json`, `components.md`, `plan.md` and the built screens. Writes the
+motion into the app's own files and `forge-work/motion.md`. Recipes: `../forge-motion/motion.md`.
 
 ## Ground rules
 
@@ -36,8 +37,10 @@ Read `../forge/rules.md` once per session. In short:
 
 Also for this skill:
 
-- **Motion explains, it never decorates everything.** Each animation has one job: a state change,
-  feedback, orientation or delight. No job, no motion. Delight is for a few moments per app.
+- **Build first, write second.** The work is edits to templates, components, stylesheets and
+  scripts. Never stop after the inventory or the tokens: go on to Step 3 in the same run.
+- **Every animation has a job** (a state change, feedback, orientation or delight), and the user
+  must see the difference: the baseline of Step 3 is always built, on every screen it fits.
 - **Nothing is taken from another site.** Not its animation code, timings file, Lottie or video
   files, 3D models or shaders, and no hero rebuilt from a screenshot. A reference gives a mood.
 - **No CDN, no hosted player, no tracker.** Every script, font, model and animation file is in the
@@ -50,14 +53,15 @@ Also for this skill:
 
 1. Read the tokens' `motion` group, components.md and every built screen (run the stack:
    `docker compose up -d --build --wait`; clone mode: the notes on motion in recon.md are a mood).
-2. Ask one question: "Which feel: **calm** (fades and small moves), **lively** (springy controls,
-   staggered lists, counting numbers) or **technical-HUD** (thin glowing lines, drawn charts, a slow
-   wireframe hero on a dark screen)? And is there a hero visual you have in mind?" Auto mode, or
-   "decide yourself": pick the one that fits plan.md's audience and say why in one line.
-3. Write the inventory: a table with, per screen, the moment, its job (state change, feedback,
-   orientation, delight), the recipe from motion.md, and what reduced motion shows instead. Skip
-   moments with no job. A screen people use all day (a table, a form) gets feedback and state
-   changes only. Aim for at most three delight moments in the whole app.
+2. The feel comes from what the user said: **calm** (fades and small moves), **lively** (springy
+   controls, staggered lists, counting numbers) or **technical-HUD** (thin glowing lines, drawn
+   charts, a slow wireframe hero on a dark screen). Nothing said: pick the one that fits the app,
+   say which and that it can change, and go on. Do not wait for an answer to start building.
+3. `python3 ../forge-motion/motioncount.py .` and note the number: the places that move now.
+4. Write the inventory: a table with, per screen, the moment, its job, the recipe from motion.md,
+   the file to change, and what reduced motion shows instead. It holds the baseline of Step 3 for
+   every screen, plus what the direction adds. A screen people use all day (a table, a form) gets
+   feedback and state changes; delight goes to the landing page, the first run and empty states.
 
 ## Step 2: the motion tokens
 
@@ -74,8 +78,13 @@ Components and scripts use those variables (scripts through `getComputedStyle`),
 Copy `../forge-motion/motion.css` next to the theme file and load it after the theme (laravel:
 `resources/css/motion.css`, imported in `app.css` right after the other imports; django:
 `static/css/motion.css`, linked after `tokens.css`; next: imported in `app/layout.tsx` after
-`globals.css`; static: imported in `src/main.*`). Delete the recipes the inventory does not use.
-Then, per row of the inventory, the first layer that does the job:
+`globals.css`; static: imported in `src/main.*`). A rule in it does nothing until an element carries its class: the work is
+putting the classes and scripts into the app's own templates and components. **The baseline**, built
+in every app, on each screen it fits: buttons and links (press and hover), cards and rows (hover
+lift), the page's main content on load (enter), lists and grids (stagger), dialogs, menus and
+toasts (enter and leave), loading (skeleton to content), numbers on a dashboard (count-up), charts
+(draw-on), sections of a long page (reveal on scroll), page changes (a view transition). Then the
+direction's own rows. Per row, the first layer that does the job:
 
 1. CSS transitions and keyframes, with `@starting-style` for entries.
 2. The View Transitions API for page changes; browsers without it navigate as always.
@@ -88,40 +97,35 @@ Scripts set custom properties with `element.style.setProperty()`. One commit per
 
 ## Step 4: the library ladder
 
-A library only when a row of the table in motion.md section 5 says so: GSAP for long timelines that
-are scrubbed or pinned to scroll, Three.js for real 3D (lighting, thousands of lines,
-post-processing), Lottie for an animation file the user owns. Then, each time:
+A library only when a row of the table in motion.md section 5 says so: GSAP for long timelines
+scrubbed or pinned to scroll, Three.js for real 3D, Lottie for a file the user owns. Each time:
 
 1. Tell the user what it adds, its size and why CSS cannot do it. Wait for a yes.
 2. `npm install <package>` in the project; it goes in package.json and the lockfile. Never a
    `<script>` or `import` from a URL. `python3 ../forge-secure/deps.py .` afterwards.
-3. Read the licence of the version you installed: `npm view <package> license`, then the licence
-   file in `node_modules/<package>/`, or the page it points to when there is none. Do not assume
-   it from memory or from motion.md. A licence that is not a standard open one (GSAP's own) is the
-   user's decision: show the conditions and wait. An animation or model file has its own licence:
-   ask where it came from.
+3. Read the licence of the version you installed (`npm view <package> license`, then the licence
+   file in `node_modules/<package>/`), never from memory. One that is not a standard open licence
+   (GSAP's own), or an animation or model file: the user decides; show the conditions and wait.
 4. Lazy-load it per profile as motion.md section 5 shows, check reduced motion in the script,
    pause it off-screen and in hidden tabs, and clean up when the page goes away.
 5. Write a row in `## Libraries`: package, version, licence as read, why, size added, where loaded.
 
 ## Step 5: the hero visual
 
-Only when the inventory has one. It is a generative piece from the user's own idea, drawn from
-maths: a curve, a field, a lattice. Never traced or rebuilt from a reference image or another
-site's hero. Start from `../forge-motion/wireform.example.js` (a breathing torus knot in wireframe
-on a 2D canvas, no dependency): copy it into the app's scripts, change its formulas and options,
-and take its colours from the tokens. Its top says when Three.js is the better tool. The canvas is
-decoration (`aria-hidden="true"`), with the heading and buttons as HTML above it.
+When the user asked for one or the direction is technical-HUD. A generative piece from the user's
+own idea, drawn from maths (a curve, a field, a lattice), never traced or rebuilt from a reference
+image or another site's hero. Start from `../forge-motion/wireform.example.js` (a breathing torus
+knot in wireframe on a 2D canvas, no dependency): copy it into the app's scripts, change its
+formulas, take its colours from the tokens, and mount it on the landing page or the first screen.
+Its top says when Three.js fits better. The canvas is decoration (`aria-hidden="true"`).
 
 ## Step 6: accessibility and performance rules
 
-- **Reduced motion**: every animation has a `prefers-reduced-motion: reduce` version: a fade, or
-  nothing. Never remove information: what a reveal would show is simply there. Scripts check
-  `matchMedia` too; a canvas draws one still frame.
-- **No flashing** more than three times in a second. Anything that moves by itself for more than
-  5 seconds has a pause, and loops stop off-screen and in hidden tabs.
-- **Only `transform` and `opacity` animate** (the accordion's grid rows and a chart's stroke are
-  the two exceptions). No `transition: all`, no `will-change` without a measurement.
+- **Reduced motion**: every animation has a `prefers-reduced-motion: reduce` version (a fade, or
+  nothing) that removes no information. Scripts check `matchMedia`; a canvas draws one still frame.
+- **No flashing** more than three times a second. What moves by itself for over 5 seconds has a
+  pause, and loops stop off-screen and in hidden tabs.
+- **Only `transform` and `opacity` animate** (but an accordion's grid rows and a chart's stroke).
 - **Budget**: no long task over 50ms caused by animation; 60 frames a second on a mid-range phone
   (DevTools: 390px wide, 4x CPU slowdown); all motion script in the first load under 15 KB gzip; a
   lazy hero chunk under 150 KB gzip. Over budget: simplify the effect, do not raise the budget.
@@ -130,9 +134,11 @@ decoration (`aria-hidden="true"`), with the heading and buttons as HTML above it
 
 ## Step 7: check, then commit
 
-1. `python3 ../forge-motion/motioncheck.py . --fail-on medium` must exit 0. Fix what it names; a
-   false positive gets `forge:allow` on its line only with the user's OK. Exit 2: something was
-   not read; that is not a pass.
+1. `python3 ../forge-motion/motioncount.py . --min 8` must exit 0, with a number well above the
+   one of Step 1: it lists every place that moves and every motion class no element uses yet (put
+   it to work, or delete its rule). `git diff --stat` since the phase began shows templates or
+   components, not only stylesheets and forge-work. Then `python3 ../forge-motion/motioncheck.py .
+   --fail-on medium` must exit 0; a false positive gets `forge:allow` only with the user's OK.
 2. In the browser, each screen of the inventory at 390px and 1440px, with reduced motion off and
    on (Playwright: `reducedMotion: "reduce"` in the context; DevTools: Rendering, "Emulate CSS
    prefers-reduced-motion"). Look for: no console errors, nothing hidden for good, focus in the
@@ -151,12 +157,12 @@ The motion in the app, on the work branch, and `forge-work/motion.md` with these
 - `## Inventory`: the table of Step 1, with a done column.
 - `## Tokens`: the token names added and their values.
 - `## Libraries`: the rows of Step 4, or "none: CSS and the Web Animations API only".
-- `## Checks`: motioncheck.py's result, the browser pass per width and setting, the measured
-  budget numbers, and where the evidence is.
+- `## Checks`: motioncount.py's number before and after, motioncheck.py's result, the browser
+  pass per width and setting, the measured budget numbers, and where the evidence is.
 
 ## Next
 
-Checkpoint: tell the user in at most 5 plain lines the direction, how many moments move on how many
-screens, the libraries added with their licences (or none), the check results, and how to see it
-with reduced motion on. Wait for the user's go. Then `/forge-test`, or back to `/forge` when it
+Checkpoint: tell the user in at most 5 plain lines the direction, what now moves on which screens
+(motioncount.py before and after, the files changed), the libraries added with their licences (or
+none), the check results, and where to click to see it. Wait for the user's go. Then `/forge-test`, or back to `/forge` when it
 runs the phases.

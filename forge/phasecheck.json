@@ -80,6 +80,8 @@
     {"check": ["doc", "forge-work/motion.md", "--section", "Direction", "--section", "Inventory", "--section", "Tokens",
                "--section", "Libraries", "--section", "Checks"],
      "why": "forge-motion, Output: motion.md with ## Direction, ## Inventory, ## Tokens, ## Libraries, ## Checks"},
+    {"check": ["run", "forge-motion/motioncount.py", ".", "--min", "8"],
+     "why": "forge-motion, Step 7: motioncount.py . --min 8 exits 0: the motion is in the app's own files, not only in a plan"},
     {"check": ["run", "forge-motion/motioncheck.py", ".", "--fail-on", "medium"],
      "why": "forge-motion, Step 7 and Output: motioncheck.py . --fail-on medium exits 0"}
   ],
