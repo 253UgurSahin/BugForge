@@ -1,44 +1,40 @@
 #!/usr/bin/env python3
 """Does the app really move? Counts the motion that is wired into an app's own code.
 
-forge-design motion must change the app, not only write a plan. This counts the places where something on
-a screen will move: a rule in a stylesheet or <style> block with a transition or an animation, on a
-selector of the app's own (.btn, .card:hover); a motion class on an element in a template or component
-(an m- class that a stylesheet of the app has a moving rule for, as in motion.css, or Tailwind's
-transition and animate- classes); a script that animates (element.animate(), startViewTransition, an
-IntersectionObserver, a requestAnimationFrame loop). A rule for an .m- class is only on offer until an
-element carries the class; classes no element uses are listed (a motion.css copied in and never used is
-the usual reason nothing moves). Skips node_modules, vendor, build, forge-work, symlinks, files over 1 MB.
+forge-design motion must change the app, not only write a plan. This counts the places where something on a
+screen will move: a rule in a stylesheet or <style> block with a transition or an animation, on a selector of
+the app's own (.btn, .card:hover); a motion class on an element (an m- class that a stylesheet of the app has
+a moving rule for, as in motion.css, or Tailwind's transition and animate- classes); a script that animates
+(element.animate(), startViewTransition, an IntersectionObserver, a requestAnimationFrame loop). A rule for an
+.m- class is only on offer until an element carries the class; classes no element uses are listed. Skips
+node_modules, vendor, build, forge-work and other such folders, symlinks, files over 1 MB.
 
---level N (the look level, 1 to 5) also asks for the features of that level and all below it, in the
-same files. Text in a comment or a string never counts (GLSL is the exception: it lives in strings), nor
-a rule for an m- class no element carries, nor the scene kit's own files (stage.js, form.js ... in a
-folder named *scene*). The patterns are in motioncount.json, next to this script. What counts:
+--level N (the look level, 1 to 5) also asks for the features of that level and all below it. Comments and
+strings never count (GLSL lives in strings, so there it does), nor a rule for an m- class no element carries,
+nor the kit's own files (stage.js, form.js ... in a *scene* folder). Patterns: motioncount.json. What counts:
 1 reduced motion: @media (prefers-reduced-motion), matchMedia('(prefers-reduced-motion'), Tailwind
   motion-reduce: or motion-safe: in a class attribute or @apply.
-2 entrance: a counted rule with an animation (not on :hover, :focus, :active), an animated m- class on an
-  element (m-enter), a Tailwind animate- class but spin/pulse/ping/bounce, @starting-style, el.animate([.
-2 page transition or counted number: @view-transition, view-transition-name, startViewTransition(; a
-  script with requestAnimationFrame or setInterval that writes Math.round(, toFixed(, toLocaleString(,
-  format(, Number( or String( into textContent; m-count on an element, with a moving rule for it.
-3 scroll: new IntersectionObserver(, animation-timeline, view( or scroll( in a rule, new ScrollTimeline(
-  or ViewTimeline(, a scroll listener in a file that sets a progress (progress =, setProgress().
-3 CSS 3D: perspective, preserve-3d, rotateX( rotateY( rotate3d( translateZ( perspective( or translate3d(
-  with a z not 0, in a rule, a style attribute or el.style.transform; or depth.js mounted (an import or
-  <script src> of a depth.js, a data-depth attribute).
-4 WebGL scene: an import of three (or a three.module.js), getContext('webgl' | 'webgl2'), an import of a
-  scenes/*.js file, lazyScene(, <script src=".../three.js">.
+2 entrance: a rule with an animation (not on :hover, :focus, :active, view-transition), a Tailwind animate-
+  class on a tag (not spin, pulse, ping, bounce), @starting-style, el.animate([.
+2 page transition or counted number: @view-transition, view-transition-name, startViewTransition(; a script
+  with requestAnimationFrame or setInterval that writes Math.round( toFixed( toLocaleString( format( Number(
+  or String( into textContent; a moving rule for .m-count, on an element.
+3 scroll: new IntersectionObserver(, animation-timeline, view( or scroll( in a rule, new ScrollTimeline( or
+  ViewTimeline(, a scroll listener in a file that sets a progress (progress =, setProgress().
+3 CSS 3D: perspective, preserve-3d, rotateX( rotateY( rotate3d( translateZ( perspective( translate3d( with a
+  z not 0, in a rule, style attribute or el.style.transform; depth.js mounted (import, <script src>, data-depth).
+4 WebGL scene: import of three (or three.module.js), getContext('webgl'|'webgl2'), import of a scenes/*.js
+  file, lazyScene(, <script src=".../three.js">.
 4 pointer: a pointermove, mousemove or touchmove listener (onPointerMove=) in a file with the scene,
   setPointer(, or the kit mounted (a scenes/*.js import, lazyScene(): its stage reads the pointer.
-4 fallback: data-scene-poster on a tag, a [data-scene="fallback"] selector, poster= on a tag but <video>, a
-  test of the variable getContext('webgl') went into (!gl, gl === null), !window.WebGLRenderingContext.
+4 fallback: data-scene-poster on a tag, a [data-scene="fallback"] selector, poster= on a tag but <video>,
+  if (!gl), !ctx, !context or gl === null in a file with getContext('webgl'), !window.WebGLRenderingContext.
 5 scroll drives the scene: .setProgress(, an import of journey.js, a scroll listener in a file with it.
-5 shader: ShaderMaterial, RawShaderMaterial, gl_FragColor, gl_Position, a GLSL void main(), an import of
-  a kit scene (scenes/form, field, aurora, contour, datascape or glsl: all are shaders).
-5 data hook: .setData( with an argument, or uniforms.x.value = an expression naming data, values, stats,
-  metrics, props, state, store, rows, series, items, readings, json, response or payload.
---level sets the minimum (1: 5 places, 2: 12, 3 to 5: 20; always in 2 files or more) unless --min is
-given too. --level auto reads the look level from PATH/forge-work/levels.json (forge/level.py writes it).
+5 shader: (Raw)ShaderMaterial, gl_FragColor, gl_Position, GLSL void main(), an import of a kit scene (scenes/
+  form, field, aurora, contour, datascape or glsl: all are shaders).
+5 data hook: .setData( with an argument; uniforms.x.value = data/values/stats/state/rows/... (motioncount.json).
+--level sets the minimum (1: 5 places, 2: 12, 3 to 5: 20; always in 2 files or more) unless --min is given
+too. --level auto reads the look level from PATH/forge-work/levels.json (forge/level.py writes it).
 
 Usage: python3 motioncount.py PATH [--min N] [--level N|auto] [--json]   (e.g. . --min 8, or . --level auto)
 Exit codes: 0 enough places move (--min, default 5, in 2 files or more) and, with --level, every feature up
@@ -60,14 +56,14 @@ MARKUP = {".html", ".htm", ".php", ".djhtml", ".jinja", ".jinja2", ".j2", ".twig
 SCRIPTS = {".js", ".mjs", ".cjs", ".ts", ".jsx", ".tsx", ".vue", ".svelte", ".astro"}
 MAX_BYTES = 1024 * 1024
 RULES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "motioncount.json")  # the feature patterns
-COMMENT = re.compile(r"/\*.*?\*/|<!--.*?-->", re.S)
-SCRIPT_COMMENT = re.compile(r"/\*.*?\*/|(?<![:\w])//[^\n]*", re.S)  # not the // of https://
-STYLE_BLOCK = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.S | re.I)
-SCRIPT_BLOCK = re.compile(r"<script\b[^>]*>(.*?)</script\s*>", re.S | re.I)
-TOKENS = re.compile(r"/\*.*?(?:\*/|\Z)|(?<![:\w(])//[^\n]*|(\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'"
-                    r"|`(?:\\.|[^`\\])*`)", re.S)  # in a script or a stylesheet: a comment, or a string (group 1)
+COMMENT = re.compile(r"/\*.*?(?:\*/|\Z)|<!--.*?(?:-->|\Z)", re.S)
+SCRIPT_COMMENT = re.compile(r"/\*.*?(?:\*/|\Z)|(?<![:\w])//[^\n]*", re.S)  # not the // of https://
+STYLE_BLOCK = re.compile(r"<style\b[^<>]*>(.*?)(?:</style\s*>|\Z)", re.S | re.I)
+SCRIPT_BLOCK = re.compile(r"<script\b[^<>]*>(.*?)(?:</script\s*>|\Z)", re.S | re.I)
+TOKENS = re.compile(r"/\*.*?(?:\*/|\Z)|<!--.*?(?:-->|\Z)|(?<![:\w(])//[^\n]*|(\"(?:\\.|[^\"\\\n])*(?:\"|$)|'"
+                    r"(?:\\.|[^'\\\n])*(?:'|$)|`(?:\\.|[^`\\])*(?:`|\Z))", re.S | re.M)  # a comment; a string (group 1)
 BLANK = re.compile(r"[^\n]")  # what blanking a comment or a block replaces: all but the line ends
-RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")  # one innermost rule: its selector and its declarations
+RULE = re.compile(r"(?<![^{}])([^{}]+)\{([^{}]*)\}")  # one innermost rule: its selector and its declarations
 MOVES = re.compile(r"(?<![\w-])(?:transition|animation)(?:-name|-duration)?\s*:(?!\s*(?:none|0s|initial|unset)\b)")
 OFFERED = re.compile(r"\.(m-[a-z][\w-]*)")
 CLASSES = re.compile(r"""\bclass(?:Name)?\s*=\s*(?:\{\s*)?(?:"([^"]*)"|'([^']*)'|`([^`]*)`)""")
@@ -94,8 +90,7 @@ def load_rules(path):
             sig["also"]), rule=re.compile(sig["rule"]) if "rule" in sig else None) for sig in item["signals"]])
             for item in data["features"]]
         signals = [((i, n), sig) for i, item in enumerate(features) for n, sig in enumerate(item["signals"])]
-        if not ({int(key) for key in data["min"]} == {item["level"] for item in features} == {1, 2, 3, 4, 5}
-                and {sig["view"] for key, sig in signals} <= {"style", "script", "markup"}):
+        if set(data["min"]) != set("12345") or {s["view"] for _, s in signals} - {"style", "script", "markup"}:
             raise ValueError("each level 1 to 5 needs a minimum and features, each with signals of a known view")
         return {"min": {int(key): int(value) for key, value in data["min"].items()}, "kit": set(data["kit_files"]),
                 "features": features, "signals": signals, "ask": data["ask"]}
@@ -106,11 +101,10 @@ def load_rules(path):
 def level_on_record(root, ask):
     """The look level in ROOT/forge-work/levels.json. ValueError, saying to ask the user, when there is none."""
     path = os.path.join(root, "forge-work", "levels.json")
+    linked = os.path.islink(os.path.dirname(path)) or os.path.islink(path)
     try:
-        if os.path.islink(os.path.dirname(path)) or os.path.islink(path):
-            raise ValueError("it is a link, so it was not read: tell the user")
-        if not os.path.isfile(path) or os.path.getsize(path) > MAX_BYTES:
-            raise ValueError("there is no such file (of at most 1 MB) under %s" % root)
+        if linked or not os.path.isfile(path) or os.path.getsize(path) > MAX_BYTES:
+            raise ValueError("it is a link, so it was not read: tell the user" if linked else "not there, or over 1 MB")
         level = json.loads(read(path))["look"]["level"]
         if type(level) is int and 1 <= level <= 5:
             return level
@@ -145,9 +139,19 @@ def views(text, ext):
     if ext in SCRIPTS | MARKUP:
         out["script"] = scrub(text if ext in SCRIPTS else keep(text, SCRIPT_BLOCK))
     if ext in MARKUP:  # tags and attributes: the patterns start at a tag or an attribute, so no string check
-        markup = COMMENT.sub(lambda match: BLANK.sub(" ", match.group(0)), out["script"][0] if ext in SCRIPTS else text)
+        markup = out["script"][0] if ext in SCRIPTS else scrub(text)[0]
         out["markup"] = (markup, markup)
     return out
+
+
+def rule_at(mask, at):
+    """The selector of the rule whose declarations hold AT, looked for within 4000 characters; None outside one."""
+    opened, closed = (mask.rfind(char, max(0, at - 4000), at) for char in "{}")
+    if opened <= closed:
+        return None
+    start = max(0, opened - 4000)
+    selector = " ".join(mask[max([start - 1] + [mask.rfind(char, start, opened) for char in "{};"]) + 1:opened].split())
+    return None if selector.startswith("@") else selector
 
 
 def look_for(rules, text, ext, name, hits):
@@ -156,15 +160,13 @@ def look_for(rules, text, ext, name, hits):
         for key, sig in rules["signals"]:
             if sig["view"] != view or sig["also"] and all(mask[m.start()] == "\0" for m in sig["also"].finditer(full)):
                 continue
-            for match in sig["re"].finditer(full):
+            for count, match in enumerate(sig["re"].finditer(full)):
                 at = match.start()
-                opened, closed = mask.rfind("{", 0, at), mask.rfind("}", 0, at)  # the rule AT is in, if any
-                rule = " ".join(mask[max(mask.rfind(char, 0, opened) for char in "{};") + 1:opened].split())
-                rule = rule if opened > closed and not rule.startswith("@") else None
+                rule = rule_at(mask, at) if view == "style" and (sig.get("strings") or mask[at] != "\0") else None
                 if (sig.get("strings") or mask[at] != "\0") and (not sig["rule"] or rule and sig["rule"].search(rule)):
                     classes = OFFERED.findall(match.group(0) if rule is None else rule) if view == "style" else []
                     hits.setdefault(key, []).append((name, line_of(full, at), classes))
-                    if not classes:
+                    if not classes or count > 100:
                         break  # the first is enough; one for an m- class waits for an element with the class
 
 
@@ -279,10 +281,8 @@ def main(argv=None):
         if report["unused"]:
             print("\nOn offer but on no element (put the class on one, or delete the rule): %s"
                   % ", ".join(report["unused"]))
-        print("\n%d place(s) move, in %d file(s); %d file(s) read. Needed: %d, in 2 files or more."
-              % (total, report["files_moving"], report["files_read"], minimum))
-        if level:
-            print("\nLevel %d needs:" % level)
+        print("\n%d place(s) move, in %d file(s); %d file(s) read. Needed: %d, in 2 files or more.%s" % (total, report[
+            "files_moving"], report["files_read"], minimum, "\n\nLevel %d needs:" % level if level else ""))
         for item in report["features"]:
             print("found  %s  (%s)" % (item["name"], item["where"]) if item["found"]
                   else "MISSING  %s: %s" % (item["name"], item["needs"]))

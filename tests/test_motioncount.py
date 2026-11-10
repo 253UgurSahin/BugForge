@@ -216,9 +216,6 @@ class LevelProject(Project):
 
 
 class FeatureTests(LevelProject):
-    def tearDown(self):
-        shutil.rmtree(self.root, ignore_errors=True)
-
     def check(self, cases):
         """Each case: (files, the feature names found), each in a fresh folder."""
         for files, names in cases:
@@ -237,7 +234,7 @@ class FeatureTests(LevelProject):
 
     def test_entrance(self):
         name = FEATURES[1]
-        motion = open(os.path.join(ROOT, "forge-design", "motion.css"), encoding="utf-8").read()
+        motion = motioncount.read(os.path.join(ROOT, "forge-design", "motion.css"))
         found = [f for f in FEATURES[:3] if f != FEATURES[2]]  # motion.css brings its reduced-motion rule
         self.check([({"a.css": ".hero { animation: rise 300ms both; }\n"}, [name]),
                     ({"a.css": "@starting-style { dialog[open] { opacity: 0; } }\n"}, [name]),
@@ -450,7 +447,7 @@ class BadInputTests(LevelProject):
 
     def test_a_missing_or_broken_motioncount_json_is_exit_2(self):
         broken = os.path.join(self.root, "rules.json")
-        good = json.loads(open(motioncount.RULES, encoding="utf-8").read())
+        good = json.loads(motioncount.read(motioncount.RULES))
         bad_view = dict(good, features=[dict(good["features"][0], signals=[{"view": "x", "re": "a"}])] + good["features"])
         for text in (None, "{", '{"min": {}}', json.dumps(dict(good, min={"1": 5})), json.dumps(bad_view),
                      json.dumps(dict(good, features=[dict(good["features"][0], signals=[{"view": "style", "re": "("}])]))):
@@ -467,6 +464,9 @@ class BadInputTests(LevelProject):
         self.write("a.js", "<" * 200000 + "`" + "a = getContext('webgl') " * 2000)
         self.write("b.html", "<div " + "class=' " * 50000)
         self.write("c.css", "/*" + "{" * 100000)
+        self.write("d.css", "/* " * 50000 + " " * 200000)  # no brace anywhere
+        self.write("e.js", "'" + "\\'" * 100000 + "\n" + "translate3d(1, 2, " * 10000)  # a quote never closed
+        self.write("f.html", "<script src='" * 20000 + "<style>" * 20000 + "<a " * 50000)
         start = time.time()
         self.assertIn(self.run_main("--level", "5")[0], (1, 2))
         self.assertLess(time.time() - start, 20)

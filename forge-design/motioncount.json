@@ -38,7 +38,7 @@
     },
     {
      "view": "markup",
-     "re": "<[A-Za-z][\\w.-]*\\b[^>]{0,2000}?\\sclass(?:Name)?\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,2000}(?<![\\w-])motion-(?:reduce|safe):"
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sclass(?:Name)?\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,2000}(?<![\\w-])motion-(?:reduce|safe):"
     },
     {
      "view": "script",
@@ -59,7 +59,7 @@
     },
     {
      "view": "markup",
-     "re": "<[A-Za-z][\\w.-]*\\b[^>]{0,2000}?\\sclass(?:Name)?\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,2000}(?<![\\w-])animate-(?!(?:spin|pulse|ping|bounce|none)(?![\\w-]))[\\w-]"
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sclass(?:Name)?\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,2000}(?<![\\w-])animate-(?!(?:spin|pulse|ping|bounce|none)(?![\\w-]))[\\w-]"
     },
     {
      "view": "style",
@@ -88,7 +88,7 @@
     },
     {
      "view": "markup",
-     "re": "<[A-Za-z][\\w.-]*\\b[^>]{0,2000}?\\sstyle\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,500}view-transition-name\\s*:"
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sstyle\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,500}view-transition-name\\s*:"
     },
     {
      "view": "script",
@@ -169,7 +169,7 @@
     },
     {
      "view": "markup",
-     "re": "<[A-Za-z][\\w.-]*\\b[^>]{0,2000}?\\sstyle\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,500}(?:rotate[XY]|rotate3d|translateZ|perspective)\\s*\\("
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sstyle\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,500}(?:rotate[XY]|rotate3d|translateZ|perspective)\\s*\\("
     },
     {
      "view": "script",
@@ -181,11 +181,11 @@
     },
     {
      "view": "markup",
-     "re": "<[A-Za-z][\\w.-]*\\b[^>]{0,2000}?\\sdata-depth\\b"
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sdata-depth\\b"
     },
     {
      "view": "markup",
-     "re": "<script\\b[^>]{0,500}\\ssrc\\s*=\\s*['\\\"][^'\\\"]{0,300}(?<![\\w-])depth\\.m?js['\\\"]"
+     "re": "<script\\b[^<>]{0,500}\\ssrc\\s*=\\s*['\\\"][^'\\\"]{0,300}(?<![\\w-])depth\\.m?js['\\\"]"
     }
    ]
   },
@@ -213,7 +213,7 @@
     },
     {
      "view": "markup",
-     "re": "<script\\b[^>]{0,500}\\ssrc\\s*=\\s*['\\\"][^'\\\"]{0,300}(?<![\\w-])three(?:\\.module|\\.core)?(?:\\.min)?\\.m?js['\\\"]"
+     "re": "<script\\b[^<>]{0,500}\\ssrc\\s*=\\s*['\\\"][^'\\\"]{0,300}(?<![\\w-])three(?:\\.module|\\.core)?(?:\\.min)?\\.m?js['\\\"]"
     }
    ]
   },
@@ -250,7 +250,7 @@
    "signals": [
     {
      "view": "markup",
-     "re": "<[A-Za-z][\\w.-]*\\b[^>]{0,2000}?\\sdata-scene-poster\\b"
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sdata-scene-poster\\b"
     },
     {
      "view": "style",
@@ -258,11 +258,12 @@
     },
     {
      "view": "markup",
-     "re": "<(?!video\\b)[A-Za-z][\\w.-]*\\b[^>]{0,2000}?\\sposter\\s*="
+     "re": "<(?!video\\b)[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sposter\\s*="
     },
     {
      "view": "script",
-     "re": "\\b([A-Za-z_$][\\w$]*)\\s*=\\s*[^;\\n]{0,200}?\\bgetContext\\s*\\(\\s*['\"`](?:webgl2?|experimental-webgl)['\"`][\\s\\S]{0,4000}?(?:!\\s*\\1\\b|\\b\\1\\s*(?:===?|!==?)\\s*null\\b)"
+     "re": "\\bif\\s*\\(\\s*!\\s*(?:[\\w$]+\\.)*(?:gl|ctx|context|webgl|renderer)\\s*\\)|\\b(?:gl|ctx|context)\\s*===?\\s*null\\b",
+     "also": "\\bgetContext\\s*\\(\\s*['\"`](?:webgl2?|experimental-webgl)['\"`]"
     },
     {
      "view": "script",
