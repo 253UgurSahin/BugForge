@@ -144,9 +144,9 @@
      "why": "forge-launch, Also for this skill: commit once all tests pass and secretscan.py, sweep.py and, in clone mode, copycheck.py exit 0; forge-build, Clean room: rewrite each shared run, or with the user's OK add it to forge-work/copy-allow.txt"}
   ],
   "secure": [
-    {"check": ["doc", "forge-work/security.md", "--section", "What was checked", "--section", "Findings",
-               "--section", "Not checked", "--section", "Accepted risks"],
-     "why": "forge-secure, Step 9 and Output: security.md in the format of its report"},
+    {"check": ["doc", "forge-work/security.md", "--section", "What was checked", "--section", "Coverage",
+               "--section", "Findings", "--section", "Not checked", "--section", "Accepted risks"],
+     "why": "forge-secure, Step 10 and Output: security.md in the format of its report, with the coverage table"},
     {"check": ["line", "forge-work/security.md", "Verdict", "PASS"],
      "why": "forge-secure, The gate: the line is exactly Verdict: PASS or Verdict: FAIL"},
     {"check": ["counts", "forge-work/security.md"],

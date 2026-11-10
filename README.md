@@ -176,8 +176,12 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 | `scope.py TARGET [--scope FILE] [--json]` | may active tests run here? 0 = yes (localhost, containers, your listed domains), 1 = passive only |
 | `secretscan.py PATH [--json] [--fail-on L]` | keys, tokens, passwords and `.env` files |
 | `codecheck.py PATH [--json] [--fail-on L]` | risky code patterns in PHP, Python and JS/TS |
+| `flowcheck.py PATH [--json] [--fail-on L]` | request input followed to a risky call, handlers with no owner check, uploads, weak tokens, mass assignment, secrets in logs |
 | `deps.py PATH [--json] [--fail-on L] [--strict]` | known holes, through npm audit, composer audit and pip-audit when installed |
+| `supply.py PATH [--sbom FILE] [--json] [--fail-on L]` | the supply chain, offline: lockfiles, floating versions, odd sources, look-alike names, install scripts, licences; `--sbom` writes a CycloneDX parts list |
 | `headers.py URL [--json] [--fail-on L]` or `--file FILE --url URL` | HTTP security headers, from one passive GET |
+| `probe.py URL [--paths FILE] [--scope FILE] [--max-requests N] [--json] [--fail-on L]` | active, your own app only (asks scope.py, else exit 2): exposed files, a database error after a quote, reflected input, debug pages, CORS, open redirects, forms without a CSRF token |
+| `authz.py URL --urls FILE --a COOKIES_A --b COOKIES_B [--scope FILE] [--json] [--fail-on L]` | active, your own app only: can a second user or a visitor read the first user's pages? |
 | `trackers.py PATH [--json] [--fail-on L]` | third-party services in the code, for the privacy policy |
 | `untrusted.py FILE... [--json] [--fail-on L]` | prompt-injection signs in fetched text, before Claude uses it |
 
@@ -195,7 +199,7 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 | `getpage.py URL OUT [--json]` | loads one page passively and saves its HTML in a new file; 0 or 2 |
 | `pagecheck.py URL [--json] [--fail-on L] [--no-pwa]` or `--file FILE [--url URL]` | SEO, accessibility, speed, PWA and mixed-content basics of one page |
 
-**forge-compare/**, **forge-design/**, **forge-build/**, **forge-diff/**, **forge-brand/**, **forge-test/**, **forge-pack/**
+**forge-compare/**, **forge-design/**, **forge-build/**, **forge-dashboard/**, **forge-motion/**, **forge-diff/**, **forge-brand/**, **forge-test/**, **forge-pack/**
 
 | usage | what it does |
 | --- | --- |
@@ -205,10 +209,15 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 | `theme.py TOKENS.json --tailwind 4\|3\|no [--write FILE]` | the theme CSS from the design tokens, as components.md maps them; 0 or 2 |
 | `pagetext.py PAGE...` | keeps the visible text of the original's saved pages in `forge-work/original-text/`; 0 or 2 |
 | `copycheck.py [PATH...] [--words N] [--json]` | runs of 6 or more words the clone shares with the original's kept text; 1 = a run found |
+| `chart.py DATA.json --type line\|area\|bar\|spark\|donut [--tokens TOKENS.json] [--title T] [--out FILE] [--json]` | one accessible inline SVG chart from data, no dependencies; 0 or 2 |
+| `dashcheck.py DASHBOARD.md [--json] [--fail-on L]` | the numbers table of forge-work/dashboard.md: a definition, a source and a unit for each, no invented data, no misleading chart form |
+| `motioncheck.py PATH [--json] [--fail-on L]` | motion in the app's code: no reduced-motion rule, layout properties animated, endless loops, an animation library from a CDN |
 | `parity.py FEATURES.csv [--visual JSON...] [--json \| --markdown] [--fail-under N]` | feature parity score; 1 = a must-have is missing |
 | `imgdiff.py ORIGINAL.png CLONE.png [--out DIFF.png] [--json]` | layout score of two screenshots, colour ignored; 0 or 2 |
 | `sweep.py [PATH] [--config F] [--avoid A] [--domains D] [--colors C] [--json]` | the original's names, domains and colours left in the code; 1 = leftovers |
 | `bugs.py BUGS.md [--json] [--fail-on L]` | open bugs in forge-work/bugs.md; 1 = one at or above `--fail-on` |
+| `walkcheck.py WALK.json [--budget FILE] [--bugs] [--json] [--fail-on L]` | judges the browser walk: errors, broken links, accessibility, layout faults, speed against a budget; `--bugs` prints blocks for bugs.md |
+| `shotcheck.py BEFORE_DIR AFTER_DIR [--min SCORE] [--json]` | the screenshots of two rounds, compared with imgdiff.py; 1 = a changed, missing or new shot |
 | `packcheck.py PATH [--json] [--fail-on L]` | Dockerfile and the files it copies, compose file, .dockerignore and .env.example |
 | `composecheck.py PATH [--json] [--fail-on L]` | the compose part of packcheck, on its own |
 
@@ -228,8 +237,9 @@ python3 forge-design/contrast.py forge-design/tokens.json
   any other platform. It builds containers; running them is your step.
 - Buy anything: no domains, trademarks or subscriptions.
 - Touch real money: Stripe test keys only. Live keys are yours.
-- Run active tests (fuzzing, scans, odd input, load) on a site that is not yours. Other people's
-  sites get what any visitor does: load a page, read the headers.
+- Run active tests (probes, odd input, scans, load) on a site that is not yours: probe.py and
+  authz.py refuse any target scope.py does not allow. Other people's sites get what any visitor
+  does: load a page, read the headers.
 - Log in to someone else's account, ask for your password, crawl, or scrape against a site's terms.
 - Copy another app's code, logo, images, fonts, text or brand.
 - Print, paste or commit a secret, or open your `.env` while fixing your code.
@@ -244,7 +254,7 @@ The full rules: [`forge/rules.md`](forge/rules.md).
 
 Needs Claude Code, Python 3.9+, git, and Docker with the compose plugin. Building also uses your
 stack's own tools (PHP and Composer, Python, Node: /forge-build says which), or runs them in their
-Docker image. Playwright and Lighthouse need Node.
+Docker image. Playwright and Lighthouse need Node. Screenshots for the look review use Playwright too.
 
 Works on Linux, macOS and Windows: CI runs every script's tests on all three.
 
