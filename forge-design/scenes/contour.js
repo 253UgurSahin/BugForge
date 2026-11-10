@@ -56,8 +56,8 @@
  *
  * Cost: one rectangle, one draw call, no textures, no work on the processor beyond a few numbers a
  * frame. Per pixel: 2D simplex noise with its exact slope, 2 lookups for the warp plus 3, 4 or 5
- * layers (low, medium, high), and a few screen-space derivatives; the pixels right next to a top
- * or a hollow read the land once more to place its mark exactly. Lines must be sharp, so it draws
+ * layers (low, medium, high), and a few screen-space derivatives; only the pixels within about
+ * 12 of a top, a hollow or a saddle read the land six times more, to place a mark exactly. Lines must be sharp, so it draws
  * at full resolution (the stage caps the pixel ratio); on a weak device the stage steps down to
  * fewer layers and a pixel ratio of 1. Fill rate is what it costs: give it the hero, not a page.
  */
@@ -261,8 +261,8 @@ void main() {
 
   // Marks. Near a top or a hollow the land is nearly a bowl, so one Newton step, -H^-1 g (H the
   // curvature and g the slope, both per pixel), points from this pixel to the top. H is how the
-  // exact slope changes from one pixel to the next. Close to the top the land is read once more
-  // at that point and the step is taken again: every pixel of a mark then agrees on where the
+  // exact slope changes from one pixel to the next. Close to the top the land is read again
+  // at that point and the step is taken twice more: every pixel of a mark then agrees on where the
   // top is, how high it is and how calm the chart is there, so a mark is drawn whole or not at
   // all. A saddle (det H < 0) gets no mark. A top gets one only when the innermost ring round it
   // is small (within about 30 pixels), as on a real chart; when that ring would be a speck under
@@ -270,45 +270,57 @@ void main() {
   float mark = 0.0, speck = 0.0;
   mat2 H = mat2(dFdx(perPixel), dFdy(perPixel));
   H = 0.5 * (H + transpose(H));
-  if (uLook.x > 0.5 && determinant(H) > 0.0) {
-    vec2 to = -inverse(H) * perPixel;
-    if (length(to) < 12.0 * uPixelRatio) {
-      // At the first guess, read the land and its curvature exactly (the slope four pixels on),
-      // and step again: every pixel round the top now finds the same point.
-      vec2 at = gl_FragCoord.xy + to;
-      // (One loop, not three calls: the shader stays small and compiles fast on weak devices.)
-      vec3 c[3];
-      for (int i = 0; i < 3; i++) {
-        vec2 offset = vec2(i == 1 ? 4.0 : 0.0, i == 2 ? 4.0 : 0.0);
-        c[i] = terrain((at + offset - 0.5 * uResolution) / unit);
+  vec2 to = -inverse(H) * perPixel;
+  if (uLook.x > 0.5 && length(to) < 12.0 * uPixelRatio) {
+    // At the first guess, read the land and its curvature exactly (the slope four pixels on) and
+    // step again; there, close to the top for every pixel round it, read them once more and take
+    // the last step. So every pixel of a mark finds the same top, to a fraction of a pixel, and
+    // judges it by the same numbers. (One loop, not six calls: the shader stays small and
+    // compiles fast on weak devices.)
+    vec2 at = gl_FragCoord.xy + to;
+    vec3 c1 = vec3(0.0), cx = vec3(0.0);
+    mat2 C = mat2(1.0);
+    for (int i = 0; i < 6; i++) {
+      int k = i - (i / 3) * 3;
+      vec2 pixel = at + vec2(k == 1 ? 4.0 : 0.0, k == 2 ? 4.0 : 0.0);
+      vec3 here = terrain((pixel - 0.5 * uResolution) / unit);
+      if (k == 0) c1 = here;
+      else if (k == 1) cx = here;
+      else {
+        C = mat2(cx.yz - c1.yz, here.yz - c1.yz) / (4.0 * unit);
+        C = 0.5 * (C + transpose(C));
+        if (i == 2 && abs(determinant(C)) > 1e-24) at -= inverse(C) * (c1.yz / unit);
       }
-      vec3 c0 = c[0], cx = c[1], cy = c[2];
-      vec2 g = c0.yz / unit;
-      mat2 C = mat2(cx.yz - c0.yz, cy.yz - c0.yz) / (4.0 * unit);
-      C = 0.5 * (C + transpose(C));
-      float det = determinant(C);
-      // On nearly flat ground the two readings of the curvature disagree, and a mark there would
-      // come out as stray dots: such a top gets none.
-      float agree = (C[0][0] + C[1][1]) / (H[0][0] + H[1][1]);
-      if (det > 0.0 && agree > 0.6 && agree < 1.6) {
-        vec2 more = -inverse(C) * g;
-        to += more;
-        float top = C[0][0] < 0.0 ? 1.0 : 0.0;
-        float half_ = 0.5 * (C[0][0] + C[1][1]);
-        float weakest = abs(half_) - sqrt(max(half_ * half_ - det, 0.0));   // the smaller |eigenvalue|
-        float level = (c0.x + uTide + 0.5 * dot(g, more)) / interval;        // the height of the top itself
-        float toLevel = (top > 0.5 ? level - floor(level) : ceil(level) - level) * interval;
-        float reach = sqrt(2.0 * toLevel / max(weakest, 1e-12)) / uPixelRatio;   // CSS px to the innermost ring
-        float calmThere = calmAt(gl_FragCoord.xy + to);
-        float innermost = top > 0.5 ? floor(level) : ceil(level);
-        // This pixel's line is the innermost ring when it is the level next to the top.
-        speck = step(reach, 9.0) * step(abs(floor(h / interval + 0.5) - innermost), 0.5);
-        float r = length(to) / uPixelRatio;
-        float spot = 1.0 - smoothstep(1.4, 2.3, r);                         // a top: a solid dot
-        vec2 a = abs(rotate45 * to) / uPixelRatio;                          // a hollow: a small x
-        float ex = (1.0 - smoothstep(0.35, 0.95, min(a.x, a.y))) * (1.0 - smoothstep(2.6, 3.4, max(a.x, a.y)));
-        mark = step(reach, 30.0) * step(length(more), 4.0 * uPixelRatio) * step(0.6, abs(level)) * (1.0 - smoothstep(0.0, 0.3, calmThere)) * mix(ex, spot, top);
-      }
+    }
+    float det = determinant(C);
+    float half_ = 0.5 * (C[0][0] + C[1][1]);
+    float root = sqrt(max(half_ * half_ - det, 0.0));
+    float weakest = abs(half_) - root, strongest = abs(half_) + root;   // |eigenvalues|
+    // A saddle gets no mark, nor does a top drawn out into a long ridge or trough (its curvature
+    // along under a quarter of that across): there no single point is the top, and the pixels
+    // round it would not agree where it is.
+    if (det > 0.0) {
+      vec2 g = c1.yz / unit;
+      vec2 last = -inverse(C) * g;
+      vec2 centre = at + last;
+      to = centre - gl_FragCoord.xy;
+      float top = C[0][0] < 0.0 ? 1.0 : 0.0;
+      float level = (c1.x + uTide + 0.5 * dot(g, last)) / interval;       // the height of the top itself
+      float toLevel = (top > 0.5 ? level - floor(level) : ceil(level) - level) * interval;
+      float reach = sqrt(2.0 * toLevel / max(weakest, 1e-12)) / uPixelRatio;   // CSS px to the innermost ring
+      float calmThere = calmAt(centre);
+      float innermost = top > 0.5 ? floor(level) : ceil(level);
+      // This pixel's line is the innermost ring when it is the level next to the top.
+      speck = step(reach, 9.0) * step(abs(floor(h / interval + 0.5) - innermost), 0.5);
+      float r = length(to) / uPixelRatio;
+      float spot = 1.0 - smoothstep(1.4, 2.3, r);                         // a top: a solid dot
+      vec2 a = abs(rotate45 * to) / uPixelRatio;                          // a hollow: a small x
+      float ex = (1.0 - smoothstep(0.35, 0.95, min(a.x, a.y))) * (1.0 - smoothstep(2.6, 3.4, max(a.x, a.y)));
+      // Every test fades in over a range rather than switching, so a top on the edge of one is
+      // drawn whole and faint, never in pieces.
+      float keep = smoothstep(0.22, 0.35, weakest / strongest) * (1.0 - smoothstep(20.0, 38.0, reach))
+                 * smoothstep(0.4, 0.8, abs(level)) * (1.0 - smoothstep(0.0, 0.3, calmThere));
+      mark = keep * mix(ex, spot, top);
     }
   }
   minor *= 1.0 - speck;
@@ -442,7 +454,7 @@ export function mount(container, options = {}) {
     const k = (MAP / num(o.scale, 1, 0.2, 5)) * (1 - 0.38 * p) * fit;
     u.uView.value.set(3.1 + p * 2.6 + flow * 0.012, -1.7 + p * 1.1 + flow * 0.004, k, flow);
     // The knoll grows while the pointer is over the scene and sinks when it leaves.
-    presence = damp(presence, stage.pointer.inside && !still && lift > 0 ? 1 : 0, 2.2);
+    presence = damp(presence, stage.pointer.inside && !still && lift > 0 ? 1 : 0, 4);
     u.uHill.value.set((stage.pointer.x * stage.size.width) / (2 * unit), (stage.pointer.y * stage.size.height) / (2 * unit),
       presence, lift * 0.4);
     // The range rises and settles towards the data.

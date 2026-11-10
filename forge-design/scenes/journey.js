@@ -28,8 +28,10 @@
  * Options (only scene is needed):
  *   scene       a mounted scene of this kit, or a factory (element) => scene, called with the stage
  *               element. Mount a scene of your own with progressEase: 0.05: the journey eases itself.
- *   chapters    keyframes { at, camera, phone, still, progress, params, via, alt }:
+ *   chapters    keyframes { at, until, camera, phone, still, progress, params, via, alt }:
  *     at        0..1 on the section's scroll. Default: where its [data-chapter] is centred on screen.
+ *     until     0..1: the chapter stays the current one up to here, for a long chapter whose text
+ *               stays while the camera rides on toward the next keyframe (default: at).
  *     camera    { position: [0, 0, 9], target: [0, 0, 0], fov: the one before (32), roll: 0 degrees }.
  *     phone     the same, below the `narrow` aspect; still: the same, for its reduced-motion still
  *               (without it the still slides camera sideways to centre `focus`). Missing parts: camera.
@@ -41,12 +43,17 @@
  *   steps       the chapter elements, a selector or a list. Default "[data-chapter]" in the section.
  *   inertia     0.65. Seconds the camera lags the scroll on average (settled in about twice that).
  *   dwell       0.3. How much the move slows at a chapter: 0 not at all, 1 to a stop.
- *   parallax    0.035, drift 0.01. A lean toward the pointer and a slow hand-held float, as parts
- *               of the camera's distance.
+ *   parallax    0.09, drift 0.01. A lean toward the pointer (0.09 swings the camera about 5 degrees
+ *               round its target, with a slight roll and a small slide after the pointer) and a slow
+ *               hand-held float, as parts of the camera's distance.
  *   narrow      0.8. Below this width/height the phone keyframes are used.
  *   stillWidth  880, stillRatio 0.62: CSS size of a still. focus [0, 0, 0]: the subject's middle.
  *   keepScene   false. true: destroy() leaves a scene you mounted yourself alive.
  *   onUpdate    fn({ progress, target, index, params }) after every frame.
+ *
+ * While live, the section also carries --journey-x and --journey-y (0..1 across the stage element,
+ * y down, eased with the camera's lean) and --journey-pointer (0..1, eased: is there a pointer), so
+ * page CSS can light the side of the scene the pointer is on.
  *
  * The section gets data-journey="live" | "still" | "fallback" and data-chapter="<index>", and a
  * "chapter" event (detail { index, direction: 1, -1, or 0 the first time, chapter }) each time
@@ -72,7 +79,7 @@
 import * as THREE from "three";
 import { progressOf } from "./stage.js";
 
-const DEFAULTS = { inertia: 0.65, dwell: 0.3, parallax: 0.035, drift: 0.01, narrow: 0.8,
+const DEFAULTS = { inertia: 0.65, dwell: 0.3, parallax: 0.09, drift: 0.01, narrow: 0.8,
                    stillWidth: 880, stillRatio: 0.62, focus: [0, 0, 0], keepScene: false };
 const FILTERS = 3;       // how many smoothing stages follow the scroll (see Follower)
 const HOLD = 0.012;      // hysteresis of the chapter switch, in progress units
@@ -159,6 +166,7 @@ export function mount(section, options = {}) {
     for (const off of offs.splice(0).reverse()) off();
     root.removeAttribute("data-journey");
     root.removeAttribute("data-chapter");
+    for (const name of ["--journey-x", "--journey-y", "--journey-pointer"]) root.style.removeProperty(name);
   };
   if (!stage || stage.failed || !stage.camera) {
     root.setAttribute("data-journey", "fallback");
@@ -180,8 +188,8 @@ export function mount(section, options = {}) {
     const phone = like(c.phone), still = like(c.still);
     still.own = Boolean(c.still);
     const via = Boolean(c.via) && i > 0 && i < n - 1;
-    return { at: c.at, wide, phone, still, via, chapter: via ? -1 : told++, progress: finite(c.progress, n > 1 ? i / (n - 1) : 0),
-             params: c.params || {} };
+    return { at: c.at, until: c.until, wide, phone, still, via, chapter: via ? -1 : told++,
+             progress: finite(c.progress, n > 1 ? i / (n - 1) : 0), params: c.params || {} };
   });
   const told2key = keys.filter((k) => !k.via).map((k) => keys.indexOf(k)); // chapter number -> keyframe
   // Uniform Catmull-Rom: a curve through every keyframe whose direction and speed run on without
@@ -193,7 +201,7 @@ export function mount(section, options = {}) {
   };
   const paths = { wide: path("wide"), phone: path("phone"), still: path("still") };
   const progressList = keys.map((k) => k.progress), paramList = keys.map((k) => k.params);
-  let ats = [];
+  let ats = [], untils = [];
 
   // Where each keyframe sits on the scroll: given; for a chapter, where its text is centred on
   // screen; for a via, half-way between its neighbours.
@@ -210,6 +218,7 @@ export function mount(section, options = {}) {
     });
     ats.forEach((v, i) => { if (Number.isNaN(v)) ats[i] = (ats[i - 1] + (Number.isNaN(ats[i + 1]) ? ats[i - 1] : ats[i + 1])) / 2; });
     for (let i = 1; i < n; i++) ats[i] = Math.max(ats[i], ats[i - 1]); // in order, whatever was given
+    untils = keys.map((k, i) => Math.max(ats[i], Number.isFinite(Number(k.until)) ? clamp(Number(k.until), 0, 1) : ats[i]));
   }
 
   // Trip position s (0..1) -> segment i and u (0..1) inside it. u is bent by a cubic whose slope
@@ -241,7 +250,7 @@ export function mount(section, options = {}) {
     camera.position.copy(home.position); camera.quaternion.copy(home.quaternion); camera.up.copy(home.up);
     camera.fov = home.fov; camera.updateProjectionMatrix();
   };
-  let leanX = 0, leanY = 0;
+  let leanX = 0, leanY = 0, present = 0;
   function place(i, u, time, delta, moving) {
     const own = !moving && keys[i + Math.round(u)] && keys[i + Math.round(u)].still.own; // a still of its own
     const p = paths[own ? "still" : stage.size.aspect < o.narrow ? "phone" : "wide"];
@@ -251,6 +260,7 @@ export function mount(section, options = {}) {
     const ease = (v, t) => (moving ? THREE.MathUtils.damp(v, t, 2, delta) : 0);
     leanX = ease(leanX, stage.pointer.x);
     leanY = ease(leanY, stage.pointer.y);
+    present = ease(present, stage.pointer.active ? 1 : 0);
     forward.subVectors(look, eye);
     const distance = forward.length();
     forward.normalize();
@@ -266,9 +276,19 @@ export function mount(section, options = {}) {
       look.addScaledVector(right, dx).addScaledVector(up, dy);
     } // moving: only the eye moves, so the lean and the float turn the view round the target
     camera.position.copy(eye).addScaledVector(right, dx).addScaledVector(up, dy);
+    // Moving: keep the distance, so the lean swings the camera round its target (an orbit), roll a
+    // little with it, and slide eye and target together a third as far the other way: the subject
+    // turns toward the pointer and drifts a little after it, so the lean reads at any distance.
+    if (moving) {
+      camera.position.sub(look).setLength(distance).add(look);
+      const slide = -0.35 * o.parallax * distance;
+      toFocus.copy(right).multiplyScalar(leanX * slide).addScaledVector(up, leanY * 0.6 * slide);
+      camera.position.add(toFocus);
+      look.add(toFocus);
+    }
     camera.up.copy(THREE.Object3D.DEFAULT_UP);
     camera.lookAt(look);
-    camera.rotateZ(monotone(p.roll, i, u));
+    camera.rotateZ(monotone(p.roll, i, u) - (moving ? leanX * o.parallax * 0.3 : 0));
     camera.fov = monotone(p.fov, i, u);
     camera.updateProjectionMatrix();
   }
@@ -314,9 +334,13 @@ export function mount(section, options = {}) {
     const { i, u } = locate(trip);
     place(i, u, time, delta, true);
     const params = applyScene(i, u);
-    // The current chapter is the nearest keyframe; a new one has to be nearer by HOLD, so the
-    // text does not flicker when the trip rests half-way.
-    const gap = (c) => Math.abs(trip - ats[told2key[c]]);
+    const css = root.style;
+    css.setProperty("--journey-x", ((leanX + 1) / 2).toFixed(4));
+    css.setProperty("--journey-y", ((1 - leanY) / 2).toFixed(4));
+    css.setProperty("--journey-pointer", present.toFixed(3));
+    // The current chapter is the nearest keyframe (or stretch, with until); a new one has to be
+    // nearer by HOLD, so the text does not flicker when the trip rests half-way.
+    const gap = (c) => { const k = told2key[c]; return Math.max(ats[k] - trip, trip - untils[k], 0); };
     let best = 0;
     for (let c = 1; c < told2key.length; c++) if (gap(c) < gap(best)) best = c;
     if (current < 0) announce(best, 0);
