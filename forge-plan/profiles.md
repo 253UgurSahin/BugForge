@@ -35,10 +35,10 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
 - One app, no microservices. Secrets only in `.env` (git-ignored); `.env.example` lists every name
   with a fake value. TLS and the public domain belong to the user's own reverse proxy.
 - End-to-end tests: Playwright (`@playwright/test` 1.64) against the running compose stack.
-- **3D scenes**, look level 4 and 5 only (1 to 3 add no library): `three` 0.187 from npm, never a CDN,
-  and the kit's files copied into the app (`../forge-design/scenes/lazy.js`, `stage.js`, `glsl.js`, the
-  scene). Three loads on the client only, on the screens with a scene, when it is near (`lazyScene`), with
-  a poster for weak devices, no WebGL and reduced motion (`../forge-design/motion.md` section 9).
+- **3D scenes**, look level 4 and 5 only (1 to 3 add no library; level 3 depth is the kit's `depth.js`): `three`
+  0.187 from npm, never a CDN, and the kit's files copied into the app (`../forge-design/scenes/lazy.js`,
+  `stage.js`, `glsl.js`, the scene). Three loads on the client only, on the screens with a scene, when near
+  (`lazyScene`), with a poster for no WebGL and reduced motion. Files and mount: `../forge-design/scenes.md`.
 
 ## Shared by the server profiles (laravel, django, next)
 

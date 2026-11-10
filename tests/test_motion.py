@@ -344,7 +344,7 @@ class StepsLevelTests(unittest.TestCase):
                      "../forge-design/shots.example.mjs", "--frames", "--video", "--reduced",
                      "python3 ../forge-design/changed.py forge-work/motion-shots/before forge-work/motion-shots/after",
                      "python3 ../forge-design/changed.py --moves", "python3 ../forge-design/motioncount.py . --level auto",
-                     "motioncount.py . --min 8", "python3 ../forge-design/motioncheck.py . --fail-on medium",
+                     "the same `motioncount.py . --level auto`", "python3 ../forge-design/motioncheck.py . --fail-on medium",
                      "Agent or Task", "git branch --show-current", "git worktree list", "service worker",
                      "git switch", ".webm"]:
             self.assertIn(part, self.steps)

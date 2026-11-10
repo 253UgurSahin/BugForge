@@ -8,8 +8,9 @@ Changes the app: when it ends, things on the screens move that did not move befo
 the chosen look level asks and no more. A plan, a report or a stylesheet no element uses is a
 failed run. An optional phase after build (and dashboard) in clone and idea mode; on its own it
 works on the user's own app. Writes the app's own files and `forge-work/motion.md`. Recipes,
-budgets and the proof script: `../forge-design/motion.md`. The scene kit (levels 4 and 5) is the
-folder of `../forge-design/scenes/stage.js`; the API of each file is the comment at its top.
+budgets and the proof script: `../forge-design/motion.md`. The scene kit (`depth.js` from level 3,
+WebGL from level 4) is the folder of `../forge-design/scenes/stage.js`; the API of each file is the
+comment at its top, and how to use it in an app is `../forge-design/scenes.md`.
 
 Also for this part:
 
@@ -62,7 +63,7 @@ What each level adds (each level builds everything of the levels below it):
 | --- | --- | --- | --- | --- |
 | 1 | Subtle | Subtiel | a clean, consistent design system; feedback on every control: hover, focus, press; fades | CSS only |
 | 2 | Polished | Verzorgd | + content arrives: enter, stagger; page transitions; numbers count up; skeleton to content; toasts and dialogs move in and out; micro-interactions on every control | CSS, View Transitions, Web Animations API |
-| 3 | Expressive | Expressief | + scroll storytelling: reveals, sticky scenes, parallax layers; springs; charts that draw and morph; real depth with CSS 3D: tilting cards, layered panels, perspective; one signature moment built for this app only | + CSS 3D, scroll-driven animation; the app's own `depth.js` (motion.md section 8) |
+| 3 | Expressive | Expressief | + scroll storytelling: reveals, sticky scenes, parallax layers; springs; charts that draw and morph; real depth with CSS 3D: tilting cards, layered panels, perspective; one signature moment built for this app only | + CSS 3D, scroll-driven animation; the kit's `depth.js` and `depth.css` |
 | 4 | Showpiece | Showpiece | + a WebGL hero scene made for this app's concept: a generative form, a particle field, a shader atmosphere or a contour field; cursor-reactive light and depth; 3D inside the interface: cards, objects, charts; depth while scrolling; Three.js installed without asking again (npm, local, never a CDN), loaded lazily and only on the screens that use it; a still poster for weak devices, for no WebGL and for reduced motion | + Three.js (installed locally), the scene kit |
 | 5 | Cinematic | Cinematisch | + a scroll-driven 3D journey: a camera that moves through chapters; custom shaders; GPU particles; forms that react to the pointer and to the app's live data; screens that change in 3D space | + the whole scene kit, composed |
 
@@ -131,24 +132,25 @@ page transitions. Per row, the first layer of motion.md section 3 that does the 
 
 **Level 3 adds** scroll storytelling (a sticky scene whose steps follow the scroll, reveals,
 parallax layers), springs, charts that draw in and morph between periods, real depth in CSS 3D
-(perspective on a container, rotateX, rotateY, translateZ on its cards and panels: the app's own
-`depth.js` of motion.md section 8, as the kit has none yet), and the signature moment, built for
-this app only. Patterns: motion.md section 8. No library.
+(tilting cards, stacked panels, folds, a layered hero: `../forge-design/scenes/depth.js` and
+`depth.css` copied into the app's `scenes/` folder, elements marked `data-depth="tilt|stack|fold|scene"`,
+scenes.md section 7) and the signature moment, built for this app only. Patterns: motion.md
+section 8. No library.
 
 **Level 4 adds** a WebGL hero from the kit: `form.js` (a shape: an object, a tool, a craft),
 `field.js` (particles: a crowd, a flow, numbers), `aurora.js` (light: water, a sky, a sea; mode
-`water`) or `contour.js` (lines over a map: places, depth, height). `npm install three` without
-asking again (the level said yes); read `node_modules/three/LICENSE`, write it under `##
-Libraries`, run `python3 ../forge-check/deps.py .`. Copy `stage.js`, `glsl.js`, `lazy.js` and the
+`water`) or `contour.js` (lines over a map: places, depth, height); the chooser is scenes.md
+section 2. `npm install three` without asking again (the level said yes); read
+`node_modules/three/LICENSE`, write it under `## Libraries`, run `python3 ../forge-check/deps.py .`. Copy `stage.js`, `glsl.js`, `lazy.js` and the
 scene (next to `../forge-design/scenes/lazy.js`) into a `scenes/` folder of the app, never from a
 URL. Tune its options and colours until it could only belong to this app: a plain torus knot is a
 failed hero. Mount it with `lazyScene`, with a poster (`data-scene-poster`: PNG, or JPEG at
 quality 80, under 100 KB) and one `motionToggle` button. The pointer moves its light,
-`setProgress` with the scroll gives depth, CSS 3D gives 3D inside the interface. Plain page, React
-and Next: motion.md section 9.
+`setProgress` with the scroll gives depth, CSS 3D gives 3D inside the interface. The mount per
+stack (plain page, Vite, Next, Django): `../forge-design/scenes.md` section 5.
 
-**Level 5 adds** (motion.md section 10): **the scroll journey**, chapters that move the camera (the
-kit has no `journey.js` yet: the recipe of section 10, story.js and the scene's camera); **a
+**Level 5 adds** (motion.md section 10): **the scroll journey**, chapters that move the camera
+(the kit's `journey.js` directing one scene, scenes.md section 6; reduced motion shows stills); **a
 custom shader**, a `ShaderMaterial` in the app's own code on `glsl.js` (a kit scene alone is not
 one); **GPU particles**, `field.js`; **the data hook**, `setData` fed from data a signed-in screen
 already loads (the overview, the statistics), on that screen; a new endpoint, or the user's data
@@ -189,8 +191,8 @@ stay outside. The app's CSP stays as strict as it is: no inline `style` attribut
 ## Step 9: prove it, commit
 
 1. `python3 ../forge-design/motioncount.py . --level auto` must exit 0: level 1 needs 5 places,
-   level 2 12, levels 3 to 5 at least 20, in 2 files or more, well above Step 1 (the gate also
-   runs `motioncount.py . --min 8`). It lists what the level misses and each motion class no
+   level 2 12, levels 3 to 5 at least 20, in 2 files or more, well above Step 1 (the gate runs
+   the same `motioncount.py . --level auto`). It lists what the level misses and each motion class no
    element uses (put it to work, or delete its rule). `git diff --stat` shows templates or
    components, not only stylesheets. Level 5: the count cannot tell it from level 4, so write under `## Checks` that
    the journey's frames differ, a `ShaderMaterial` is in the app's own code, `setData` gets real

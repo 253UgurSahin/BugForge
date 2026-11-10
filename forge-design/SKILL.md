@@ -94,8 +94,8 @@ How far the look goes, from 1 to 5. Each level includes the ones below it:
   data screens, put the dashboard table in the same message, so the user answers once.
 - A level is a promise in both directions: never less than it asks, never more. Each part's report
   has the line `Level: N`, and `python3 ../forge/level.py check look --report <that report>` passes.
-- At level 4 and 5, Three.js and the scene kit (which scene fits: design.md, "The level"; how
-  to mount it: `../forge-design/motion.md` section 9) are installed without asking again: with npm
+- At level 4 and 5, Three.js and the scene kit (which scene fits and how to mount it:
+  `../forge-design/scenes.md`) are installed without asking again: with npm
   into the app, never from a CDN, loaded only on the screens that use them, with a still picture
   for weak devices, no WebGL and reduced motion.
   Levels 1 to 3 add no library. GSAP only when a scrubbed timeline really needs it, and its

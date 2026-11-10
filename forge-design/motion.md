@@ -560,7 +560,8 @@ brief (`forge-work/design/brief.md`), never from a style list and never from a s
 ## 8. Level 3: Expressive
 
 Everything above, plus scroll storytelling, springs, charts that draw and morph, real depth with
-CSS 3D and one signature moment. No library: CSS and the Web Animations API. Each pattern ran
+CSS 3D and one signature moment. No library: CSS, the Web Animations API and the kit's
+`depth.js`. Each pattern ran
 in Chromium with motion on and with reduced motion.
 
 **Sticky scroll scene.** A section three screens tall whose stage stays in place while its steps
@@ -681,54 +682,37 @@ Reduced: the bars jump to their new height. Mistake: animating `height` (layout 
 the values only in the bars (keep the numbers as labels or a table), and a line chart morphed by
 animating `d`, which only some browsers do: draw the new line with `m-draw` instead.
 
-**Tilt card with depth.js.** Cards that lean toward the pointer, with a layer inside at its own
-depth, in perspective set once on their container. CSS and a small `depth.js` that you write into
-the app from this recipe, outside its `scenes/` folder: the kit has no depth.js of its own yet
-(when one sits next to stage.js, its top comment says how to use it instead).
+**Tilt card with depth.js.** Cards that lean toward the pointer, with layers inside at their own
+depth: the kit's `depth.js` and `depth.css` (no three, about 6 KB), copied into the app's
+`scenes/` folder. The markup says what moves. Its options and the other behaviours (`stack`,
+`fold`, `scene`) are the comment at the top of `../forge-design/scenes/depth.js`; the markup per
+behaviour is section 7 of `../forge-design/scenes.md`.
 
 ```html
+<link rel="stylesheet" href="/js/scenes/depth.css">          <!-- after the app's own styles -->
 <div class="deck">
-  <article class="card tilt">
-    <img src="/img/spot.webp" alt="The north bank at dawn">
-    <h3 class="tilt__layer">North bank</h3>
+  <article class="card" data-depth="tilt">
+    <img data-depth-layer="1" src="/img/spot.webp" alt="The north bank at dawn">
+    <h3 data-depth-layer="2">North bank</h3>
   </article>
 </div>
 ```
-```css
-.deck { perspective: 900px; }                          /* once, on the container */
-.tilt { transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transform-style: preserve-3d; }
-.tilt__layer { transform: translateZ(var(--size-shift-lg)); }   /* nearer than the card */
-@media (prefers-reduced-motion: no-preference) {
-  .tilt { transition: transform var(--duration-base) var(--ease-standard); }
-}
-@media (prefers-reduced-motion: reduce) { .tilt, .tilt__layer { transform: none; } }
-```
 ```js
-// depth.js of the app: a card leans toward the pointer, at most `most` degrees
-import { reduce } from "./tokens.js";
+// in the page's script, once the cards are in the page
+import { mount } from "./scenes/depth.js";
 
-export function tilt(card, most = 6) {
-  if (reduce.matches || !matchMedia("(hover: hover)").matches) return () => {};
-  const move = (event) => {
-    const box = card.getBoundingClientRect();
-    const x = (event.clientX - box.left) / box.width - 0.5;      // -0.5 .. 0.5
-    const y = (event.clientY - box.top) / box.height - 0.5;
-    card.style.setProperty("--tilt-y", (x * most * 2).toFixed(2) + "deg");
-    card.style.setProperty("--tilt-x", (-y * most * 2).toFixed(2) + "deg");
-  };
-  const rest = () => { card.style.setProperty("--tilt-x", "0deg"); card.style.setProperty("--tilt-y", "0deg"); };
-  card.addEventListener("pointermove", move, { passive: true });
-  card.addEventListener("pointerleave", rest);
-  return () => { card.removeEventListener("pointermove", move); card.removeEventListener("pointerleave", rest); };
-}
+const depth = mount(document.querySelector(".deck"), { tilt: 5 });
+// cards added later: depth.destroy(), then mount() again
 ```
 
-In React, call it in a `useEffect` and return what it returns. Panels stacked in perspective are
-the same container with `rotateX(8deg)` and a `translateZ` per panel. A card stays a normal link or
-button: the tilt is a transform on top. Reduced: the cards lie flat and still; hover gives the
-shadow of `m-lift`. Mistake: a tilt over about 8 degrees (text gets hard to read), tilting a whole
-form or table, `overflow: hidden` on the card (it flattens the layers), depth on touch screens
-where nobody hovers, and a perspective set on each card instead of once on their container.
+In React, `mount(ref.current)` in a `useEffect` that returns its `destroy`. Panels stacked in
+perspective are `data-depth="stack"` on their container. A card stays a normal link or button: the
+tilt is a transform on top. Reduced: depth.js lays every card flat and still (also while the motion
+toggle is off); hover gives the shadow of `m-lift`. Mistake: a tilt over about 8 degrees (text gets
+hard to read), tilting a whole form or table, `overflow: hidden`, opacity or a filter on the card
+itself (it flattens the layers: put them on a child), a transform of your own on the card (depth.js
+owns it: use the CSS `rotate`, `translate` or `scale` properties), and depth.js mounted before the
+cards exist.
 
 **The signature moment.** One moment that could only belong to this app, from the concept: a
 float that dips when a catch is saved, a stamp that lands on a paid invoice, a tide line that
@@ -741,8 +725,9 @@ Everything above, plus a WebGL hero from the scene kit, light and depth that fol
 3D inside the interface and depth while scrolling. Which scene: `form.js` for a shape (an object,
 a tool, a craft), `field.js` for particles (a crowd, a flow, numbers; it takes `setData`),
 `aurora.js` for light (water, a sky, a sea; mode `water`), `contour.js` for lines over a map
-(places, depth, height). The options and API of each are the comment at its top; the mount per
-stack is below (a plain page, React and Next).
+(places, depth, height); the full chooser is `../forge-design/scenes.md` section 2. The options and
+API of each are the comment at its top; the mount per stack is below (a plain page, React and
+Next) and in scenes.md section 5 (also Vite and Django).
 
 - `npm install three` in the app; the level is the user's yes, so do not ask again. Read the
   licence of the installed version (MIT, in `node_modules/three/LICENSE`) and write it in
@@ -825,52 +810,50 @@ Everything above, plus a scroll-driven journey, custom shaders, GPU particles, f
 the pointer and to the app's live data, and screens that change in 3D space.
 
 - **The journey**: a tall section whose chapters move the camera, with each chapter's text
-  brought in by the page. The kit has no `journey.js` yet: build it from story.js (section 8) and
-  the scene's camera, as below (`chapters.js`). The chapters come from the direction, not a demo.
+  brought in by the page: the kit's `journey.js` (the comment at its top; markup, CSS and the
+  mount: `../forge-design/scenes.md` section 6). The chapters come from the direction, not a demo.
 - **Custom shaders**: a `THREE.ShaderMaterial` in the app's own code that spreads `stage.uniforms`
   (time, pointer, progress, the theme's colours) and builds on the noise of `glsl.js`; the fragment
   shader ends with `#include <colorspace_fragment>`. The comment at the top of `stage.js` shows a
   whole scene. A kit scene used as it is does not count as the app's own shader.
 - **GPU particles**: `field.js`, its formations set by `setProgress`, its amplitude by `setData`.
 
-**The journey.** Chapters along the scroll of a sticky section (the `.story` markup and CSS of
-section 8, one `[data-step]` per chapter). Each chapter has a camera position and a progress for
-the scene; between two chapters both ease. For `form.js` and `field.js`, which leave the camera to
-the page; `aurora.js` and `contour.js` are flat shaders, so their journey is `setProgress` only.
+**The journey.** `journey.js` pins a stage element (`[data-journey-stage]`, sticky) in a tall
+section, flies the camera along a smooth path through the chapters' keyframes, walks the scene's
+`setProgress` with it and fires a `chapter` event on the section; the page lights the text. It
+directs `form.js`, `field.js`, `datascape.js` or a scene of the app's own; `aurora.js` and
+`contour.js` are flat shaders, so their section needs only `setProgress` with
+`stage.progressOf(section, "contain")`. Loaded through `lazyScene`, nothing of three comes before
+the section is near:
 
 ```js
-// chapters.js of the app (outside its scenes/ folder): the camera through chapters, from the scroll
-import { story } from "./story.js";
+// trip.js of the app: the lake from far, then close, then from above
+import { lazyScene } from "./scenes/lazy.js";
 
-export async function journey(section, hero, chapters, onChapter = () => {}) {
-  const scene = await hero.ready;                  // lazyScene's promise of the scene; null: no WebGL
-  if (!scene) return () => {};
-  const { camera } = scene.stage;
-  let current = -1;
-  return story(section, (progress) => {
-    const i = Math.max(chapters.findLastIndex((c) => c.at <= progress), 0);
-    const a = chapters[i], b = chapters[Math.min(i + 1, chapters.length - 1)];
-    const t = b === a ? 0 : Math.min((progress - a.at) / (b.at - a.at), 1);
-    const e = t * t * (3 - 2 * t);                 // soft at both ends
-    camera.position.set(...a.camera.map((v, k) => v + (b.camera[k] - v) * e));
-    camera.lookAt(0, 0, 0);
-    scene.setProgress(a.progress + (b.progress - a.progress) * e);
-    if (i !== current) onChapter((current = i));  // the page shows that chapter's text
-  });
-}
-```
-```js
-journey(document.querySelector("[data-story]"), hero, [
-  { at: 0, camera: [0, 0, 6], progress: 0 },       // far: the whole lake
-  { at: 0.4, camera: [2, 1, 3], progress: 0.5 },   // closer: where the fish were
-  { at: 0.8, camera: [0, -1, 2], progress: 1 },    // under the surface: your best spot
-]);
+const section = document.querySelector(".journey");
+const steps = [...section.querySelectorAll("[data-chapter]")];
+lazyScene(section, async () => {
+  const [journey, form] = await Promise.all([import("./scenes/journey.js"), import("./scenes/form.js")]);
+  return { mount: (el, options) => journey.mount(el, { ...options,
+    scene: (stageEl) => form.mount(stageEl, { side: "centre", progressEase: 0.05 }) }) };
+}, {
+  chapters: [
+    { camera: { position: [-1, 0.5, 9], target: [-2, 0, 0], fov: 32 }, progress: 0 },  // the whole lake
+    { camera: { position: [2, -1, 5], target: [0.5, 0, 0] }, progress: 0.5 },         // where the fish were
+    { camera: { position: [0, 8, 6], target: [0, 0, 0] }, progress: 1 },              // your best spot
+  ],
+});
+section.addEventListener("chapter", (event) => {
+  steps.forEach((step, i) => step.toggleAttribute("data-current", i === event.detail.index));
+});
 ```
 
-Reduced: story.js never runs its loop, so the scene shows its still frame and every chapter's text
-stands in the section, which is as tall as its content. Mistake: a camera that cuts between
-chapters (ease it), chapters so short that one flick of the wheel skips two, and text that people
-must read moving with the camera.
+Reduced: no pin and no trip; each chapter gets a still of its keyframe beside its text
+(`[data-journey="still"]` in the page's CSS), and the stage element stays: it draws them. No
+WebGL: the poster stays and the chapters scroll over it. Mistake: chapters so short that one flick
+of the wheel skips two, text that people must read moving with the camera, the stage element
+hidden under reduced motion, a second WebGL scene on the same page, and an ancestor with
+`overflow: hidden` (sticky then never sticks).
 
 **The data hook.** `setData` gets the app's own numbers, never made-up ones, as numbers from 0 to
 1 (what each scene does with them: its comment). Where:
@@ -1053,7 +1036,7 @@ for any stack whose dev server and build share an output folder.
 | --- | --- | --- | --- | --- |
 | 1 Subtle | motion.css, about 4 KB; scripts none or under 2 KB | nothing | 60 a second | no layout shift |
 | 2 Polished | under 15 KB for all motion code | nothing | 60 a second on a mid-range phone (390px, 4x CPU slowdown) | CLS under 0.1, no long task over 50ms |
-| 3 Expressive | under 25 KB, the tilt and story scripts included | nothing | the same, also while a sticky scene scrolls | no library |
+| 3 Expressive | under 25 KB, the kit's depth.js (about 6 KB) and the story script included | nothing | the same, also while a sticky scene scrolls | no library |
 | 4 Showpiece | the same as level 3: nothing of three | the hero (three after tree-shaking, the kit and one scene) under 200 KB, only on the screens that show it, after the page is idle; a poster under 100 KB | 60 on a mid-range laptop; 30 or more on a mid-range phone at low quality | the largest paint is the heading or the poster, never later than before |
 | 5 Cinematic | the same as level 3 | the scenes, the journey and the shaders together under 300 KB; one WebGL context per page | the same as level 4, also during the journey | GPU particles at the count the stage's quality picks |
 

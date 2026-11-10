@@ -53,13 +53,14 @@ Then write `forge-work/design/world.md`, as `../forge-design/concepts.md` sectio
 - Then do exactly what that level asks (the look table of levels.md), never less and never more.
 
 The level shapes the concepts and the specs: the control states (1), what arrives and how (2),
-the signature moment and real depth in CSS 3D (3: perspective, rotateX/rotateY and preserve-3d on
-cards and panels, `../forge-design/motion.md` section 8), the scene the concept becomes (4), the
-journey's chapters (5). The kit scene per kind of concept: water, a lake or a sea: `aurora.js`,
-mode `water`; places, depth or height: `contour.js`; a crowd, a flow or numbers: `field.js`; an
-object, a tool or a craft: `form.js`. Their options are the comment at the top of each file (next
-to `../forge-design/scenes/stage.js`); the mount in a plain page, React and Next is motion.md
-section 9. Motion and 3D are built with `../forge-design/steps/motion.md`, in `/forge`'s motion
+the signature moment and real depth in CSS 3D (3: tilting cards, stacked panels, folds with the
+kit's `../forge-design/scenes/depth.js` and `depth.css`), the scene the concept becomes (4), the
+journey's chapters (5: the kit's `journey.js`). The kit scene per kind of concept: water, a lake or
+a sea: `aurora.js`, mode `water`; places, depth or height: `contour.js`; a crowd, a flow or
+numbers: `field.js`; an object, a tool or a craft: `form.js`; the app's own numbers:
+`datascape.js`. Their options are the comment at the top of each file (next to
+`../forge-design/scenes/stage.js`); the chooser, the files to copy and the mount per stack are in
+`../forge-design/scenes.md`. Motion and 3D are built with `../forge-design/steps/motion.md`, in `/forge`'s motion
 phase or right after Build for the whole look. Write `Level: N (Name)` in the brief and redesign.md.
 
 ## Three concepts
