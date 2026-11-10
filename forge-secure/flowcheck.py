@@ -129,25 +129,22 @@ def follow(lang, lines, heads, start, first, where):
         var = uses(lang, name, "var")
         for index in range(begin + 1, bottom):
             line = lines[index]
-            if lang["blanket"].search(line) or (var.search(line) and lang["clean"].search(line)):
-                break  # checked or cleaned: safe from here on
-            if "forge:allow" in line or not var.search(line):
-                continue
-            assigned = lang["assign"].search(line)
-            rhs = line[assigned.end():] if assigned else ""
-            if assigned and not var.search(rhs):
-                if name in targets(assigned):
-                    break  # a new value
-                continue
             is_open = line.count("(") > line.count(")") or line.count("`") % 2  # the call goes on below
             text = "\n".join(lines[index:index + 4]) if is_open else line
+            assigned = lang["assign"].search(line)
+            rhs = line[assigned.end():] if assigned else ""
+            if lang["blanket"].search(line) or (var.search(line) and lang["clean"].search(line)) or (
+                    assigned and name in targets(assigned) and not var.search(rhs)):
+                break  # checked, cleaned or given a new value: safe from here on
+            if "forge:allow" in line or not var.search(text):
+                continue
             for check in lang["sink"]:
                 match, use = check["pattern"].search(line), check["use"]
                 tail = text[match.start():] if match else ""  # the call and what it is given
                 if var.search(tail) and (use == "any" or (built or pasted(lang, name, tail) if use == "glued" else
                                                       lead and uses(lang, name, "start").match(text[match.end():]))):
                     found.append(finding(check["info"], where, index, first, start + 1))
-            if assigned and depth < 2 and name not in targets(assigned):  # a copy: x = data["url"], or "..." + x
+            if var.search(rhs) and depth < 2 and name not in targets(assigned):  # a copy: x = data["url"], "..." + x
                 if uses(lang, name, "member").match(rhs):
                     todo += [(target, index, built, lead, depth + 1) for target in targets(assigned)]
                 elif pasted(lang, name, rhs) or lang["join"].search(rhs):

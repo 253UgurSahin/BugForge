@@ -332,10 +332,10 @@
    "rule": "flow-no-access-check",
    "lang": "php",
    "kind": "scope",
-   "pattern": "\\b[A-Z]\\w*::(?:find|findOrFail|findMany|destroy)\\s*\\(|\\b[A-Z]\\w*::where\\s*\\(\\s*['\\\"]\\w*id['\\\"]|->where\\s*\\(\\s*['\\\"]id['\\\"]\\s*,\\s*\\$|\\$(?!this\\b|request\\b)\\w+->(?:update|delete|forceDelete)\\s*\\(",
+   "pattern": "\\b[A-Z]\\w*::(?:find|findOrFail|findMany|destroy)\\s*\\(|\\b[A-Z]\\w*::where\\s*\\(\\s*['\\\"](?:\\w+_)?id['\\\"]|->where\\s*\\(\\s*['\\\"]id['\\\"]\\s*,\\s*\\$|\\$(?!this\\b|request\\b)\\w+->(?:update|delete|forceDelete)\\s*\\(",
    "near": [
     "\\bfunction\\b",
-    "\\$\\w*[iI]d\\b|\\$request\\b|\\(\\s*[^)]{0,200}\\b[A-Z]\\w+\\s+\\$\\w+\\s*[,)]"
+    "\\$(?:id|\\w+Id|\\w+_id)\\b|\\$request\\b|\\(\\s*[^)]{0,200}\\b[A-Z]\\w+\\s+\\$\\w+\\s*[,)]"
    ],
    "unless": "authorize\\w*\\s*\\(|\\bGate::|->can(?:not)?\\s*\\(|[pP]olic(?:y|ies)|\\bauth\\s*\\(|\\bAuth::|->user\\s*\\(|->middleware\\s*\\(|user_id|owner|\\babort_(?:if|unless)\\s*\\(|\\b[A-Z]\\w+Request\\s+\\$|->tokenCan\\s*\\(|(?i:is_?admin|hasrole|haspermission)",
    "file_has": "Controller\\b|\\bRoute::",
@@ -356,10 +356,10 @@
    "rule": "flow-no-access-check",
    "lang": "js",
    "kind": "scope",
-   "pattern": "\\.(?:findUnique(?:OrThrow)?|findFirst(?:OrThrow)?|findById\\w*|findByPk|findOne\\w*)\\s*\\(|\\.(?:update|updateOne|delete|deleteOne|destroy|upsert)\\s*\\(\\s*\\{|\\b(?:WHERE|where)\\s+\\w*id\\s*=|\\beq\\s*\\(\\s*\\w+\\.id\\s*,|\\.eq\\s*\\(\\s*['\\\"]id['\\\"]",
+   "pattern": "\\.(?:findUnique(?:OrThrow)?|findFirst(?:OrThrow)?|findById\\w*|findByPk|findOne\\w*)\\s*\\(|\\.(?:update|updateOne|delete|deleteOne|destroy|upsert)\\s*\\(\\s*\\{|\\b(?:WHERE|where)\\s+(?:\\w+_)?id\\s*=|\\beq\\s*\\(\\s*\\w+\\.id\\s*,|\\.eq\\s*\\(\\s*['\\\"]id['\\\"]",
    "near": [
     "export\\s+(?:default\\s+)?(?:async\\s+)?function\\s+(?:GET|POST|PUT|PATCH|DELETE|handler)\\b|export\\s+const\\s+(?:GET|POST|PUT|PATCH|DELETE)\\b|['\\\"]use server['\\\"]|\\b(?:app|router)\\.(?:get|post|put|patch|delete|all)\\s*\\(",
-    "\\b(?:params|query|body)\\??\\.\\w*[iI]d\\b|\\{[^}]{0,120}\\b\\w*[iI]d\\b[^}]{0,120}\\}\\s*=\\s*(?:await\\s+)?(?:params|req|request|body|context)|(?:searchParams|formData)\\.get\\(\\s*['\\\"]\\w*[iI]d['\\\"]|:\\w*[iI]d\\b"
+    "\\b(?:params|query|body)\\??\\.(?:id|\\w+Id|\\w+_id)\\b|\\{[^}]{0,120}\\b(?:id|\\w+Id|\\w+_id)\\b[^}]{0,120}\\}\\s*=\\s*(?:await\\s+)?(?:params|req|request|body|context)|(?:searchParams|formData)\\.get\\(\\s*['\\\"](?:id|\\w+Id|\\w+_id)['\\\"]|:(?:id|\\w+Id|\\w+_id)\\b"
    ],
    "unless": "getServerSession|\\bauth\\s*\\(|auth\\.api\\.getSession|getSession\\s*\\(|currentUser\\s*\\(|getUser\\s*\\(|getCurrentUser|\\b(?:req|request|ctx)\\.(?:user|auth|session)\\b|session\\??\\.user|\\buserId\\b|ownerId|verifyToken|jwt\\.verify|jwtVerify|(?i:requireauth|isauthenticated|ensureauth|authmiddleware|checkauth|withauth|authorize|\\bprotect\\b|requireuser|requireadmin|isadmin|verifysession|validaterequest)|passport\\.authenticate|getToken\\s*\\(|supabase\\.auth|[pP]olicy|\\bcan\\s*\\(",
    "unless_file": "\\b(?:router|app)\\.use\\s*\\([^)]{0,200}(?i:auth|protect|session|jwt|passport)"
@@ -368,10 +368,10 @@
    "rule": "flow-no-access-check",
    "lang": "js",
    "kind": "scope",
-   "pattern": "\\.(?:findUnique(?:OrThrow)?|findFirst(?:OrThrow)?|findById\\w*|findByPk|findOne\\w*)\\s*\\(|\\.(?:update|updateOne|delete|deleteOne|destroy|upsert)\\s*\\(\\s*\\{|\\b(?:WHERE|where)\\s+\\w*id\\s*=|\\beq\\s*\\(\\s*\\w+\\.id\\s*,|\\.eq\\s*\\(\\s*['\\\"]id['\\\"]",
+   "pattern": "\\.(?:findUnique(?:OrThrow)?|findFirst(?:OrThrow)?|findById\\w*|findByPk|findOne\\w*)\\s*\\(|\\.(?:update|updateOne|delete|deleteOne|destroy|upsert)\\s*\\(\\s*\\{|\\b(?:WHERE|where)\\s+(?:\\w+_)?id\\s*=|\\beq\\s*\\(\\s*\\w+\\.id\\s*,|\\.eq\\s*\\(\\s*['\\\"]id['\\\"]",
    "near": [
     "export\\s+(?:default\\s+)?async\\s+function\\b",
-    "\\b\\w*[iI]d\\b"
+    "\\b(?:id|\\w+Id|\\w+_id)\\b"
    ],
    "unless": "getServerSession|\\bauth\\s*\\(|auth\\.api\\.getSession|getSession\\s*\\(|currentUser\\s*\\(|getUser\\s*\\(|getCurrentUser|\\b(?:req|request|ctx)\\.(?:user|auth|session)\\b|session\\??\\.user|\\buserId\\b|ownerId|verifyToken|jwt\\.verify|jwtVerify|(?i:requireauth|isauthenticated|ensureauth|authmiddleware|checkauth|withauth|authorize|\\bprotect\\b|requireuser|requireadmin|isadmin|verifysession|validaterequest)|passport\\.authenticate|getToken\\s*\\(|supabase\\.auth|[pP]olicy|\\bcan\\s*\\(",
    "file_has": "(?m)^\\s*['\\\"]use server['\\\"]"
@@ -500,7 +500,7 @@
    "kind": "line",
    "pattern": "(?<![\\w>:$])(?:rand|mt_rand|uniqid|lcg_value|str_shuffle)\\s*\\(",
    "near": [
-    "(?i)\\b\\w*id\\b|uuid"
+    "\\bid\\b|\\bID\\b|_id\\b|[a-z]Id\\b|(?i:uuid)"
    ],
    "unless": "(?i)token|passw|secret|reset|otp|\\bpin\\b|session|api_?key|nonce|salt|invit|csrf|verif|coupon|voucher|code\\b",
    "severity": "medium",
@@ -522,7 +522,7 @@
    "kind": "line",
    "pattern": "\\brandom\\.(?:random|randint|choice|choices|randrange|sample|getrandbits)\\s*\\(",
    "near": [
-    "(?i)\\b\\w*id\\b|uuid"
+    "\\bid\\b|\\bID\\b|_id\\b|[a-z]Id\\b|(?i:uuid)"
    ],
    "unless": "(?i)token|passw|secret|reset|otp|\\bpin\\b|session|api_?key|nonce|salt|invit|csrf|verif|coupon|voucher|code\\b",
    "severity": "medium",
@@ -544,7 +544,7 @@
    "kind": "line",
    "pattern": "\\bMath\\.random\\s*\\(",
    "near": [
-    "(?i)\\b\\w*id\\b|uuid"
+    "\\bid\\b|\\bID\\b|_id\\b|[a-z]Id\\b|(?i:uuid)"
    ],
    "unless": "(?i)token|passw|secret|reset|otp|\\bpin\\b|session|api_?key|nonce|salt|invit|csrf|verif|coupon|voucher|code\\b",
    "severity": "medium",

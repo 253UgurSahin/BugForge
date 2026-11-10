@@ -6,8 +6,8 @@ Every chart has role="img", a <title> and a <desc> with a plain-text summary (fi
 per series). Every label is escaped and written as ASCII: data is untrusted, a label with <script> stays text.
 
 Usage:
-    python3 chart.py DATA.json --type line|area|bar|spark|donut [--tokens TOKENS.json]
-                     [--width W] [--height H] [--title T] [--out FILE] [--json]
+    python3 chart.py DATA.json --type line|area|bar|spark|donut [--tokens TOKENS.json] [--width W] [--height H]
+                     [--title T] [--out FILE] [--json]
 DATA.json: {"title": "Revenue per month", "unit": "EUR",
             "series": [{"name": "Revenue", "points": [["2026-01", 1200], ["2026-02", 1100]]}]}
 Each point is [label, number]; at most 6 series. A value matrix (heat map) is an HTML table: dashboard.md.
@@ -25,9 +25,8 @@ currentColor), so it follows light and dark. Never colour alone: every series ha
 
 Exit codes:
     0  the chart was written (to stdout, or to --out)
-    2  bad input, nothing written: no points, a value that is not a number, a donut with negative values or
-       over 6 parts (use a bar chart), stacked series of different lengths, an unreadable or invalid file, a
-       size out of range, or an --out that is a symlink
+    2  bad input, nothing written: no points, a value that is not a number, a donut with negative values or over 6
+       parts (use a bar chart), stacked series of different lengths, an unreadable file, a bad size, --out is a symlink
 """
 
 import argparse
@@ -38,7 +37,6 @@ import math
 import os
 import re
 import sys
-import zlib
 
 SIZES = {"spark": (120, 32), "donut": (360, 200)}  # default width and height; the rest: 640 x 280
 MAX_BYTES, MAX_SERIES, MAX_PARTS = 1000000, 6, 6
@@ -143,14 +141,19 @@ def colours(tokens, count):
         need(isinstance(value, str) and HEX.match(value.strip()), 'the tokens file needs color.%s as "#rgb" or "#rrggbb"' % name)
         return value.strip()
 
-    def hls(code):  # "#abc" or "#aabbcc" as hue, lightness and saturation from 0 to 1
+    def rgb(code):  # "#abc" or "#aabbcc" as three numbers from 0 to 1
         code = code[1:] if len(code) == 7 else "".join(char * 2 for char in code[1:])
-        return colorsys.rgb_to_hls(*[int(code[index:index + 2], 16) / 255.0 for index in (0, 2, 4)])
-    (hue, _, sat), light = hls(role("accent")), 0.38 if hls(role("bg"))[1] > 0.5 else 0.65  # readable on light or dark
-    turned = [colorsys.hls_to_rgb((hue + 0.382 * index) % 1, light, max(sat, 0.5)) for index in range(count)]
-    return {"text": role("text"), "muted": role("text-muted", "text"), "grid": role("border", "text"), "bg": role("bg"),
-            "series": [role("chart-%d" % (index + 1), "accent") if not index or "chart-%d" % (index + 1) in roles else
-                       "#%02x%02x%02x" % tuple(int(round(part * 255)) for part in turned[index]) for index in range(count)]}
+        return [int(code[index:index + 2], 16) / 255.0 for index in (0, 2, 4)]
+
+    def lum(parts):  # WCAG relative luminance, 0 (black) to 1 (white)
+        return sum(w * (c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4) for w, c in zip((0.2126, 0.7152, 0.0722), parts))
+    (hue, _, sat), bg, series = colorsys.rgb_to_hls(*rgb(role("accent"))), lum(rgb(role("bg"))), []
+    for index in range(count):  # chart-N from the file, else the accent's hue turned and dimmed to 3:1 on a light bg
+        turned = colorsys.hls_to_rgb((hue + 0.382 * index) % 1, 0.65 if bg < 0.18 else 0.4, max(sat, 0.5))
+        dim = 1 if bg < 0.18 else min(1, ((bg + 0.05) / 3.3 - 0.05) / lum(turned)) ** (1 / 2.4)
+        series.append(role("chart-%d" % (index + 1), "accent") if not index or "chart-%d" % (index + 1) in roles else
+                      "#%02x%02x%02x" % tuple(int(round(part * dim * 255)) for part in turned))
+    return {"text": role("text"), "muted": role("text-muted", "text"), "grid": role("border", "text"), "bg": role("bg"), "series": series}
 
 
 def summary(kind, title, unit, series):
@@ -159,11 +162,10 @@ def summary(kind, title, unit, series):
     for one in series:
         values, labels, total = one["values"], one["labels"], float(sum(one["values"]))
         low, high = values.index(min(values)), values.index(max(values))
-        parts.append("Total %s. %s." % (fmt(total), ", ".join(
-            "%s %s (%d%%)" % (label, fmt(value), round(value / total * 100)) for label, value in zip(labels, values)))
-            if kind == "donut" else "%s: %d points, first %s (%s), last %s (%s), lowest %s (%s), highest %s (%s)." % (
-            one["name"], len(values), fmt(values[0]), labels[0], fmt(values[-1]), labels[-1],
-            fmt(values[low]), labels[low], fmt(values[high]), labels[high]))
+        shares = ", ".join("%s %s (%d%%)" % (label, fmt(value), round(value / (total or 1) * 100)) for label, value in zip(labels, values))
+        parts.append("Total %s. %s." % (fmt(total), shares) if kind == "donut" else "%s: %d points, first %s (%s), last %s (%s), "
+                     "lowest %s (%s), highest %s (%s)." % (one["name"], len(values), fmt(values[0]), labels[0], fmt(values[-1]),
+                                                             labels[-1], fmt(values[low]), labels[low], fmt(values[high]), labels[high]))
     return " ".join(parts)
 
 
@@ -262,7 +264,7 @@ def main(argv=None):
     kind, size = args.type, SIZES.get(args.type, (640, 280))
     width, height = size[0] if args.width is None else args.width, size[1] if args.height is None else args.height
     try:
-        need((kind == "spark" or min(width, height) >= 100) and 16 <= width <= 4000 and 16 <= height <= 4000,
+        need((16 if kind == "spark" else 100) <= min(width, height) and max(width, height) <= 4000,
              "--width and --height: from 100 to 4000 px (a spark: from 16 px)")
         data = read_json(args.data, "the data file")
         series = read_series(data, kind)
@@ -272,7 +274,7 @@ def main(argv=None):
         desc = summary(kind, title, unit, series)
         body = (draw_spark(series, width, height, col) if kind == "spark" else
                 draw_donut(series, width, height, col, unit) if kind == "donut" else draw_xy(kind, series, width, height, col))
-        name = "c%08x" % (zlib.crc32((kind + desc).encode("utf-8", "replace")) & 0xFFFFFFFF)  # ids differ per chart
+        name = "c%x" % (sum((spot + 1) * ord(char) for spot, char in enumerate(kind + desc)) % 2 ** 32)  # ids differ per chart
         head = tag("svg", " ", xmlns="http://www.w3.org/2000/svg", viewBox="0 0 %d %d" % (width, height), width=width,
                    height=height, role="img", aria_labelledby="%s-t %s-d" % (name, name), font_family="inherit", font_size=12)
         svg = "\n".join([head[:-len(" </svg>")], tag("title", esc(title), id=name + "-t"), tag("desc", esc(desc, 4000), id=name + "-d")]
