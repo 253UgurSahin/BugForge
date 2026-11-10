@@ -34,8 +34,7 @@ OUTSIDE = re.compile(r"(?:git[+:@]|(?:git|https?|ssh|file)://|github:|gitlab:|bi
                      r"|[\w.-]+/[\w.-]+(?:#\S*)?$)")  # a git URL, a link, a local path, npm's user/repo
 COPYLEFT = re.compile(r"(?i)(?<![a-z])(?:AGPL|GPL|SSPL)")  # not LGPL
 NPM_LOCKS = ["package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb"]
-PY_LOCKS = ["uv.lock", "poetry.lock", "Pipfile.lock", "pdm.lock"]
-NOT_READ = set(NPM_LOCKS[2:] + PY_LOCKS[2:])  # they count as a lockfile; their entries are not checked
+PY_LOCKS = ["uv.lock", "poetry.lock", "Pipfile.lock", "pdm.lock"]  # of both lists, only the first two are read
 REQUIREMENT = re.compile(r"([A-Za-z0-9][\w.-]*)(?:\[[^\]]*\])?\s*(?!@)([^;@]*)(?:;.*)?$")  # name[extra] range; marker
 
 try:  # supply.json, next to this script: the words of each finding, and well-known package names per registry
@@ -114,7 +113,7 @@ def manifest(report, folder, names, name, kind, deps, locks, covered=False):
     add(report, "supply-source", folder, name, [dep for dep, spec in deps.items() if OUTSIDE.match(spec.strip())])
     locked(report, folder, name, kind, [(dep, None, None, None, False) for dep in deps])
     report["not_read"] += [{"file": shown(report, folder, lock), "reason": "this lockfile format is not read"}
-                           for lock in have if lock in NOT_READ]
+                           for lock in have if lock in NPM_LOCKS[2:] + PY_LOCKS[2:]]
 
 def locked(report, folder, name, kind, entries):
     """The checks every list of packages gets. ENTRIES: (package, version, licence, host, runs code on install)."""
@@ -139,13 +138,13 @@ def check_npm(report, folder, names, covered):
     if not isinstance(packages, dict):
         report["not_read"].append({"file": shown(report, folder, lock), "reason": "lockfile version 1 is not read"})
     entries, bare = [], []
-    for key, entry in packages.items() if isinstance(packages, dict) else ():
-        if "node_modules/" not in key or entry.get("link"):
+    for key, item in packages.items() if isinstance(packages, dict) else ():
+        if "node_modules/" not in key or item.get("link"):
             continue  # the project itself, or a workspace folder
-        dep, source = entry.get("name") or key.rpartition("node_modules/")[2], str(entry.get("resolved") or "")
+        dep, source = item.get("name") or key.rpartition("node_modules/")[2], str(item.get("resolved") or "")
         host = (host_of(source) or "not a registry: " + source.split(":")[0]) if source else None
-        entries.append((dep, entry.get("version"), licence_of(entry.get("license")), host, "hasInstallScript" in entry))
-        bare += [dep] if not entry.get("integrity") and not entry.get("inBundle") else []
+        entries.append((dep, item.get("version"), licence_of(item.get("license")), host, item.get("hasInstallScript")))
+        bare += [dep] if not item.get("integrity") and not item.get("inBundle") else []
     locked(report, folder, lock, "npm", entries)
     add(report, "supply-no-integrity", folder, lock, bare)
 
@@ -168,13 +167,13 @@ def check_requirements(report, folder, names, name):
     deps, pins, hosts = {}, [], []
     for line in re.sub(r"\\\r?\n", " ", read(report, folder, name)).splitlines():
         line = re.sub(r"(?:^|\s)#.*", "", line).strip()
-        dep = REQUIREMENT.match(line)
+        dep = None if "://" in line else REQUIREMENT.match(line)  # git+https://..., name @ https://...: a source
         if re.match(r"(?:-i|-f|--(?:extra-)?index-url|--find-links)\b", line):
             hosts += ["index %s" % host_of(line)] if host_of(line) not in OFFICIAL else []
         elif dep and "==" in dep.group(2) and "*" not in dep.group(2):
             pins.append((norm(dep.group(1)), dep.group(2).split("==")[-1].split()[0].strip("=, "), None, None, False))
         elif dep:
-            deps[norm(dep.group(1))] = dep.group(2)
+            deps[norm(dep.group(1))] = ""  # no == on the line: not pinned
         elif line and not re.match(r"-[rc]\b|--", line):  # -e ., git+https://..., name @ https://...
             deps[line] = "./" + re.sub(r"^(?:-e|--editable)\s+", "", line)
     manifest(report, folder, names, name, "pypi", deps, [name])
@@ -210,7 +209,7 @@ def check_python(report, folder, names):
             dep, version = [re.search(r'(?m)^%s\s*=\s*"([^"]*)"' % key, block) for key in ("name", "version")]
             source = re.search(r'(?m)^source\s*=\s*\{\s*(\w+)\s*=\s*"([^"]*)"'  # uv, then Poetry
                                r'|^\[package\.source\]\s*\n(?:(?!\[).*\n)*?url\s*=\s*"([^"]*)"', block)
-            how, url = (source[1] or "source", source[2] or source[3]) if source else ("", "//pypi.org")
+            how, url = (source[1] or "source", source[2] or source[3]) if source else ("", "https://pypi.org")
             if dep and version and how not in ("editable", "virtual"):  # those two are the project itself
                 entries.append((norm(dep[1]), version[1], None, host_of(url) or "%s %s" % (how, url), False))
         locked(report, folder, name, "pypi", entries)
@@ -222,7 +221,7 @@ def check_path(root):
     for folder, subfolders, files in os.walk(root, onerror=lambda error: report["unreadable"].append(
             {"path": shown(report, error.filename or root), "reason": error.strerror or "cannot be opened"})):
         parent = os.path.basename(os.path.abspath(folder))
-        subfolders[:] = sorted(sub for sub in subfolders if sub not in SKIP_DIRS and parent + "/" + sub not in SKIP_DIRS)
+        subfolders[:] = sorted(d for d in subfolders if d not in SKIP_DIRS and parent + "/" + d not in SKIP_DIRS)
         names = {name for name in files if not os.path.islink(os.path.join(folder, name))}
         try:
             if "package.json" in names:
@@ -231,7 +230,7 @@ def check_path(root):
             if "composer.json" in names:
                 check_composer(report, folder, names)
             check_python(report, folder, names)
-        except (OSError, ValueError, TypeError, AttributeError, LookupError) as error:  # unreadable, or an unknown shape
+        except (OSError, ValueError, TypeError, AttributeError, LookupError) as error:  # unreadable, or an odd shape
             named = isinstance(error, ValueError) and len(error.args) == 2  # read() says which file, and why
             name, reason = error.args if named else ("", "a file here is not what its name says")
             report["unreadable"].append({"path": shown(report, folder, str(name)), "reason": str(reason)})
@@ -240,17 +239,17 @@ def check_path(root):
 
 def write_sbom(path, components):
     """Write the locked packages as a CycloneDX 1.5 JSON document. Returns "" or why it was not written."""
-    items = []
-    for kind, name, version, licence in sorted(set(components)):
+    bom = {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1, "components": []}
+    for kind, name, version, licence in sorted(components):
         purl = "pkg:%s/%s@%s" % (kind, quote(name, safe="/"), quote(version))  # @scope/name becomes %40scope/name
         item = {"type": "library", "name": name, "version": version, "purl": purl, "bom-ref": purl}
-        items.append(dict(item, licenses=[{"license": {"name": licence}}]) if licence else item)
+        bom["components"].append(dict(item, licenses=[{"license": {"name": licence}}]) if licence else item)
     try:
         if os.path.islink(path):
             raise OSError(0, "it is a symlink, and this script does not write through one")
         flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
         with os.fdopen(os.open(path, flags, 0o644), "w", encoding="utf-8") as handle:
-            json.dump({"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1, "components": items}, handle, indent=2)
+            json.dump(bom, handle, indent=2)
         return ""
     except OSError as error:
         return error.strerror or "it cannot be written"
@@ -260,9 +259,9 @@ def format_human(report, summary):
     lines = []
     for item in report["findings"]:
         names, pad = item["packages"], " " * (len(item["severity"]) + 2)
-        which = ", ".join(names[:8]) + (", and %d more (--json lists all)" % (len(names) - 8) if names[8:] else "")
+        item = dict(item, which=", ".join(names[:8]) + (" (+%d more: --json)" % len(names[8:]) if names[8:] else ""))
         lines += ["%s  %s [%s]" % (item["severity"].upper(), item["title"], item["rule"])]
-        lines += [pad + "%-7s%s" % (key + ":", dict(item, which=which)[key]) for key in ("where", "which", "why", "fix")] + [""]
+        lines += [pad + "%-7s%s" % (key + ":", item[key]) for key in ("where", "which", "why", "fix")] + [""]
     lines += ["Not read: %(file)s (%(reason)s)" % item for item in report["not_read"]]
     lines += ["INCOMPLETE, so not a pass. Could not read %(path)s (%(reason)s)" % item for item in report["unreadable"]]
     counts = ", ".join("%d %s" % (summary[s], s) for s in SEVERITIES if summary[s])
@@ -287,9 +286,9 @@ def main(argv=None):
     if not os.path.isdir(args.path):
         parser.error("%s is not a folder" % args.path)  # exit code 2
     report = check_path(args.path)
-    components, _ = set(report.pop("components")), report.pop("root")
+    components, _ = {part[:3]: part for part in sorted(report.pop("components"))}, report.pop("root")  # each once
     if args.sbom:
-        reason = write_sbom(args.sbom, components)
+        reason = write_sbom(args.sbom, components.values())
         report["sbom"] = {"file": args.sbom, "written": not reason, "reason": reason, "components": len(components)}
     summary = {s: sum(f["severity"] == s for f in report["findings"]) for s in SEVERITIES}
     summary.update(total=len(report["findings"]), packages=len(components), incomplete=bool(report["unreadable"]))

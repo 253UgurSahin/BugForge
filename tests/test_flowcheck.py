@@ -159,6 +159,9 @@ SAFE = [
     ("python", '@login_required\ndef detail(request, pk):\n    order = Order.objects.get(pk=pk)\n    return render(request, "o.html", {"o": order})\n'),
     ("python", 'def detail(request, pk):\n    order = Order.objects.get(pk=pk, user=request.user)\n    return render(request, "o.html", {})\n'),
     ("python", 'def helper(pk):\n    return Order.objects.get(pk=pk)\n'),  # not a handler
+    ("python", 'def detail(request, slug):\n    return render(request, "e.html", {"e": get_object_or_404(Event, slug=slug)})\n'),
+    ("php", PHP + 'function export(Request $request) {\n    $name = "posts." . $request->input("format");\n'
+                  '    return response()->streamDownload(fn () => print(Post::all()->toJson()), $name);\n}\n'),
     ("python", '@app.route("/orders/<int:order_id>")\n@login_required\ndef show(order_id):\n    return Order.query.get_or_404(order_id)\n'),
     ("python", '@router.get("/items/{item_id}")\nasync def read(item_id: int, user=Depends(get_current_user)):\n    return db.get(Item, item_id)\n'),
     ("python", 'class V(APIView):\n    permission_classes = [IsAuthenticated]\n\n    def get(self, request, pk):\n'

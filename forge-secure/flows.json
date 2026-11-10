@@ -268,7 +268,7 @@
    "rule": "flow-raw-html",
    "lang": "php",
    "kind": "sink",
-   "pattern": "\\{!!|(?<![$'\\\">\\w])(?:echo|print)\\b|<\\?=",
+   "pattern": "\\{!!|(?<![$'\\\">\\w])(?:echo|print)\\b(?!\\s*\\()|<\\?=",
    "use": "any",
    "direct": false
   },
@@ -345,7 +345,7 @@
    "rule": "flow-no-access-check",
    "lang": "python",
    "kind": "scope",
-   "pattern": "\\.objects\\.(?:get|filter)\\s*\\(\\s*(?:pk|id|\\w+_id|uuid|slug)\\s*=|\\bget_object_or_404\\s*\\(\\s*[\\w.]+\\s*,\\s*(?:pk|id|\\w+_id|uuid|slug)\\s*=|\\.query\\.get(?:_or_404)?\\s*\\(|\\b(?:db\\.)?session\\.get\\s*\\(\\s*[A-Z]|\\bdb\\.get\\s*\\(\\s*[A-Z]|\\.filter(?:_by)?\\s*\\(\\s*(?:[A-Z]\\w*\\.)?id\\s*==?",
+   "pattern": "\\.objects\\.(?:get|filter)\\s*\\(\\s*(?:pk|id|\\w+_id|uuid)\\s*=|\\bget_object_or_404\\s*\\(\\s*[\\w.]+\\s*,\\s*(?:pk|id|\\w+_id|uuid)\\s*=|\\.query\\.get(?:_or_404)?\\s*\\(|\\b(?:db\\.)?session\\.get\\s*\\(\\s*[A-Z]|\\bdb\\.get\\s*\\(\\s*[A-Z]|\\.filter(?:_by)?\\s*\\(\\s*(?:[A-Z]\\w*\\.)?id\\s*==?",
    "near": [
     "def\\s+\\w+\\s*\\(\\s*(?:self\\s*,\\s*)?request\\b|@\\w+(?:\\.\\w+)*\\.(?:route|get|post|put|patch|delete)\\s*\\(|@api_view"
    ],
