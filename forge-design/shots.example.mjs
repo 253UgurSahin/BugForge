@@ -212,7 +212,7 @@ function glide({ to, speed, longest }) {
       if (share < 1) requestAnimationFrame(step);  // forge:allow: a scroll that ends, not a loop
       else done(Math.round(px));
     };
-    requestAnimationFrame(step);
+    requestAnimationFrame(step);  // forge:allow: the first step of that scroll
   });
 }
 const scroll = (page, to, { speed, longest }) => within(longest + QUIET_LIMIT, page.evaluate(glide, { to, speed, longest }));
