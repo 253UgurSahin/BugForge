@@ -30,7 +30,7 @@ Read `../forge/rules.md` once per session. In short:
 - Only public pages and the user's own accounts. Active tests only where `../forge-secure/scope.py` allows.
 - Clean-room: rebuild what an app does, never copy its code, assets, copy or brand.
 - Never print, paste or commit secrets. Never touch a server: forge only builds containers.
-- Stop at every checkpoint and wait for the user's go.
+- Stop at every checkpoint and wait for the user's go; in auto mode, stop where `../forge/rules.md` section 7 says.
 
 ## Before you start
 
@@ -105,7 +105,7 @@ Read `../forge/rules.md` once per session. In short:
 
 The core loop from recon.md's flows (idea mode: plan.md's), end to end on the real database with real auth, before
 anything else (booking app: create an event type, book a slot on the public page, see it on the dashboard). Ugly is
-fine. Checkpoint: show it running (5 lines max: what works, how to try it, what is next) and wait for the user's go.
+fine. Checkpoint: show it running (5 lines max: what works, how to try it, what is next); wait for the user's go.
 
 ## Step 4: screen by screen
 
@@ -154,9 +154,9 @@ or plan.md and build it from the basic components with real data through the dat
 
 ## Step 7: finish the build and check in
 
-The full suite passes, `docker compose up -d --build --wait` gives a healthy stack, copycheck.py exits 0 (clone
-mode) and /forge-secure ran with no critical or high finding open. Checkpoint (5 plain lines): must-haves built of
-total, what is partial or skipped and why, the tests, the security verdict, how to open it. Wait for the user's go.
+The full suite passes, `docker compose up -d --build --wait` gives a healthy stack, copycheck.py exits 0 (clone mode),
+the look review ran (`../forge-design/review.md`) and /forge-secure left no critical or high finding open. Checkpoint
+(5 lines): must-haves built of total, partial or skipped and why, tests, look scores, security verdict, how to open it.
 
 ## Output
 
@@ -165,4 +165,4 @@ The app in the project root, running in its compose stack; in forge-work/ `featu
 
 ## Next
 
-`/forge-test`, or back to `/forge` when it runs the phases.
+`/forge-dashboard` and `/forge-motion` (each optional), then `/forge-test`; or back to `/forge` when it runs the phases.

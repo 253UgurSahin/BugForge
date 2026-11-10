@@ -1,0 +1,685 @@
+{
+ "about": "Rule tables for flowcheck.py. rules: the words of each finding. languages: per language, what request input looks like (source), what cleans it (clean), where a function starts (header), and how a variable is assigned and used (VAR stands for its name). blanket: a validator or allow-list line that clears every value. checks: one pattern each; kind sink (input must reach it), line (one line) or scope (the function around it).",
+ "rules": {
+  "flow-sql": {
+   "severity": "critical",
+   "title": "Request input ({0}, line {1}) is pasted into a database query",
+   "why": "anyone who controls that value can rewrite the query and read, change or delete your data",
+   "fix": "pass the value separately as a bound parameter (? or %s placeholders), never inside the query text"
+  },
+  "flow-shell": {
+   "severity": "critical",
+   "title": "Request input ({0}, line {1}) is pasted into a shell command",
+   "why": "a visitor can add their own commands and take over the server",
+   "fix": "run the program with a list of arguments and no shell, or escape the value (escapeshellarg, shlex.quote)"
+  },
+  "flow-path": {
+   "severity": "high",
+   "title": "Request input ({0}, line {1}) is used as a file path",
+   "why": "with ../ in the value a visitor can read or overwrite files outside the folder you meant (path traversal)",
+   "fix": "keep only the file name (basename, secure_filename, path.basename) and check that the full path stays inside your folder"
+  },
+  "flow-ssrf": {
+   "severity": "high",
+   "title": "Request input ({0}, line {1}) decides which address the server calls",
+   "why": "a visitor can make your server call internal addresses, such as cloud metadata or the database host (server-side request forgery)",
+   "fix": "check the host against a list of hosts you allow before the call, and do not follow redirects blindly"
+  },
+  "flow-redirect": {
+   "severity": "medium",
+   "title": "Request input ({0}, line {1}) decides where the visitor is redirected",
+   "why": "a link to your site can send people on to a fake login page (open redirect)",
+   "fix": "only redirect to paths on your own site (start with a single /), or check the host against a list"
+  },
+  "flow-raw-html": {
+   "severity": "high",
+   "title": "Request input ({0}, line {1}) is put into the page as raw HTML",
+   "why": "a visitor can add scripts to the page that steal other visitors' logins (cross-site scripting)",
+   "fix": "print it as text (the template's normal escaping, textContent), or clean it first (DOMPurify, bleach)"
+  },
+  "flow-deserialise": {
+   "severity": "high",
+   "title": "Request input ({0}, line {1}) is turned back into objects",
+   "why": "loading objects from outside data can run an attacker's code",
+   "fix": "read outside data as JSON only"
+  },
+  "flow-no-access-check": {
+   "severity": "high",
+   "title": "Check that this handler tests who is asking before it uses a record by its id",
+   "why": "no login or owner check was found in this function: anyone who guesses another id may read or change someone else's record",
+   "fix": "require a login and filter on the owner (where user_id = the logged-in user), or call your policy or permission check here; if a route file or middleware already does it, mark the line forge:allow"
+  },
+  "flow-upload-unchecked": {
+   "severity": "medium",
+   "title": "Upload stored with no check of its type or size nearby",
+   "why": "visitors can fill the disk, or store a script or HTML page that your site then serves",
+   "fix": "check the size and the file type against a short list before you store it"
+  },
+  "flow-upload-client-name": {
+   "severity": "high",
+   "title": "Upload saved under the name the visitor's browser sent",
+   "why": "the name can overwrite another file, or end in .php or .html so that it runs on your site",
+   "fix": "make up the stored name yourself (a random id plus an extension from your own list)"
+  },
+  "flow-weak-hash": {
+   "severity": "medium",
+   "title": "Password or token hashed with md5 or sha1",
+   "why": "these hashes are quick to crack or forge",
+   "fix": "passwords: the framework's password hasher (bcrypt, argon2); tokens and signatures: SHA-256 with HMAC"
+  },
+  "flow-weak-random": {
+   "severity": "high",
+   "title": "Token, password or code made with a random function that can be predicted",
+   "why": "these functions are not made for secrets: an attacker can guess the next value",
+   "fix": "use the secure one: random_bytes() or Str::random() in PHP, the secrets module in Python, crypto.randomUUID() or crypto.randomBytes() in JavaScript"
+  },
+  "flow-jwt-unverified": {
+   "severity": "high",
+   "title": "Login token (JWT) read without checking its signature",
+   "why": "anyone can write their own token and log in as any user",
+   "fix": "verify the token with your key and a fixed algorithm (never none); decode without verify is only for display"
+  },
+  "flow-weak-cipher": {
+   "severity": "medium",
+   "title": "Encryption with a fixed IV or in ECB mode",
+   "why": "the same text always gives the same output, so patterns in the data leak",
+   "fix": "use an authenticated mode (AES-GCM) with a new random IV for every message, or the framework's encrypter"
+  },
+  "flow-tls-off": {
+   "severity": "high",
+   "title": "Certificate check turned off",
+   "why": "anyone on the network path (public Wi-Fi, a hacked router) can read or change the traffic",
+   "fix": "remove that option; to trust your own certificate authority, pass its certificate file"
+  },
+  "flow-mass-assign": {
+   "severity": "high",
+   "title": "The whole request is written into a database record",
+   "why": "a visitor can add fields you did not mean to accept, such as is_admin or user_id",
+   "fix": "pick the fields by name (validated(), only([...]), a serializer or a schema) and pass only those"
+  },
+  "flow-log-secret": {
+   "severity": "medium",
+   "title": "A password, token or request headers written to the log",
+   "why": "logs are kept for a long time and read by many people and tools; a secret in them is a leak",
+   "fix": "do not log the value: log that it was there, or mask it"
+  }
+ },
+ "blanket": "(?i)\\bvalidat\\w*\\s*\\(|is_?valid\\w*\\s*\\(|safeParse\\s*\\(|schema\\w*\\.parse\\s*\\(|allow_?(?:ed_?)?(?:list|hosts?|urls?|domains?|paths?|files?)|whitelist|ALLOWED_",
+ "languages": {
+  "php": {
+   "source": "\\$_(?:GET|POST|REQUEST|COOKIE)\\b|\\$request->(?:input|get|query|post|cookie|all|only|json|string|route)\\s*\\(|\\$request->(?!validated\\b|validate\\b|user\\b|session\\b|file\\b)\\w+\\b(?!\\s*\\()|\\brequest\\(\\s*['\\\"]|\\brequest\\(\\)->(?:input|get|query|all|post)\\s*\\(|\\bRequest::(?:input|get|query)\\s*\\(|\\bInput::get\\s*\\(",
+   "clean": "\\bintval\\(|\\(int\\)|\\(float\\)|\\(bool\\)|\\bfloatval\\(|\\bbasename\\(|escapeshell(?:arg|cmd)\\(|\\bin_array\\(|\\bfilter_var\\(|\\bpreg_match\\(|\\bctype_\\w+\\(|\\bis_numeric\\(|htmlspecialchars\\(|htmlentities\\(|strip_tags\\(|\\be\\(|Rule::in|str_starts_with\\(|Str::startsWith\\(|->(?:integer|boolean|float|date|enum)\\(|Str::(?:slug|uuid)|array_key_exists\\(",
+   "header": "\\bfunction\\b\\s*&?\\s*\\w*\\s*\\(",
+   "assign": "\\$(\\w+)\\s*=(?![=>])",
+   "var": "\\$VAR\\b",
+   "glue": "\\.\\s*\\$VAR\\b|\\$VAR\\b\\s*\\.(?!=)",
+   "start": "\\s*[\\\"']?(?:Location:\\s*)?(?:[\\\"']\\s*\\.\\s*)?\\{?\\$VAR\\b",
+   "lead": "\\s*(?:[\\\"'](?:https?://)?(?:[\\\"']\\s*\\.\\s*)?)?\\{?\\$VAR\\b",
+   "member": "\\s*\\$VAR\\b\\s*(?:\\[|->|;|$|\\?\\?)",
+   "join": "\\b\\w+_path\\s*\\(|\\bsprintf\\s*\\("
+  },
+  "python": {
+   "source": "\\brequest\\.(?:GET|POST|args|form|values|json|data|query_params|cookies|COOKIES|headers|META|body|path_params|view_args)\\b|\\brequest\\.get_json\\s*\\(|\\bself\\.kwargs\\b",
+   "clean": "\\bint\\(|\\bfloat\\(|\\bbool\\(|UUID\\(|basename\\(|secure_filename\\(|\\bescape\\(|\\bquote(?:_plus)?\\(|shlex\\.quote\\(|\\.isdigit\\(|\\.isalnum\\(|\\.isnumeric\\(|\\bre\\.(?:match|fullmatch)\\(|\\.startswith\\(|url_has_allowed_host_and_scheme\\(|is_safe_url\\(|\\bnot\\s+in\\b|\\bin\\s+\\(?[A-Z_]{3,}|cleaned_data|\\.resolve\\(\\)|is_relative_to\\(|safe_join\\(",
+   "header": "^\\s*(?:async\\s+)?def\\s+\\w+|^\\s*class\\s+\\w+|^\\s*@\\w",
+   "assign": "^\\s*(\\w+)\\s*(?::\\s*[\\w\\[\\]., |]+)?=(?!=)",
+   "var": "(?<![\\w.])VAR\\b(?!\\s*=[^=])",
+   "glue": "[+%]\\s*\\(?\\s*VAR\\b|(?<![\\w.])VAR\\b\\s*\\+|\\.format\\([^)]{0,200}\\bVAR\\b",
+   "start": "\\s*(?:[\\\"']\\w+[\\\"']\\s*,\\s*)?(?:url\\s*=\\s*)?(?:f[\\\"']\\{\\s*)?VAR\\b",
+   "lead": "\\s*(?:f[\\\"'](?:https?://)?\\{\\s*|[\\\"']https?://[\\\"']\\s*\\+\\s*)?VAR\\b",
+   "member": "\\s*(?:await\\s+)?VAR\\b\\s*(?:\\[|\\.get\\(|\\.\\w+\\s*$|$)",
+   "join": "\\bos\\.path\\.join\\s*\\(|\\bPath\\s*\\(|\\.joinpath\\s*\\("
+  },
+  "js": {
+   "source": "\\breq(?:uest)?\\.(?:query|body|params|cookies|headers|nextUrl)\\b|\\bsearchParams\\b|\\bformData\\b|\\breq(?:uest)?\\.(?:json|formData|text)\\(\\)|\\bparams\\.\\w+|^\\s*(?:await\\s+)?params\\s*;?\\s*$|\\blocation\\.(?:hash|search|href)\\b|\\buseSearchParams\\(|\\bURLSearchParams\\(|\\bctx\\.(?:query|params)\\b|\\bctx\\.request\\.body\\b",
+   "clean": "\\bparseInt\\(|\\bparseFloat\\(|\\bNumber\\(|\\bBoolean\\(|path\\.basename\\(|encodeURIComponent\\(|\\.includes\\(|\\.has\\(|\\.test\\(|\\.match\\(|\\.startsWith\\(|\\.indexOf\\(|DOMPurify|(?i:sanitiz|sanitis)|\\bescape\\w*\\(|\\bisUUID\\(|\\bisInt\\(|\\bz\\.\\w+\\(|\\bvalidator\\.\\w+\\(",
+   "header": "\\bfunction\\b|=\\s*(?:async\\s*)?\\([^()]*\\)\\s*(?::\\s*[\\w<>\\[\\]]+\\s*)?=>|=\\s*(?:async\\s+)?\\w+\\s*=>|\\b(?:app|router|server|fastify)\\.(?:get|post|put|patch|delete|all)\\s*\\(|^\\s*(?:(?:public|private|protected|static|async)\\s+)+\\w+\\s*\\(",
+   "assign": "(?:\\b(?:const|let|var)\\s+|^\\s*)(?:(\\w+)|\\{([^}]*)\\})\\s*(?::\\s*[\\w<>\\[\\]|. ]+)?=(?![=>])",
+   "var": "(?<![\\w.$])VAR\\b(?!\\s*:)",
+   "glue": "\\+\\s*VAR\\b|(?<![\\w.$])VAR\\b\\s*\\+",
+   "start": "\\s*(?:\\d+\\s*,\\s*)?(?:new\\s+URL\\(\\s*)?(?:\\{\\s*url\\s*:\\s*)?(?:`\\$\\{\\s*)?VAR\\b",
+   "lead": "\\s*(?:`(?:https?://)?\\$\\{\\s*|[\\\"']https?://[\\\"']\\s*\\+\\s*)?VAR\\b",
+   "member": "\\s*(?:await\\s+)?VAR\\b\\s*(?:\\.\\w+\\s*;?\\s*$|\\[|\\.get\\(|;?\\s*$|\\?\\.)",
+   "join": "\\bpath\\.(?:join|resolve)\\s*\\("
+  }
+ },
+ "checks": [
+  {
+   "rule": "flow-sql",
+   "lang": "php",
+   "kind": "sink",
+   "pattern": "\\bDB::(?:select|statement|unprepared|insert|update|delete|raw)\\s*\\(|(?:where|select|orderBy|having|groupBy|from)Raw\\s*\\(|\\bmysqli?_query\\s*\\(|\\bpg_query\\s*\\(|->(?:query|exec|prepare)\\s*\\(",
+   "use": "glued",
+   "direct": false
+  },
+  {
+   "rule": "flow-sql",
+   "lang": "python",
+   "kind": "sink",
+   "pattern": "\\.(?:execute|executemany|executescript|raw|extra)\\s*\\(|\\bRawSQL\\s*\\(|\\btext\\s*\\(",
+   "use": "glued",
+   "direct": true
+  },
+  {
+   "rule": "flow-sql",
+   "lang": "js",
+   "kind": "sink",
+   "pattern": "\\.(?:query|execute|raw)\\s*\\(|\\$(?:query|execute)RawUnsafe\\s*\\(",
+   "use": "glued",
+   "direct": false
+  },
+  {
+   "rule": "flow-shell",
+   "lang": "php",
+   "kind": "sink",
+   "pattern": "(?<![\\w$>:])(?:exec|system|passthru|shell_exec|popen|proc_open)\\s*\\(|\\bProcess::(?:run|start)\\s*\\(",
+   "use": "glued",
+   "direct": false
+  },
+  {
+   "rule": "flow-shell",
+   "lang": "python",
+   "kind": "sink",
+   "pattern": "\\bsubprocess\\.\\w+\\s*\\(|\\bos\\.(?:system|popen)\\s*\\(",
+   "use": "glued",
+   "direct": true
+  },
+  {
+   "rule": "flow-shell",
+   "lang": "js",
+   "kind": "sink",
+   "pattern": "(?<![\\w.$])(?:exec|execSync)\\s*\\(|\\b(?:child_process|cp)\\.(?:exec|execSync)\\s*\\(",
+   "use": "glued",
+   "direct": false
+  },
+  {
+   "rule": "flow-path",
+   "lang": "php",
+   "kind": "sink",
+   "pattern": "\\b(?:include|require)(?:_once)?\\b|(?<![\\w$>:])(?:file_get_contents|fopen|readfile|unlink|file_put_contents)\\s*\\(|\\bStorage::(?:\\w+\\([^)]{0,80}\\)->)?(?:get|download|delete|path|readStream)\\s*\\(|->(?:download|file)\\s*\\(",
+   "use": "any",
+   "direct": true
+  },
+  {
+   "rule": "flow-path",
+   "lang": "python",
+   "kind": "sink",
+   "pattern": "(?<![\\w.])open\\s*\\(|\\bsend_file\\s*\\(|\\bFileResponse\\s*\\(|\\bos\\.(?:remove|unlink|listdir)\\s*\\(|\\bshutil\\.\\w+\\s*\\(|\\.read_(?:text|bytes)\\s*\\(",
+   "use": "any",
+   "direct": true
+  },
+  {
+   "rule": "flow-path",
+   "lang": "js",
+   "kind": "sink",
+   "pattern": "\\b(?:readFile|readFileSync|createReadStream|writeFile|writeFileSync|unlink|unlinkSync|appendFile|readdir|readdirSync)\\s*\\(|\\.(?:sendFile|download)\\s*\\(|(?<![\\w.$])require\\s*\\(",
+   "use": "any",
+   "direct": true
+  },
+  {
+   "rule": "flow-ssrf",
+   "lang": "php",
+   "kind": "sink",
+   "pattern": "\\bHttp::(?:\\w+\\([^)]{0,80}\\)->)*(?:get|post|put|patch|delete|head)\\s*\\(|\\bcurl_init\\s*\\(|CURLOPT_URL\\s*,|\\$(?:client|http|guzzle)\\w*->(?:get|post|put|delete)\\s*\\(|\\$(?:client|http|guzzle)\\w*->request\\s*\\(\\s*['\\\"]\\w+['\\\"]\\s*,|\\bget_headers\\s*\\(",
+   "use": "start",
+   "direct": true
+  },
+  {
+   "rule": "flow-ssrf",
+   "lang": "python",
+   "kind": "sink",
+   "pattern": "\\b(?:requests|httpx|session|client|http)\\.(?:get|post|put|patch|delete|head|request)\\s*\\(|\\burlopen\\s*\\(|\\burllib\\.request\\.Request\\s*\\(",
+   "use": "start",
+   "direct": true
+  },
+  {
+   "rule": "flow-ssrf",
+   "lang": "js",
+   "kind": "sink",
+   "pattern": "(?<![\\w.$])fetch\\s*\\(|\\baxios(?:\\.\\w+)?\\s*\\(|\\bgot(?:\\.\\w+)?\\s*\\(|\\bhttps?\\.(?:get|request)\\s*\\(",
+   "use": "start",
+   "direct": true
+  },
+  {
+   "rule": "flow-redirect",
+   "lang": "php",
+   "kind": "sink",
+   "pattern": "\\bredirect\\s*\\((?!\\s*\\))|->(?:away|to)\\s*\\(|\\bRedirect::(?:to|away)\\s*\\(|(?<![\\w$>:])header\\s*\\(",
+   "use": "start",
+   "direct": true
+  },
+  {
+   "rule": "flow-redirect",
+   "lang": "python",
+   "kind": "sink",
+   "pattern": "\\b(?:redirect|HttpResponseRedirect|HttpResponsePermanentRedirect|RedirectResponse)\\s*\\(",
+   "use": "start",
+   "direct": true
+  },
+  {
+   "rule": "flow-redirect",
+   "lang": "js",
+   "kind": "sink",
+   "pattern": "\\b(?:res|reply|response)\\.redirect\\s*\\(|(?<![\\w.$])(?:redirect|permanentRedirect)\\s*\\(|\\bNextResponse\\.redirect\\s*\\(|\\blocation\\.(?:href\\s*=(?!=)|assign\\s*\\(|replace\\s*\\()|\\brouter\\.(?:push|replace)\\s*\\(",
+   "use": "start",
+   "direct": true
+  },
+  {
+   "rule": "flow-raw-html",
+   "lang": "php",
+   "kind": "sink",
+   "pattern": "\\{!!|(?<![$'\\\">\\w])(?:echo|print)\\b(?!\\s*\\()|<\\?=",
+   "use": "any",
+   "direct": false
+  },
+  {
+   "rule": "flow-raw-html",
+   "lang": "python",
+   "kind": "sink",
+   "pattern": "\\bmark_safe\\s*\\(|\\bMarkup\\s*\\(|\\brender_template_string\\s*\\(",
+   "use": "any",
+   "direct": true
+  },
+  {
+   "rule": "flow-raw-html",
+   "lang": "python",
+   "kind": "sink",
+   "pattern": "\\b(?:HttpResponse|HTMLResponse|make_response)\\s*\\(",
+   "use": "glued",
+   "direct": true
+  },
+  {
+   "rule": "flow-raw-html",
+   "lang": "js",
+   "kind": "sink",
+   "pattern": "dangerouslySetInnerHTML|\\.(?:inner|outer)HTML\\s*\\+?=(?!=)|\\bdocument\\.write(?:ln)?\\s*\\(|\\.insertAdjacentHTML\\s*\\(",
+   "use": "any",
+   "direct": true
+  },
+  {
+   "rule": "flow-raw-html",
+   "lang": "js",
+   "kind": "sink",
+   "pattern": "\\bres\\.(?:send|end|write)\\s*\\(",
+   "use": "glued",
+   "direct": true
+  },
+  {
+   "rule": "flow-deserialise",
+   "lang": "php",
+   "kind": "sink",
+   "pattern": "\\bunserialize\\s*\\(",
+   "use": "any",
+   "direct": false
+  },
+  {
+   "rule": "flow-deserialise",
+   "lang": "python",
+   "kind": "sink",
+   "pattern": "\\b(?:marshal|dill|jsonpickle)\\.(?:loads?|decode)\\s*\\(|\\bshelve\\.open\\s*\\(",
+   "use": "any",
+   "direct": true
+  },
+  {
+   "rule": "flow-deserialise",
+   "lang": "js",
+   "kind": "sink",
+   "pattern": "\\bunserialize\\s*\\(|\\bvm\\.run\\w*\\s*\\(|\\bnew\\s+vm\\.Script\\s*\\(",
+   "use": "any",
+   "direct": true
+  },
+  {
+   "rule": "flow-no-access-check",
+   "lang": "php",
+   "kind": "scope",
+   "pattern": "\\b[A-Z]\\w*::(?:find|findOrFail|findMany|destroy)\\s*\\(|\\b[A-Z]\\w*::where\\s*\\(\\s*['\\\"](?:\\w+_)?id['\\\"]|->where\\s*\\(\\s*['\\\"]id['\\\"]\\s*,\\s*\\$|\\$(?!this\\b|request\\b)\\w+->(?:update|delete|forceDelete)\\s*\\(",
+   "near": [
+    "\\bfunction\\b",
+    "\\$(?:id|\\w+Id|\\w+_id)\\b|\\$request\\b|\\(\\s*[^)]{0,200}\\b[A-Z]\\w+\\s+\\$\\w+\\s*[,)]"
+   ],
+   "unless": "authorize\\w*\\s*\\(|\\bGate::|->can(?:not)?\\s*\\(|[pP]olic(?:y|ies)|\\bauth\\s*\\(|\\bAuth::|->user\\s*\\(|->middleware\\s*\\(|user_id|owner|\\babort_(?:if|unless)\\s*\\(|\\b[A-Z]\\w+Request\\s+\\$|->tokenCan\\s*\\(|(?i:is_?admin|hasrole|haspermission)",
+   "file_has": "Controller\\b|\\bRoute::",
+   "unless_file": "->middleware\\s*\\(|authorizeResource\\s*\\("
+  },
+  {
+   "rule": "flow-no-access-check",
+   "lang": "python",
+   "kind": "scope",
+   "pattern": "\\.objects\\.(?:get|filter)\\s*\\(\\s*(?:pk|id|\\w+_id|uuid)\\s*=|\\bget_object_or_404\\s*\\(\\s*[\\w.]+\\s*,\\s*(?:pk|id|\\w+_id|uuid)\\s*=|\\.query\\.get(?:_or_404)?\\s*\\(|\\b(?:db\\.)?session\\.get\\s*\\(\\s*[A-Z]|\\bdb\\.get\\s*\\(\\s*[A-Z]|\\.filter(?:_by)?\\s*\\(\\s*(?:[A-Z]\\w*\\.)?id\\s*==?",
+   "near": [
+    "def\\s+\\w+\\s*\\(\\s*(?:self\\s*,\\s*)?request\\b|@\\w+(?:\\.\\w+)*\\.(?:route|get|post|put|patch|delete)\\s*\\(|@api_view"
+   ],
+   "unless": "login_required|permission_required|user_passes_test|permission_classes|IsAuthenticated|IsAdmin|request\\.user|current_user|Depends\\s*\\(\\s*\\w*(?:user|auth|token|admin)\\w*|has_perm|check_object_permissions|jwt_required|get_jwt_identity|verify_jwt|\\bsession\\[|\\bg\\.user|\\bSecurity\\s*\\(|staff_member_required|user_id|owner|\\.is_staff|\\.is_superuser|api_key|authenticate",
+   "unless_file": "permission_classes|LoginRequiredMixin|PermissionRequiredMixin|UserPassesTestMixin|AccessMixin|before_request|dependencies\\s*=\\s*\\[\\s*Depends"
+  },
+  {
+   "rule": "flow-no-access-check",
+   "lang": "js",
+   "kind": "scope",
+   "pattern": "\\.(?:findUnique(?:OrThrow)?|findFirst(?:OrThrow)?|findById\\w*|findByPk|findOne\\w*)\\s*\\(|\\.(?:update|updateOne|delete|deleteOne|destroy|upsert)\\s*\\(\\s*\\{|\\b(?:WHERE|where)\\s+(?:\\w+_)?id\\s*=|\\beq\\s*\\(\\s*\\w+\\.id\\s*,|\\.eq\\s*\\(\\s*['\\\"]id['\\\"]",
+   "near": [
+    "export\\s+(?:default\\s+)?(?:async\\s+)?function\\s+(?:GET|POST|PUT|PATCH|DELETE|handler)\\b|export\\s+const\\s+(?:GET|POST|PUT|PATCH|DELETE)\\b|['\\\"]use server['\\\"]|\\b(?:app|router)\\.(?:get|post|put|patch|delete|all)\\s*\\(",
+    "\\b(?:params|query|body)\\??\\.(?:id|\\w+Id|\\w+_id)\\b|\\{[^}]{0,120}\\b(?:id|\\w+Id|\\w+_id)\\b[^}]{0,120}\\}\\s*=\\s*(?:await\\s+)?(?:params|req|request|body|context)|(?:searchParams|formData)\\.get\\(\\s*['\\\"](?:id|\\w+Id|\\w+_id)['\\\"]|:(?:id|\\w+Id|\\w+_id)\\b"
+   ],
+   "unless": "getServerSession|\\bauth\\s*\\(|auth\\.api\\.getSession|getSession\\s*\\(|currentUser\\s*\\(|getUser\\s*\\(|getCurrentUser|\\b(?:req|request|ctx)\\.(?:user|auth|session)\\b|session\\??\\.user|\\buserId\\b|ownerId|verifyToken|jwt\\.verify|jwtVerify|(?i:requireauth|isauthenticated|ensureauth|authmiddleware|checkauth|withauth|authorize|\\bprotect\\b|requireuser|requireadmin|isadmin|verifysession|validaterequest)|passport\\.authenticate|getToken\\s*\\(|supabase\\.auth|[pP]olicy|\\bcan\\s*\\(",
+   "unless_file": "\\b(?:router|app)\\.use\\s*\\([^)]{0,200}(?i:auth|protect|session|jwt|passport)"
+  },
+  {
+   "rule": "flow-no-access-check",
+   "lang": "js",
+   "kind": "scope",
+   "pattern": "\\.(?:findUnique(?:OrThrow)?|findFirst(?:OrThrow)?|findById\\w*|findByPk|findOne\\w*)\\s*\\(|\\.(?:update|updateOne|delete|deleteOne|destroy|upsert)\\s*\\(\\s*\\{|\\b(?:WHERE|where)\\s+(?:\\w+_)?id\\s*=|\\beq\\s*\\(\\s*\\w+\\.id\\s*,|\\.eq\\s*\\(\\s*['\\\"]id['\\\"]",
+   "near": [
+    "export\\s+(?:default\\s+)?async\\s+function\\b",
+    "\\b(?:id|\\w+Id|\\w+_id)\\b"
+   ],
+   "unless": "getServerSession|\\bauth\\s*\\(|auth\\.api\\.getSession|getSession\\s*\\(|currentUser\\s*\\(|getUser\\s*\\(|getCurrentUser|\\b(?:req|request|ctx)\\.(?:user|auth|session)\\b|session\\??\\.user|\\buserId\\b|ownerId|verifyToken|jwt\\.verify|jwtVerify|(?i:requireauth|isauthenticated|ensureauth|authmiddleware|checkauth|withauth|authorize|\\bprotect\\b|requireuser|requireadmin|isadmin|verifysession|validaterequest)|passport\\.authenticate|getToken\\s*\\(|supabase\\.auth|[pP]olicy|\\bcan\\s*\\(",
+   "file_has": "(?m)^\\s*['\\\"]use server['\\\"]"
+  },
+  {
+   "rule": "flow-upload-unchecked",
+   "lang": "php",
+   "kind": "scope",
+   "pattern": "->store(?:As|Publicly|PubliclyAs)?\\s*\\(|\\bmove_uploaded_file\\s*\\(|->move\\s*\\(|\\bStorage::(?:\\w+\\([^)]{0,80}\\)->)?put(?:File|FileAs)?\\s*\\(",
+   "near": [
+    "->file\\s*\\(|\\$_FILES\\b|UploadedFile|hasFile|allFiles"
+   ],
+   "unless": "(?i)mimes|mimetypes|\\bimage\\b|max:|getSize\\(|getMimeType\\(|getClientMimeType\\(|extension\\(|validat|\\['size'\\]|\\['type'\\]|finfo|in_array|[a-z]Request\\s+\\$|File::types|pathinfo"
+  },
+  {
+   "rule": "flow-upload-unchecked",
+   "lang": "python",
+   "kind": "scope",
+   "pattern": "\\.save\\s*\\(|\\bFileSystemStorage\\s*\\(|\\bcopyfileobj\\s*\\(|\\.write\\s*\\(\\s*(?:await\\s+)?\\w+(?:\\.file)?\\.read\\s*\\(|\\.chunks\\s*\\(",
+   "near": [
+    "request\\.(?:files|FILES)\\b|UploadFile|\\.chunks\\s*\\("
+   ],
+   "unless": "content_type|\\.size\\b|content_length|MAX_CONTENT_LENGTH|imghdr|\\bmagic\\.|splitext|\\.endswith\\(|allowed_file|ALLOWED|(?i:validat)|is_valid|\\.suffix|filetype|Image\\.open"
+  },
+  {
+   "rule": "flow-upload-unchecked",
+   "lang": "js",
+   "kind": "scope",
+   "pattern": "\\.mv\\s*\\(|\\bwriteFile(?:Sync)?\\s*\\(|\\bcreateWriteStream\\s*\\(|\\bmulter\\s*\\(|\\.upload\\s*\\(|(?<![\\w.$])put\\s*\\(|\\bPutObjectCommand\\s*\\(",
+   "near": [
+    "formData\\.get\\(|\\breq\\.files?\\b|\\.arrayBuffer\\s*\\(|\\bmulter\\b|busboy|formidable"
+   ],
+   "unless": "\\.size\\b|\\.type\\b|mimetype|\\blimits\\b|fileFilter|fileSize|\\.endsWith\\(|extname\\(|(?i:allowed|accept|validat)|file-?[tT]ype|\\bz\\.|maxFileSize|\\bsharp\\("
+  },
+  {
+   "rule": "flow-upload-client-name",
+   "lang": "php",
+   "kind": "scope",
+   "pattern": "getClientOriginalName\\s*\\(|\\$_FILES\\s*\\[[^\\]]+\\]\\s*\\[\\s*['\\\"]name['\\\"]\\s*\\]",
+   "near": [
+    "->store(?:As|Publicly|PubliclyAs)?\\s*\\(|\\bmove_uploaded_file\\s*\\(|->move\\s*\\(|\\bStorage::(?:\\w+\\([^)]{0,80}\\)->)?put(?:File|FileAs)?\\s*\\("
+   ],
+   "unless": "\\bbasename\\s*\\(|Str::(?:random|uuid|slug)|\\buniqid\\s*\\(|hashName\\s*\\(|\\bpathinfo\\s*\\(|\\bpreg_replace\\s*\\(|\\bbin2hex\\("
+  },
+  {
+   "rule": "flow-upload-client-name",
+   "lang": "python",
+   "kind": "scope",
+   "pattern": "(?:\\bopen|\\.save|\\bos\\.path\\.join|\\bPath|\\.joinpath)\\s*\\([^#\\n]{0,200}\\.(?:filename|name)\\b|/\\s*\\w+\\.filename\\b",
+   "near": [
+    "request\\.(?:files|FILES)\\b|UploadFile|\\.chunks\\s*\\("
+   ],
+   "unless": "secure_filename|uuid|basename|token_hex|token_urlsafe|get_valid_name|get_available_name|slugify|\\.suffix|splitext"
+  },
+  {
+   "rule": "flow-upload-client-name",
+   "lang": "js",
+   "kind": "scope",
+   "pattern": "\\.originalname\\b|(?:join|resolve|writeFile\\w*|createWriteStream|\\.mv|put)\\s*\\([^\\n]{0,200}\\b\\w*[fF]ile\\w*\\.name\\b|[`/]\\$\\{\\s*\\w*[fF]ile\\w*\\.name\\s*\\}",
+   "near": [
+    "formData\\.get\\(|\\breq\\.files?\\b|\\.arrayBuffer\\s*\\(|\\bmulter\\b|busboy|formidable"
+   ],
+   "unless": "path\\.basename\\s*\\(|(?i:uuid)|randomBytes|nanoid|extname\\s*\\(|(?i:sanitiz|sanitis|slugify)"
+  },
+  {
+   "rule": "flow-weak-hash",
+   "lang": "php",
+   "kind": "line",
+   "pattern": "(?i)\\b(?:md5|sha1)\\s*\\(",
+   "near": [
+    "(?i)token|secret|reset|api_?key|signature"
+   ],
+   "unless": "(?i)passw(?:or)?d|(?<![a-z])pass(?![a-z])"
+  },
+  {
+   "rule": "flow-weak-hash",
+   "lang": "php",
+   "kind": "line",
+   "pattern": "\\bhash(?:_hmac)?\\s*\\(\\s*['\\\"](?:md5|sha1)['\\\"]",
+   "near": [
+    "(?i)passw|token|secret|reset|api_?key|signature"
+   ],
+   "unless": null
+  },
+  {
+   "rule": "flow-weak-hash",
+   "lang": "python",
+   "kind": "line",
+   "pattern": "\\bhashlib\\.(?:md5|sha1)\\s*\\(|\\bhashlib\\.new\\s*\\(\\s*['\\\"](?:md5|sha1)['\\\"]",
+   "near": [
+    "(?i)passw|token|secret|reset|api_?key|signature"
+   ],
+   "unless": null
+  },
+  {
+   "rule": "flow-weak-hash",
+   "lang": "python",
+   "kind": "line",
+   "pattern": "\\b(?:Unsalted)?(?:MD5|SHA1)PasswordHasher\\b",
+   "near": [],
+   "unless": "^\\s*(?:from|import|class)\\b"
+  },
+  {
+   "rule": "flow-weak-hash",
+   "lang": "js",
+   "kind": "line",
+   "pattern": "createHash\\s*\\(\\s*['\\\"](?:md5|sha1)['\\\"]|(?<![\\w.$])(?:md5|sha1)\\s*\\(|CryptoJS\\.(?:MD5|SHA1)\\s*\\(",
+   "near": [
+    "(?i)passw|token|secret|reset|api_?key|signature"
+   ],
+   "unless": null
+  },
+  {
+   "rule": "flow-weak-random",
+   "lang": "php",
+   "kind": "line",
+   "pattern": "(?<![\\w>:$])(?:rand|mt_rand|uniqid|lcg_value|str_shuffle)\\s*\\(",
+   "near": [
+    "(?i)token|passw|secret|reset|otp|\\bpin\\b|session|api_?key|nonce|salt|invit|csrf|verif|coupon|voucher|code\\b"
+   ],
+   "unless": null
+  },
+  {
+   "rule": "flow-weak-random",
+   "lang": "php",
+   "kind": "line",
+   "pattern": "(?<![\\w>:$])(?:rand|mt_rand|uniqid|lcg_value|str_shuffle)\\s*\\(",
+   "near": [
+    "\\bid\\b|\\bID\\b|_id\\b|[a-z]Id\\b|(?i:uuid)"
+   ],
+   "unless": "(?i)token|passw|secret|reset|otp|\\bpin\\b|session|api_?key|nonce|salt|invit|csrf|verif|coupon|voucher|code\\b",
+   "severity": "medium",
+   "title": "Id made with a random function that can be predicted"
+  },
+  {
+   "rule": "flow-weak-random",
+   "lang": "python",
+   "kind": "line",
+   "pattern": "\\brandom\\.(?:random|randint|choice|choices|randrange|sample|getrandbits)\\s*\\(",
+   "near": [
+    "(?i)token|passw|secret|reset|otp|\\bpin\\b|session|api_?key|nonce|salt|invit|csrf|verif|coupon|voucher|code\\b"
+   ],
+   "unless": null
+  },
+  {
+   "rule": "flow-weak-random",
+   "lang": "python",
+   "kind": "line",
+   "pattern": "\\brandom\\.(?:random|randint|choice|choices|randrange|sample|getrandbits)\\s*\\(",
+   "near": [
+    "\\bid\\b|\\bID\\b|_id\\b|[a-z]Id\\b|(?i:uuid)"
+   ],
+   "unless": "(?i)token|passw|secret|reset|otp|\\bpin\\b|session|api_?key|nonce|salt|invit|csrf|verif|coupon|voucher|code\\b",
+   "severity": "medium",
+   "title": "Id made with a random function that can be predicted"
+  },
+  {
+   "rule": "flow-weak-random",
+   "lang": "js",
+   "kind": "line",
+   "pattern": "\\bMath\\.random\\s*\\(",
+   "near": [
+    "(?i)token|passw|secret|reset|otp|\\bpin\\b|session|api_?key|nonce|salt|invit|csrf|verif|coupon|voucher|code\\b"
+   ],
+   "unless": null
+  },
+  {
+   "rule": "flow-weak-random",
+   "lang": "js",
+   "kind": "line",
+   "pattern": "\\bMath\\.random\\s*\\(",
+   "near": [
+    "\\bid\\b|\\bID\\b|_id\\b|[a-z]Id\\b|(?i:uuid)"
+   ],
+   "unless": "(?i)token|passw|secret|reset|otp|\\bpin\\b|session|api_?key|nonce|salt|invit|csrf|verif|coupon|voucher|code\\b",
+   "severity": "medium",
+   "title": "Id made with a random function that can be predicted"
+  },
+  {
+   "rule": "flow-jwt-unverified",
+   "lang": "php",
+   "kind": "line",
+   "pattern": "(?i)['\\\"]?alg(?:orithm)?s?['\\\"]?\\s*(?:=>|[:=])\\s*\\[?\\s*['\\\"]none['\\\"]",
+   "near": [],
+   "unless": null
+  },
+  {
+   "rule": "flow-jwt-unverified",
+   "lang": "python",
+   "kind": "line",
+   "pattern": "(?i)['\\\"]?alg(?:orithm)?s?['\\\"]?\\s*(?:=>|[:=])\\s*\\[?\\s*['\\\"]none['\\\"]|verify_signature['\\\"]?\\s*:\\s*False|\\bget_unverified_claims\\s*\\(",
+   "near": [],
+   "unless": null
+  },
+  {
+   "rule": "flow-jwt-unverified",
+   "lang": "js",
+   "kind": "line",
+   "pattern": "(?i)['\\\"]?alg(?:orithm)?s?['\\\"]?\\s*(?:=>|[:=])\\s*\\[?\\s*['\\\"]none['\\\"]|\\bjwt\\.decode\\s*\\(|\\bjwtDecode\\s*\\(|\\bjwt_decode\\s*\\(",
+   "near": [],
+   "unless": null
+  },
+  {
+   "rule": "flow-weak-cipher",
+   "lang": "php",
+   "kind": "line",
+   "pattern": "(?i)['\\\"][\\w-]*-ecb['\\\"]|MCRYPT_MODE_ECB|\\$iv\\s*=\\s*['\\\"][^'\\\"]+['\\\"]",
+   "near": [],
+   "unless": null
+  },
+  {
+   "rule": "flow-weak-cipher",
+   "lang": "python",
+   "kind": "line",
+   "pattern": "\\bMODE_ECB\\b|\\bmodes\\.ECB\\s*\\(|\\b(?:iv|IV)\\s*=\\s*b?['\\\"][^'\\\"]+['\\\"]",
+   "near": [],
+   "unless": null
+  },
+  {
+   "rule": "flow-weak-cipher",
+   "lang": "js",
+   "kind": "line",
+   "pattern": "(?i)['\\\"][\\w-]*-ecb['\\\"]|\\bcreateCipher\\s*\\(|\\b(?:iv|IV)\\s*[:=]\\s*(?:['\\\"][^'\\\"]+['\\\"]|Buffer\\.from\\s*\\(\\s*['\\\"])",
+   "near": [],
+   "unless": null
+  },
+  {
+   "rule": "flow-tls-off",
+   "lang": "php",
+   "kind": "line",
+   "pattern": "(?i)CURLOPT_SSL_VERIFY(?:PEER|HOST)\\s*(?:,|=>)\\s*(?:false|0)\\b|\\bwithoutVerifying\\s*\\(|['\\\"]verify['\\\"]\\s*=>\\s*false",
+   "near": [],
+   "unless": null
+  },
+  {
+   "rule": "flow-tls-off",
+   "lang": "python",
+   "kind": "line",
+   "pattern": "\\b_create_unverified_context\\b|\\bCERT_NONE\\b|\\bcheck_hostname\\s*=\\s*False|['\\\"]verify['\\\"]\\s*:\\s*False",
+   "near": [],
+   "unless": null
+  },
+  {
+   "rule": "flow-tls-off",
+   "lang": "js",
+   "kind": "line",
+   "pattern": "\\bstrictSSL['\\\"]?\\s*:\\s*false\\b",
+   "near": [],
+   "unless": null
+  },
+  {
+   "rule": "flow-mass-assign",
+   "lang": "php",
+   "kind": "line",
+   "pattern": "(?:::|->)(?:create|insert|update|fill|forceFill|forceCreate|updateOrCreate|firstOrCreate)\\s*\\(\\s*(?:\\$request->(?:all|input|post|query)\\s*\\(\\s*\\)|\\$_(?:POST|GET|REQUEST)\\b|request\\(\\)->all\\s*\\(\\s*\\))",
+   "near": [],
+   "unless": null,
+   "severity": "medium",
+   "title": "The whole request is written into a model: check its $fillable list"
+  },
+  {
+   "rule": "flow-mass-assign",
+   "lang": "python",
+   "kind": "line",
+   "pattern": "\\*\\*\\s*(?:await\\s+)?request\\.(?:data|POST|GET|json|form|values|query_params|get_json)\\b|\\bfor\\s+\\w+\\s*,\\s*\\w+\\s+in\\s+request\\.(?:data|json|POST|form)\\.items\\(\\)",
+   "near": [],
+   "unless": null
+  },
+  {
+   "rule": "flow-mass-assign",
+   "lang": "js",
+   "kind": "scope",
+   "pattern": "\\.(?:create|update|upsert|createMany|updateMany)\\s*\\(\\s*\\{[^}]{0,200}\\bdata\\s*:\\s*(?:req\\.body|body|json|payload|await\\s+req(?:uest)?\\.json\\(\\)|\\{\\s*\\.\\.\\.\\s*(?:req\\.)?body)\\b|^\\s*data\\s*:\\s*(?:req\\.body|body|json|payload)\\s*,?\\s*$|\\.(?:create|update|findByIdAndUpdate|findOneAndUpdate|updateOne|insertOne|insertMany|insert|set|values)\\s*\\([^)\\n]{0,200}\\breq\\.body\\s*[,)]|\\bnew\\s+[A-Z]\\w*\\s*\\(\\s*req\\.body\\s*\\)|\\bObject\\.assign\\s*\\(\\s*\\w+\\s*,\\s*req\\.body\\s*\\)",
+   "near": [],
+   "unless": "safeParse|(?<!JSON)\\.parse\\s*\\(|(?i:validat)|\\bpick\\s*\\(|\\bz\\.object|\\bJoi\\.|\\byup\\."
+  },
+  {
+   "rule": "flow-log-secret",
+   "lang": "php",
+   "kind": "line",
+   "pattern": "\\bLog::\\w+\\s*\\(|(?<![\\w$>:])(?:logger|error_log|var_dump|print_r|dd|dump|info)\\s*\\(|->(?:info|debug|warning|error|notice|critical)\\s*\\(",
+   "near": [
+    "(?i)passw(?:or)?d|(?<![a-z])token\\b|secret|authori[sz]ation|api_?key|\\bheaders\\b|\\bcookies?\\b|card_?number|\\bcvv\\b|\\bssn\\b|\\bbsn\\b|\\biban\\b"
+   ],
+   "unless": "(?i)mask|redact|\\*\\*\\*|\\blen\\(|\\.length\\b|strlen\\(|\\bbool\\(|!!|is None|is not None|hash|isset\\(|empty\\(",
+   "code_only": true
+  },
+  {
+   "rule": "flow-log-secret",
+   "lang": "python",
+   "kind": "line",
+   "pattern": "\\b(?:log|logger|logging|_log|_logger|LOG)\\.(?:debug|info|warning|warn|error|exception|critical)\\s*\\(|(?<![\\w.])print\\s*\\(",
+   "near": [
+    "(?i)passw(?:or)?d|(?<![a-z])token\\b|secret|authori[sz]ation|api_?key|\\bheaders\\b|\\bcookies?\\b|card_?number|\\bcvv\\b|\\bssn\\b|\\bbsn\\b|\\biban\\b"
+   ],
+   "unless": "(?i)mask|redact|\\*\\*\\*|\\blen\\(|\\.length\\b|strlen\\(|\\bbool\\(|!!|is None|is not None|hash|isset\\(|empty\\(",
+   "code_only": true
+  },
+  {
+   "rule": "flow-log-secret",
+   "lang": "js",
+   "kind": "line",
+   "pattern": "\\bconsole\\.(?:log|info|warn|error|debug)\\s*\\(|\\b(?:logger|log)\\.\\w+\\s*\\(",
+   "near": [
+    "(?i)passw(?:or)?d|(?<![a-z])token\\b|secret|authori[sz]ation|api_?key|\\bheaders\\b|\\bcookies?\\b|card_?number|\\bcvv\\b|\\bssn\\b|\\bbsn\\b|\\biban\\b"
+   ],
+   "unless": "(?i)mask|redact|\\*\\*\\*|\\blen\\(|\\.length\\b|strlen\\(|\\bbool\\(|!!|is None|is not None|hash|isset\\(|empty\\(",
+   "code_only": true
+  }
+ ]
+}

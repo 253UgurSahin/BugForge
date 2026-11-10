@@ -12,6 +12,10 @@ Runs against: {{http://localhost:8080}}, the local compose stack with seed data.
   Without `E2E_PASSWORD` every signed-in test is skipped (an app without accounts has none):
   Playwright still exits 0, so read the skipped count and write each skip in the result column.
   Between two runs, reset the app's rate limits: `{{docker compose exec app php artisan cache:clear | docker compose restart app}}`.
+- The walk, after the flow specs (every route of `forge-work/test/routes.json` at 390, 768 and 1440 px,
+  light and dark; see `../forge-test/walk.md`): `cd e2e && FORGE_BASE_URL=http://localhost:8080
+  FORGE_ROUND={{r1}} npx playwright test walk`, then, from the project root,
+  `python3 ../forge-test/walkcheck.py forge-work/test/walk.json`.
 
 ## Cases
 
@@ -38,3 +42,7 @@ Cases: {{n}} run, {{n}} passed, {{n}} failed, {{n}} skipped.
 Bugs (the counts `../forge-test/bugs.py` prints): {{n}} critical, {{n}} high, {{n}} medium, {{n}} low;
 {{n}} open, {{n}} fixed, {{n}} wontfix.
 `python3 ../forge-test/bugs.py forge-work/bugs.md`: exit {{0}}.
+The walk, round {{r1}}: {{n}} routes, {{n}} pages; findings left: {{n}} high, {{n}} medium, {{n}} low.
+Slowest page: {{S03-dashboard at 390 px, LCP 1800 ms}}; budget: {{the default | forge-work/test/budget.json}}.
+Screenshots: {{r1 is the baseline, nothing to compare yet | shotcheck.py r1 r2: 2 changed, both by the fix for B004}}.
+`python3 ../forge-test/walkcheck.py forge-work/test/walk.json`: exit {{0}}.

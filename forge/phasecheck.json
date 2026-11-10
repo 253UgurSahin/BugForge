@@ -28,6 +28,10 @@
      "why": "forge-plan, Step 2: PWA: with yes or no, at the start of its own line"}
   ],
   "design": [
+    {"check": ["file", "forge-work/design/brief.md"], "modes": ["idea"],
+     "why": "forge-design, The brief and Output: brief.md from its template with every {{...}} filled in"},
+    {"check": ["doc", "forge-work/design/brief.md", "--template", "../forge-design/brief.md"], "modes": ["idea"],
+     "why": "forge-design, The brief and Output: brief.md from its template with every {{...}} filled in"},
     {"check": ["json", "forge-work/design/tokens.json"],
      "why": "forge-design, Step 2: copy ../forge-design/tokens.json and fill in the values"},
     {"check": ["work", "tokens", "forge-work/design/tokens.json", "../forge-design/tokens.json"],
@@ -62,6 +66,23 @@
     {"check": ["run", "forge-build/copycheck.py"], "modes": ["clone"], "when": "forge-work/original-text/",
      "why": "forge-build, Step 7: copycheck.py exits 0 (clone mode); Clean room and your own words: rewrite each run of 6+ words the project's files share with the original's text, or with the user's OK add it to forge-work/copy-allow.txt"}
   ],
+  "dashboard": [
+    {"check": ["file", "forge-work/dashboard.md"], "why": "forge-dashboard, Output: forge-work/dashboard.md"},
+    {"check": ["doc", "forge-work/dashboard.md", "--section", "Audience", "--section", "Numbers", "--section", "Layout",
+               "--section", "Charts", "--section", "States", "--section", "Checks",
+               "--rows", "number,definition,source,unit,form"],
+     "why": "forge-dashboard, Output: dashboard.md with ## Audience, ## Numbers (its table), ## Layout, ## Charts, ## States, ## Checks"},
+    {"check": ["run", "forge-dashboard/dashcheck.py", "forge-work/dashboard.md"],
+     "why": "forge-dashboard, Output: dashboard.md, on which dashcheck.py exits 0"}
+  ],
+  "motion": [
+    {"check": ["file", "forge-work/motion.md"], "why": "forge-motion, Output: forge-work/motion.md"},
+    {"check": ["doc", "forge-work/motion.md", "--section", "Direction", "--section", "Inventory", "--section", "Tokens",
+               "--section", "Libraries", "--section", "Checks"],
+     "why": "forge-motion, Output: motion.md with ## Direction, ## Inventory, ## Tokens, ## Libraries, ## Checks"},
+    {"check": ["run", "forge-motion/motioncheck.py", ".", "--fail-on", "medium"],
+     "why": "forge-motion, Step 7 and Output: motioncheck.py . --fail-on medium exits 0"}
+  ],
   "test": [
     {"check": ["file", "forge-work/test-plan.md"],
      "why": "forge-test, Output: test-plan.md with every result and the totals"},
@@ -77,6 +98,8 @@
     {"check": ["work", "specs", "e2e/**/*.spec.*", "e2e/**/*.test.*"],
      "modes": ["clone", "idea"],
      "why": "forge-test, Step 3 and Output: one spec per flow in e2e/"},
+    {"check": ["run", "forge-test/walkcheck.py", "forge-work/test/walk.json"], "when": "forge-work/test/walk.json",
+     "why": "forge-test, Output: walk.json, on which walkcheck.py exits 0"},
     {"check": ["run", "forge-test/bugs.py", "forge-work/bugs.md"],
      "why": "forge-test, Output: bugs.md, on which bugs.py exits 0"}
   ],
@@ -121,9 +144,9 @@
      "why": "forge-launch, Also for this skill: commit once all tests pass and secretscan.py, sweep.py and, in clone mode, copycheck.py exit 0; forge-build, Clean room: rewrite each shared run, or with the user's OK add it to forge-work/copy-allow.txt"}
   ],
   "secure": [
-    {"check": ["doc", "forge-work/security.md", "--section", "What was checked", "--section", "Findings",
-               "--section", "Not checked", "--section", "Accepted risks"],
-     "why": "forge-secure, Step 9 and Output: security.md in the format of its report"},
+    {"check": ["doc", "forge-work/security.md", "--section", "What was checked", "--section", "Coverage",
+               "--section", "Findings", "--section", "Not checked", "--section", "Accepted risks"],
+     "why": "forge-secure, Step 10 and Output: security.md in the format of its report, with the coverage table"},
     {"check": ["line", "forge-work/security.md", "Verdict", "PASS"],
      "why": "forge-secure, The gate: the line is exactly Verdict: PASS or Verdict: FAIL"},
     {"check": ["counts", "forge-work/security.md"],
