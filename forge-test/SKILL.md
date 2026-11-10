@@ -69,15 +69,14 @@ case (F01-H1 happy, F01-E3 edge, F01-N2 negative) and mark it `e2e`, `unit` or `
 write the base URL (normally `http://localhost:8080`) and the commit at the top of test-plan.md.
 Improve mode without a compose file: start the app the way its README says. The images have no dev
 packages, so seed and unit tests run on the host (`composer install`, a venv with the dev
-requirements, `npm ci`), on the override's port ("Where things run" in `../forge-build/SKILL.md`):
-`127.0.0.1:3307` (MariaDB) or `127.0.0.1:5433` (PostgreSQL). next: its test database, in walk.md.
+requirements, `npm ci`), on the override's database port ("Seed data" in walk.md).
 
 Seed and unit tests: laravel `php artisan db:seed`, `php artisan test`; django `python manage.py
 seed`, `pytest` (or `manage.py test`); next `npm run seed`, `npx vitest run`; static `npx vitest
 run`. The seeder is forge-build's (see build-log.md or the README); its users' password,
-`SEED_PASSWORD`, is Step 3's `E2E_PASSWORD`. Improve mode without a seeder, and an app without
-accounts: "Seed data" in walk.md. Run the unit tests; add some for the cases marked `unit`: logic,
-a second user's access, money in cents, time zones.
+`SEED_PASSWORD`, is Step 3's `E2E_PASSWORD`. No seeder (improve mode) or no accounts: "Seed data"
+in walk.md. Run the unit tests; add some for the cases marked `unit`: logic, a second user's
+access, money in cents, time zones.
 
 ## Step 3: end to end with Playwright
 
@@ -89,35 +88,33 @@ Start from that example. It shows what every spec needs: the base URL from `FORG
 and labels as selectors (never CSS classes), a failure on any console error, 5xx response or broken
 asset, an axe scan (WCAG 2.2 AA) on each screen, the second-user access check and a double submit.
 
-**Edge cases.** Copy `../forge-test/edge.example.spec.ts` to `e2e/edge.spec.ts`: one group per form,
-built from its helpers. A case that fails leaves `forge-work/test/evidence/<case>.png`.
-
-**The walk.** Copy `../forge-test/walk.example.spec.ts` to `e2e/walk.spec.ts`; after the flow specs
-run `FORGE_ROUND=r1 npx playwright test walk`. It opens every route of routes.json at 390, 768 and
-1440 px, light and dark, writes what it saw to `forge-work/test/walk.json` and a screenshot per
-page to `forge-work/test/shots/r1/` (the baseline), and fails only when a page cannot load. Then
-`python3 ../forge-test/walkcheck.py forge-work/test/walk.json` judges it: console and script errors,
-failed requests, broken links, WCAG, sideways scrolling, cut-off text, covered buttons, speed and size
-against the budget (LCP 2500 ms, CLS 0.1, TTFB 800 ms, 1.5 MB). Exit 2: incomplete, fix that first.
+- **Edge cases**: copy `../forge-test/edge.example.spec.ts` to `e2e/edge.spec.ts`, one group per
+  form, built from its helpers. A case that fails leaves `forge-work/test/evidence/<case>.png`.
+- **The walk**: copy `../forge-test/walk.example.spec.ts` to `e2e/walk.spec.ts`; after the flow
+  specs run `FORGE_ROUND=r1 npx playwright test walk`. It opens every route of routes.json at 390,
+  768 and 1440 px, light and dark, writes what it saw to `forge-work/test/walk.json` and a
+  screenshot per page to `forge-work/test/shots/r1/` (the baseline), and fails only when a page
+  cannot load. Then `python3 ../forge-test/walkcheck.py forge-work/test/walk.json` judges it:
+  errors, failed requests, broken links, WCAG, layout faults, and speed and size against the
+  budget (LCP 2500 ms, CLS 0.1, TTFB 800 ms, 1.5 MB). Exit 2: the walk is incomplete, fix that.
 
 The app's rate limits count every spec, all from one address; never loosen them for tests. Use new
-emails and names in every run (`Date.now()`); clear the counters between runs (walk.md, "Rate limits").
-Commit the new tests before any fix: `python3 ../forge/gitguard.py` and `python3
-../forge-secure/secretscan.py .` must exit 0, then one commit `test: add end-to-end and unit tests`
-with the specs, their config and lockfile, the ignore lines and the unit tests.
+emails and names in every run (`Date.now()`); clear the counters between runs ("Rate limits" in
+walk.md). Commit the new tests before any fix: `python3 ../forge/gitguard.py` and `python3
+../forge-secure/secretscan.py .` must exit 0, then one commit `test: add end-to-end and unit
+tests` with the specs, their config and lockfile, the ignore lines and the unit tests.
 
 ## Step 4: the manual pass
 
 Emails in Mailpit, sign-in with real OAuth providers, Stripe Checkout and the iDEAL test page,
-visual glitches (look at the walk's screenshots) and a screen reader get a manual pass: with a browser
-tool when there is one (screenshot each step), otherwise as a checklist for the user. Wait for their answers.
+visual glitches and a screen reader get a manual pass: with a browser tool when there is one
+(screenshot each step), otherwise as a checklist for the user. Wait for their answers.
 
 ## Step 5: report bugs
 
 Every bug gets a heading in `forge-work/bugs.md` in exactly the form below. `../forge-test/bugs.py`
 reads it and is strict: the file starts with `# Bugs`, the only other `##` heading is `## To check`,
 and `[high]` or `[open]` go in bug headings only. UTF-8, also with no bugs (a line "No bugs found.").
-
 ```markdown
 ## B001 [high] [open] Booking fails when the guest's name has an accent
 case: F01-E4   screen: S03   build: 3f2a1c9   browser: Chromium, 390px wide
@@ -127,14 +124,13 @@ actual: a 500 error, nothing saved
 evidence: e2e/f01-book.spec.ts "F01-E4", forge-work/test/evidence/F01-E4.png
 fixed in: -
 ```
-
 The walk's findings come in this form: `python3 ../forge-test/walkcheck.py forge-work/test/walk.json
---bugs --fail-on medium --known forge-work/bugs.md --build 3f2a1c9` prints a block per finding not
-yet in bugs.md, numbered on from the last bug, the screenshot as evidence: paste them in. Severity:
-critical, high, medium or low ("Severity for a bug" in walk.md). Status: `open`, `fixed` or
-`wontfix`. Only report what you reproduced; "might be an issue" goes under `## To check`. Never paste
-a secret or a real person's data into a bug. A must-have that is missing or half built is no bug: it
-goes to /forge-build, then back here (say so at the checkpoint).
+--bugs --fail-on medium --known forge-work/bugs.md --build 3f2a1c9` prints a block per finding
+that bugs.md does not have yet, numbered on from its last bug: paste them in. Severity: critical,
+high, medium or low ("Severity for a bug" in walk.md). Status: `open`, `fixed` or `wontfix`. Only
+report what you reproduced; "might be an issue" goes under `## To check`. Never paste a secret or
+a real person's data into a bug. A must-have that is missing or half built is no bug: it goes to
+/forge-build, then back here (say so at the checkpoint).
 
 ## Step 6: the fix loop
 
@@ -147,9 +143,9 @@ goes to /forge-build, then back here (say so at the checkpoint).
 5. `python3 ../forge-test/bugs.py forge-work/bugs.md`. Exit 1: an open critical or high bug is
    left, back to 2. Exit 2: a line is not in the right form (the output names it). Repeat until it
    exits 0, then fix the medium bugs the same way, and low ones when the fix is small.
-6. After each round of fixes, walk again as the next round (`FORGE_ROUND=r2`), run walkcheck.py (new
-   findings: Step 5) and `python3 ../forge-test/shotcheck.py forge-work/test/shots/r1 forge-work/test/shots/r2`.
-   Each CHANGED shot: the fix itself is fine, anything else is a new bug. Done when walkcheck.py exits 0.
+6. After each round of fixes, walk again as the next round (`FORGE_ROUND=r2`), run walkcheck.py
+   (new findings: Step 5) and `python3 ../forge-test/shotcheck.py forge-work/test/shots/r1
+   forge-work/test/shots/r2`. A CHANGED shot is the fix or a new bug. Done: walkcheck.py exits 0.
 7. Improve mode: a bug that is an audit or inspect finding the user did not pick stays open with
    `not picked: A016` under it; ask before fixing it. After the loop, update improve.md (walk.md).
 

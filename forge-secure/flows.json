@@ -586,7 +586,7 @@
    "rule": "flow-weak-cipher",
    "lang": "python",
    "kind": "line",
-   "pattern": "\\bMODE_ECB\\b|\\bmodes\\.ECB\\s*\\(|\\b(?:iv|IV|nonce)\\s*=\\s*b?['\\\"][^'\\\"]+['\\\"]",
+   "pattern": "\\bMODE_ECB\\b|\\bmodes\\.ECB\\s*\\(|\\b(?:iv|IV)\\s*=\\s*b?['\\\"][^'\\\"]+['\\\"]",
    "near": [],
    "unless": null
   },
@@ -602,7 +602,7 @@
    "rule": "flow-tls-off",
    "lang": "php",
    "kind": "line",
-   "pattern": "(?i)CURLOPT_SSL_VERIFY(?:PEER|HOST)\\s*(?:,|=>)\\s*(?:false|0)\\b|->withoutVerifying\\s*\\(|['\\\"]verify['\\\"]\\s*=>\\s*false",
+   "pattern": "(?i)CURLOPT_SSL_VERIFY(?:PEER|HOST)\\s*(?:,|=>)\\s*(?:false|0)\\b|\\bwithoutVerifying\\s*\\(|['\\\"]verify['\\\"]\\s*=>\\s*false",
    "near": [],
    "unless": null
   },

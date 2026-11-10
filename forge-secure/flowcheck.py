@@ -11,9 +11,9 @@ function, or 40 lines, of one file. A cast, a file-name or allow-list check on t
 call in the function, clears the value. It misses input that travels through other functions, files or
 templates, and it can flag safe code: read each finding as "check that ...". The rules are in flows.json,
 next to this script. Lines containing forge:allow are not checked (for a handler: its first line too);
-only the first 2,000 characters of a line are read. Walks like codecheck.py: no symlinks, no node_modules,
-vendor, build, cache or forge-work folders; big or binary files are listed as skipped; anything that
-cannot be read makes the scan INCOMPLETE: exit 2, never a pass.
+a line is read up to 2,000 characters. Walks like codecheck.py: no symlinks, node_modules, vendor, build,
+cache or forge-work folders; big or binary files are listed as skipped; anything that cannot be read
+makes the scan INCOMPLETE: exit 2, never a pass.
 
 Usage: python3 flowcheck.py PATH [--json] [--fail-on critical|high|medium|low], for example
     python3 flowcheck.py . --fail-on medium     (also fail on medium findings)
@@ -38,10 +38,10 @@ WINDOW = 40  # lines a value is followed, and a function is read, below its star
 LANGUAGES = {".php": "php", ".py": "python", ".js": "js", ".jsx": "js", ".ts": "js", ".tsx": "js",
              ".mjs": "js", ".cjs": "js", ".vue": "js", ".svelte": "js"}
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "flows.json")
-FOOTER = ("A heuristic: it follows one variable name inside one function, so it misses some problems and can flag"
-          " safe code. Read each finding as a thing to check.")
+FOOTER = "A heuristic that follows one variable name: it can miss problems and flag safe code. Check each finding."
 STRING = re.compile(r'"(?:[^"\\\n]|\\.)*"|\'(?:[^\'\\\n]|\\.)*\'|`[^`]*`')  # a quoted string or a `template`
 PASTED = re.compile(r"\$?\{[^{}]*\}|\$\w+(?:->\w+)*")  # what a string pastes in: {x}, ${x}, $x
+PATTERNS = ("pattern", "unless", "unless_file", "file_has")  # the patterns a check in flows.json can have
 CACHE = {}  # the compiled rules, read once
 
 def load_rules(path=None):
@@ -52,15 +52,16 @@ def load_rules(path=None):
         langs = {}
         for name, parts in data["languages"].items():
             ready = {key: re.compile(parts[key]) for key in ("source", "clean", "header", "assign", "join")}
-            langs[name] = dict(parts, checks=[], names={}, blanket=re.compile(data["blanket"]), **ready)
+            ready["blanket"] = re.compile(data["blanket"])
+            langs[name] = dict(parts, sink=[], line=[], scope=[], names={}, **ready)
         for check in data["checks"]:
             info = dict(data["rules"][check["rule"]], rule=check["rule"])
             info.update({key: check[key] for key in ("severity", "title") if key in check})
             if info["severity"] not in SEVERITIES or not all(info[key].strip() for key in ("title", "why", "fix")):
                 raise ValueError("rule %s needs a severity, title, why and fix" % check["rule"])
-            more = {key: re.compile(check[key]) if check.get(key) else None for key in ("unless", "unless_file", "file_has")}
-            near = [re.compile(item) for item in check.get("near", [])]
-            langs[check["lang"]]["checks"].append(dict(check, info=info, pattern=re.compile(check["pattern"]), near=near, **more))
+            ready = dict(check, info=info, near=[re.compile(item) for item in check.get("near", [])])
+            ready.update({key: re.compile(check[key]) if check.get(key) else None for key in PATTERNS})
+            langs[check["lang"]][check["kind"]].append(ready)
         return langs
     except (OSError, ValueError, LookupError, TypeError, AttributeError, re.error) as error:
         raise ValueError("the rule file %s is missing or broken (%s)" % (path or DATA, error))
@@ -75,10 +76,6 @@ def uses(lang, name, kind):
         lang["names"][(kind, name)] = re.compile(lang[kind].replace("VAR", re.escape(name)))
     return lang["names"][(kind, name)]
 
-def code_only(line):
-    """The line without the text of its strings. What a string pastes in ({x}, $x) stays."""
-    return STRING.sub(lambda quoted: " ".join(PASTED.findall(quoted.group(0))), line)
-
 def pasted(lang, name, text):
     """True when the variable is pasted into a string in `text`: "...{x}...", or glued on with + . or %."""
     inside = " ".join(PASTED.findall(" ".join(STRING.findall(text))))
@@ -91,8 +88,7 @@ def targets(assigned):
     return [assigned.group(1)] if many is None else names
 
 def bounds(lines, heads, index):
-    """(top, bottom) of the function around a line: its first line (or decorator) to the next function,
-    at most WINDOW lines down. No function in sight: WINDOW lines up."""
+    """(top, bottom) of the function around a line: its first line (or decorator) to the next one, WINDOW lines at most."""
     top = index
     while top > 0 and not heads[top] and index - top < 60:
         top -= 1
@@ -107,7 +103,8 @@ def bounds(lines, heads, index):
 
 def finding(info, where, index, *words):
     """One finding on line `index` (counted from 0); `words` fill the {0} {1} of its title."""
-    return dict(info, title=info["title"].format(*words), where="%s:%d" % (where, index + 1), file=where, line=index + 1)
+    place = {"where": "%s:%d" % (where, index + 1), "file": where, "line": index + 1}
+    return dict(info, title=info["title"].format(*words), **place)
 
 def direct(lang, check, line, match):
     """The request input used straight inside a sink call on this line, uncleaned; else None."""
@@ -115,7 +112,7 @@ def direct(lang, check, line, match):
     source = lang["source"].search(rest)
     if not source or not check.get("direct", True) or lang["clean"].search(line):
         return None
-    before = rest[:source.start()]
+    before = rest[:source.start()]  # glued: pasted into a string; start: the first thing the call is given
     fits = {"any": True, "glued": re.search(r"(?:[+%{]|format\()\s*\(?\s*$", before),
             "start": re.match(r"[\s\d,]*(?:f?[\"'`]\$?\{)?\s*(?:await\s+)?$", before)}[check["use"]]
     return source.group(0) if fits else None
@@ -144,12 +141,11 @@ def follow(lang, lines, heads, start, first, where):
                 continue
             is_open = line.count("(") > line.count(")") or line.count("`") % 2  # the call goes on below
             text = "\n".join(lines[index:index + 4]) if is_open else line
-            for check in lang["checks"]:
-                match = check["pattern"].search(line) if check["kind"] == "sink" else None
-                tail = text[match.start():] if match else ""
-                hit = {"any": True, "glued": built or pasted(lang, name, tail),
-                       "start": lead and uses(lang, name, "start").match(text[match.end():] if match else "")}
-                if match and var.search(tail) and hit[check["use"]]:
+            for check in lang["sink"]:
+                match, use = check["pattern"].search(line), check["use"]
+                tail = text[match.start():] if match else ""  # the call and what it is given
+                if var.search(tail) and (use == "any" or (built or pasted(lang, name, tail) if use == "glued" else
+                                                      lead and uses(lang, name, "start").match(text[match.end():]))):
                     found.append(finding(check["info"], where, index, first, start + 1))
             if assigned and depth < 2 and name not in targets(assigned):  # a copy: x = data["url"], or "..." + x
                 if uses(lang, name, "member").match(rhs):
@@ -163,9 +159,9 @@ def nearby(lang, lines, heads, text, where):
     """Findings of the line and scope checks: `pattern` on a line, every `near` and no `unless` on
     that line (kind line) or in the function around it (kind scope, one finding per function)."""
     found = []
-    for check in lang["checks"]:
-        if (check["kind"] == "sink" or (check["unless_file"] and check["unless_file"].search(text))
-                or (check["file_has"] and not check["file_has"].search(text))):
+    for check in lang["line"] + lang["scope"]:
+        if (check["unless_file"] and check["unless_file"].search(text)) or (
+                check["file_has"] and not check["file_has"].search(text)):
             continue
         skip_to = 0
         for index, line in enumerate(lines):
@@ -173,8 +169,8 @@ def nearby(lang, lines, heads, text, where):
                 continue
             top, bottom = bounds(lines, heads, index) if check["kind"] == "scope" else (index, index + 1)
             around = "\n".join(lines[top:bottom])
-            if check.get("code_only"):
-                around = code_only(around)
+            if check.get("code_only"):  # without the text of its strings; what they paste in ({x}, $x) stays
+                around = STRING.sub(lambda quoted: " ".join(PASTED.findall(quoted.group(0))), around)
             if ("forge:allow" not in lines[top] and all(item.search(around) for item in check["near"])
                     and not (check["unless"] and check["unless"].search(around))):
                 found.append(finding(check["info"], where, index))
@@ -196,8 +192,8 @@ def scan_text(text, language, where):
             for name in targets(assigned):
                 found += follow(lang, lines, heads, index, name, where)
         top = bounds(lines, heads, index)[0] if lang["source"].search(line) else index
-        for check in lang["checks"]:
-            match = check["pattern"].search(line) if check["kind"] == "sink" else None
+        for check in lang["sink"]:
+            match = check["pattern"].search(line)
             source = direct(lang, check, line, match) if match else None
             if source and not any(lang["blanket"].search(above) for above in lines[top:index + 1]):
                 found.append(finding(check["info"], where, index, source, index + 1))
@@ -214,8 +210,7 @@ def shown_path(full, folder):
     return os.fsencode(folder if shown == "." else shown).decode("utf-8", errors="backslashreplace")
 
 def files_under(folder, unreadable):
-    """Yield (full path, shown path) for each file of a known type under folder. A folder that cannot
-    be opened (the folder itself too) goes on the unreadable list."""
+    """Yield (full path, shown path) for each file to check under folder; a folder that cannot be opened: unreadable."""
     def cannot_open(error):  # os.walk calls this for a folder it cannot list
         unreadable.append((shown_path(error.filename or folder, folder), error.strerror or "error"))
     for parent, dirs, files in os.walk(folder, onerror=cannot_open):
@@ -269,7 +264,8 @@ def format_human(findings, summary):
     if summary["files_skipped"]:
         lines.append("Skipped (binary or over 1 MB): " + ", ".join(summary["files_skipped"]))
     if summary["unreadable"]:
-        lines.append("INCOMPLETE, so not a pass. Could not read: " + ", ".join("%s (%s)" % p for p in summary["unreadable"]))
+        could_not = ", ".join("%s (%s)" % pair for pair in summary["unreadable"])
+        lines.append("INCOMPLETE, so not a pass. Could not read: " + could_not)
     return "\n".join(lines + [FOOTER])
 
 def main(argv=None):
@@ -297,10 +293,8 @@ def main(argv=None):
         if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
             raise
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
-    if stats["unreadable"]:
-        return 2  # some code was never read, so the result cannot be trusted
-    limit = SEVERITIES.index(args.fail_on)
-    return 1 if any(SEVERITIES.index(f["severity"]) <= limit for f in findings) else 0
+    failed = any(SEVERITIES.index(f["severity"]) <= SEVERITIES.index(args.fail_on) for f in findings)
+    return 2 if stats["unreadable"] else int(failed)  # some code was never read: that result cannot be trusted
 
 if __name__ == "__main__":
     sys.exit(main())

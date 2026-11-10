@@ -58,8 +58,9 @@ h2 { font: 600 var(--label) var(--font-mono); letter-spacing: .1em; text-transfo
   color: var(--color-text-muted); }
 .chart .y { display: flex; flex-direction: column; justify-content: space-between; text-align: right; line-height: 1; }
 .chart .x { grid-column: 2; display: flex; justify-content: space-between; }
-.plot { position: relative; height: 220px; }
-.plot.small { height: 84px; }
+.grid > .panel { display: flex; flex-direction: column; }     /* the main chart takes the height that is left */
+.grid > .panel > .chart { flex: 1; grid-template-rows: minmax(220px, 1fr) auto; }
+.plot { position: relative; min-height: 84px; }
 .plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .plot svg * { vector-effect: non-scaling-stroke; fill: none; }
 .gridline { stroke: var(--color-border); }
@@ -79,7 +80,7 @@ summary { cursor: pointer; color: var(--color-text-muted); }
 table { border-collapse: collapse; width: 100%; font-size: 12px; }
 th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
 th { font: var(--label) var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted); }
-th:first-child, td:first-child, .log td:nth-child(3), .log th:nth-child(3) { text-align: left; }
+th:first-child, td:first-child, .log td:nth-child(3), .log th:nth-child(3) { text-align: left; white-space: normal; }
 .matrix td { background: color-mix(in srgb, var(--color-accent) calc(var(--t, 0) * 7%), transparent); }
 .t1 { --t: 1; } .t2 { --t: 2; } .t3 { --t: 3; } .t4 { --t: 4; } .t5 { --t: 5; }   /* five steps, set by class */
 .scroll { overflow-x: auto; }
@@ -99,7 +100,7 @@ th:first-child, td:first-child, .log td:nth-child(3), .log th:nth-child(3) { tex
 @container (max-width: 860px) {          /* one column: the connector goes, the panels stack */
   .grid, .row { grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
   .link { display: none; }
-  .plot { height: 180px; }
+  .grid > .panel > .chart { grid-template-rows: 180px auto; }
 }
 </style>
 </head>
@@ -111,10 +112,10 @@ th:first-child, td:first-child, .log td:nth-child(3), .log th:nth-child(3) { tex
 </header>
 
 <dl class="strip">
-  <div><dt>Orders</dt><dd><span class="v">606</span> <span class="delta good">+8.4% (559) better</span></dd></div>
-  <div><dt>Revenue</dt><dd><span class="v">19,089 <small>EUR</small></span> <span class="delta good">+7.9% better</span></dd></div>
-  <div><dt>Latency p95</dt><dd><span class="v">212 <small>ms</small></span> <span class="delta bad">+14 ms worse</span></dd></div>
-  <div><dt>Error rate</dt><dd><span class="v">0.42 <small>%</small></span> <span class="delta good">-0.10 pt better</span></dd></div>
+  <div><dt>Orders</dt><dd><span class="v">606</span> <span class="delta good">+8.4% vs 559, better</span></dd></div>
+  <div><dt>Revenue</dt><dd><span class="v">19,089 <small>EUR</small></span> <span class="delta good">+7.9%, better</span></dd></div>
+  <div><dt>Latency p95</dt><dd><span class="v">212 <small>ms</small></span> <span class="delta bad">+14 ms, worse</span></dd></div>
+  <div><dt>Error rate</dt><dd><span class="v">0.42 <small>%</small></span> <span class="delta good">-0.10 pt, better</span></dd></div>
   <div><dt>Queue</dt><dd><span class="v">17 <small>jobs</small></span> <span class="delta">oldest 2 min</span></dd></div>
   <div><dt>Workers busy</dt><dd><span class="v">26 <small>of 32</small></span> <span class="delta bad">1 failed</span></dd></div>
 </dl>
@@ -162,7 +163,7 @@ th:first-child, td:first-child, .log td:nth-child(3), .log th:nth-child(3) { tex
       <h2 id="p2"><span>Latency p95, ms</span><span>P-02</span></h2>
       <div class="chart">
         <div class="y" aria-hidden="true"><span>270</span><span>210</span><span>150</span></div>
-        <div class="plot small">
+        <div class="plot">
           <svg viewBox="0 0 110 120" preserveAspectRatio="none" role="img" aria-labelledby="c2t c2d">
             <title id="c2t">Latency p95 per 2 hours, in milliseconds</title>
             <desc id="c2d">First 180 at 00:00, lowest 170 at 04:00, highest 251 at 14:00 (1 ms over the limit of 250), last 212 at 22:00.</desc>

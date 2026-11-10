@@ -56,6 +56,8 @@ a record per edge case (a draft, a past item, a nearly full one), on a database 
 (unsure: ask). No accounts, data in the browser: no seeder or `E2E_PASSWORD`, each test seeds its
 own data (see the last group of `../forge-test/e2e.example.spec.ts`).
 
+Seed and unit tests run on the host and reach the database on the override's port ("Where things
+run" in `../forge-build/SKILL.md`): `127.0.0.1:3307` (MariaDB) or `127.0.0.1:5433` (PostgreSQL).
 next: the unit tests use `TEST_DATABASE_URL=postgres://app:<DB_PASSWORD>@127.0.0.1:5433/app_test`,
 made once by `docker compose exec db createdb -U app app_test`; the tests migrate it and refuse a
 name without `_test`.
@@ -183,6 +185,9 @@ is CHANGED, with where on the screen; a shot only one round has is MISSING or NE
 changed; 1: something did; 2: could not compare (a folder is missing: the first round has nothing
 to compare with). imgdiff looks at layout, not colour: a colour-only change is not seen here, but
 axe's contrast check in the walk sees the ones that matter.
+
+After the first walk, open the phone (390) and the dark shots yourself: no script sees a page that
+is merely ugly, or dark text on a dark background that axe could not measure.
 
 A change is not always a bug. Open both PNGs of each changed shot: the fix itself (the button that
 was cut off now fits) gets a line in test-plan.md; anything the fix was not meant to touch is a

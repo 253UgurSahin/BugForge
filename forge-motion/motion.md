@@ -142,7 +142,7 @@ const seen = new IntersectionObserver((entries) => {
     entry.target.classList.add("is-visible");
     seen.unobserve(entry.target);                 // once: scrolling back up does not replay it
   }
-}, { rootMargin: "0px 0px -10% 0px", threshold: 0.1 });
+}, { threshold: 0.1 });                          // no negative rootMargin: see the mistake below
 document.querySelectorAll(".m-reveal, .m-draw, .m-grow").forEach((el) => seen.observe(el));
 
 const visible = new IntersectionObserver((entries) => {
@@ -255,8 +255,9 @@ Frameworks wrap this API (React, Next, Livewire's navigate): read the docs of th
 
 **Scroll reveal, IntersectionObserver.** `class="m-reveal"` plus motion.js above. Reduced: a fade
 without the rise. Mistake: hiding content in CSS with no script running (blank page: the recipe
-hides only after motion.js set `data-motion`), revealing things above the fold, and a threshold of
-0.5 on a block taller than the screen, which then never shows.
+hides only after motion.js set `data-motion`), revealing things above the fold, a threshold of
+0.5 on a block taller than the screen, and a negative `rootMargin`: with either, the last block
+of a page may never count as seen and stays invisible.
 
 **Scroll reveal, animation-timeline.** `class="m-reveal-scroll"`: no script, progress follows the
 scrollbar. Reduced, and in browsers without it: the element is simply there. Mistake: writing
