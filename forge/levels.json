@@ -215,7 +215,7 @@
             "a keyboard-only pass"
           ],
           "evidence": ["e2e/**/edge*.spec.*", "forge-work/test/shots/r1/*.png", "forge-work/test/shots/r2/*.png"],
-          "evidence_how": "Write the edge spec from forge-check's edge example, one group per form. Walk twice, with FORGE_ROUND=r1 and after the fixes with FORGE_ROUND=r2: each round keeps its screenshots in a folder of its own."
+          "evidence_how": "Write the edge spec from forge-check's edge example, one group per form. Walk twice: FORGE_ROUND=r1, and FORGE_ROUND=r2 after the fixes. Each round keeps its own screenshots."
         },
         {
           "level": 5,

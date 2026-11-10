@@ -21,7 +21,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittes
 from _load import ROOT, load, run_cp1252, symlink  # noqa: E402
 
 level = load("forge", "level")
-gate = load("forge", "gate")
 SCRIPT = os.path.join(ROOT, "forge", "level.py")
 TABLE = level.load_table(level.TABLE)
 RECORD = os.path.join("forge-work", "levels.json")
@@ -59,6 +58,11 @@ class Project(unittest.TestCase):
 
     def level(self, *args):
         return self.run_main(level, *args)
+
+    def gate(self, *args):
+        """Run gate.py in the project: the forge state as /forge starts it. Loaded here, so only the tests that
+        need the gate depend on it."""
+        return self.run_main(load("forge", "gate"), *args)
 
     def check(self, *args):
         """Run check with --json. Returns (exit code, what it printed as data)."""
@@ -268,7 +272,7 @@ class SetTests(Project):
         ignore = read(os.path.join(self.work, ".gitignore"))
         self.assertEqual(ignore.splitlines()[-1], "*")
         shutil.rmtree(self.work)
-        self.assertEqual(self.run_main(gate, "init", "--mode", "idea")[0], 0)
+        self.assertEqual(self.gate("init", "--mode", "idea")[0], 0)
         self.assertEqual(read(os.path.join(self.work, ".gitignore")), ignore)
 
     def test_a_gitignore_that_is_there_is_kept(self):
@@ -435,7 +439,8 @@ class FloorTests(Project):
         self.assertEqual(self.level("get", "test"), (0, "1 Quick\n", ""))
 
     def test_a_level_from_before_the_forge_project_started(self):
-        """/forge may ask for the levels before gate.py init: a secure level below the floor is then on record."""
+        """A check on its own at a low level, and then /forge in the same folder: gate.py init comes after the
+        set, so a secure level below the floor is on record. get and check refuse it until it is recorded again."""
         self.level("set", "all", "2", "--said", "alles op 2")
         self.forge()
         code, out, err = self.level("get", "secure")
@@ -456,7 +461,7 @@ class FloorTests(Project):
         self.assertEqual(self.level("get", "secure"), (0, "3 Standard\n", ""))
 
     def test_the_state_of_gate_init_makes_it_a_forge_project(self):
-        self.assertEqual(self.run_main(gate, "init", "--mode", "improve", "--about", "mijn app")[0], 0)
+        self.assertEqual(self.gate("init", "--mode", "improve", "--about", "mijn app")[0], 0)
         ignore, state = read(os.path.join(self.work, ".gitignore")), read(os.path.join(self.work, "state.json"))
         code, out, _ = self.level("set", "all", "snel", "--said", "alles snel")
         self.assertEqual((code, self.record()["secure"]["level"], self.record()["test"]["level"]), (0, 3, 1))
@@ -464,7 +469,7 @@ class FloorTests(Project):
         self.assertEqual(sorted(os.listdir(self.work)), [".gitignore", "levels.json", "state.json"])
         self.assertEqual((read(os.path.join(self.work, ".gitignore")), read(os.path.join(self.work, "state.json"))),
                          (ignore, state))
-        self.assertEqual(self.run_main(gate, "status")[0], 0)
+        self.assertEqual(self.gate("status")[0], 0)
 
 
 class GetTests(Project):
@@ -617,6 +622,21 @@ class CheckTests(Project):
             "          " + TABLE["test"]["levels"][2]["evidence_how"],
             "FAIL: test does not pass. Do what FAIL names: the work, never a file written only to pass. Another level "
             "is the user's call."])
+
+    def test_no_line_of_a_failing_check_is_cut_by_the_gate(self):
+        """phasecheck.py shows the first 200 characters of each line a failing script prints."""
+        outputs = [self.level("check", "look")[1]]
+        for domain in TABLE:
+            self.choose(domain, 5)
+            self.write("forge-work/report.md", "# Report\nLevel: 1\n")
+            outputs.append(self.level("check", domain, "--report", "forge-work/report.md")[1])
+        self.choose("secure", 1)
+        self.forge()
+        outputs.append(self.level("check", "secure")[1])
+        self.assertEqual([text.splitlines()[-1][:5] for text in outputs], ["FAIL:"] * 6)
+        for text in outputs:
+            for line in text.splitlines():
+                self.assertLessEqual(len(line), 200, line)
 
     def test_only_the_levels_up_to_the_chosen_one_are_asked(self):
         for number, asked in ((1, []), (2, []), (3, [3]), (4, [3, 4]), (5, [3, 4])):

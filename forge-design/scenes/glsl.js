@@ -16,7 +16,8 @@
  *     }`;
  *
  * Every export is plain GLSL for THREE.ShaderMaterial (WebGL 2, so GLSL ES 3.00 behind three's
- * prefix; a RawShaderMaterial must set `precision highp float; precision highp int;` itself).
+ * prefix; a RawShaderMaterial must set `precision highp float; precision highp int;` itself, and
+ * no material may lower its precision: the hash needs whole 32-bit integers).
  * Each piece brings the pieces it needs and is wrapped in an #ifndef guard, so any set of them can
  * go into one shader in any order, and twice does no harm. Put them above your own code.
  *
@@ -53,7 +54,7 @@
  * the result into sRGB), and add dither() after that.
  *
  * Where the techniques come from. All of the code here was written for this kit.
- * - Simplex noise: Ken Perlin, "Noise hardware" (SIGGRAPH 2002 course notes); the way it is laid
+ * - Simplex noise: Ken Perlin, "Noise hardware" (SIGGRAPH course notes, 2001); the way it is laid
  *   out here, with the falloff (0.5 - d^2)^4 and its exact gradient, follows Stefan Gustavson,
  *   "Simplex noise demystified" (2005), whose reference code is in the public domain. The patent
  *   on simplex noise ended in 2022.
@@ -126,7 +127,9 @@ uint hashU(uint x) {
 // A grid point: each coordinate times its own large prime, then one round of mixing. (Mixing every
 // coordinate on its own is no better to the eye and makes the noise half as fast again.)
 uint hashU(ivec2 p) { return hashU(uint(p.x) * 0x9e3779b1U + uint(p.y) * 0x85ebca77U); }
-uint hashU(ivec3 p) { return hashU(uint(p.x) * 0x9e3779b1U + uint(p.y) * 0x85ebca77U + uint(p.z) * 0xc2b2ae3dU); }
+uint hashU(ivec3 p) {
+  return hashU(uint(p.x) * 0x9e3779b1U + uint(p.y) * 0x85ebca77U + uint(p.z) * 0xc2b2ae3dU);
+}
 float hashToFloat(uint h) { return float(h >> 8) * (1.0 / 16777216.0); } // 24 bits: exact in a float
 float hash(vec2 p) { return hashToFloat(hashU(ivec2(floor(p)))); }
 float hash(vec3 p) { return hashToFloat(hashU(ivec3(floor(p)))); }
@@ -185,7 +188,9 @@ vec4 snoiseGrad(vec3 p) {
   // Turn the grid so that its long diagonal lies along z. A flat cut (z fixed: the usual "2D noise
   // that changes in time") then goes through the grid where it looks the same in every direction;
   // without the turn such a cut shows rows.
-  const mat3 TURN = mat3(0.70710678, -0.70710678, 0.0, 0.40824829, 0.40824829, -0.81649658, 0.57735027, 0.57735027, 0.57735027);
+  const mat3 TURN = mat3(0.70710678, -0.70710678, 0.0,
+                         0.40824829, 0.40824829, -0.81649658,
+                         0.57735027, 0.57735027, 0.57735027);
   p = TURN * p;
   vec3 cell = floor(p + (p.x + p.y + p.z) / 3.0);
   vec3 d0 = p - cell + (cell.x + cell.y + cell.z) / 6.0; // from the cell's first corner to p
@@ -249,7 +254,9 @@ float fbm(vec3 p) {
   for (int i = 0; i < FBM_OCTAVES; i++) {
     sum += weight * snoise(p);
     // twice as fine, turned a sixth of a turn round the diagonal
-    p = mat3(1.3333333, 1.3333333, -0.6666667, -0.6666667, 1.3333333, 1.3333333, 1.3333333, -0.6666667, 1.3333333) * p;
+    p = mat3(1.3333333, 1.3333333, -0.6666667,
+             -0.6666667, 1.3333333, 1.3333333,
+             1.3333333, -0.6666667, 1.3333333) * p;
     weight *= 0.5;
   }
   return sum;

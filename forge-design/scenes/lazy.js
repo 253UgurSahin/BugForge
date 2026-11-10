@@ -7,11 +7,13 @@
  * the container shows its poster.
  *
  *   import { lazyScene, motionToggle } from "./scenes/lazy.js";
- *   const hero = lazyScene(document.querySelector(".hero-scene"), () => import("./scenes/form.js"), { quality: "auto" });
+ *   const box = document.querySelector(".hero-scene");
+ *   const hero = lazyScene(box, () => import("./scenes/form.js"), { quality: "auto" });
  *   hero.setProgress(0.4);                      // safe at once: kept, and passed on when the scene is there
  *   motionToggle(document.querySelector("#motion"));
  *
- * THE POSTER. A still picture of the scene (a screenshot of it will do), given in one of two ways:
+ * THE POSTER. A still picture of the scene (a screenshot of it mounted with { still: true } will
+ * do), given in one of two ways:
  *
  *   <div class="hero-scene" aria-hidden="true">
  *     <img data-scene-poster src="/img/hero-poster.webp" alt="">      a child marked data-scene-poster
@@ -30,7 +32,8 @@
  *   options    passed to mount() as they are, except options.lazy:
  *                lazy.margin   "50%": how far outside the viewport still counts as near (half a
  *                              screen above and below). Any CSS length or percentage.
- *                lazy.timeout  2000: the longest wait for a quiet moment, in milliseconds.
+ *                lazy.timeout  2000: the longest wait for a quiet moment, in milliseconds. A scene at
+ *                              the top of the page that must be there fast can pass 300, or call load().
  *   handle     setProgress(p), setData(values), setPointer(x, y): passed on to the scene. Before it
  *              has loaded, the last call of each is kept and passed on then.
  *              pause(reason), resume(reason): the same, with the reasons a stage knows.
@@ -49,7 +52,8 @@
  *   localStorage and holds on the next page, and <html> carries data-motion="paused" so CSS can
  *   follow: html[data-motion="paused"] .marquee { animation-play-state: paused; }
  *   A paused scene shows a still frame, never an empty box. Visitors who asked their system for
- *   reduced motion get that still frame without the button.
+ *   reduced motion get that still frame whatever the button says, so hide it for them:
+ *   @media (prefers-reduced-motion: reduce) { #motion { display: none; } }
  *   motionPaused() tells the current choice, setMotionPaused(true | false) sets it from code.
  */
 
@@ -95,6 +99,7 @@ function reflect() {
 }
 
 export function motionToggle(button) {
+  if (!button) return { destroy() {} }; // a page without the button
   const onClick = () => setMotionPaused(!motionPaused());
   button.addEventListener("click", onClick);
   buttons.add(button);
@@ -129,7 +134,7 @@ export function lazyScene(container, loader, options = {}) {
   const stopWaiting = () => { for (const cancel of waits.splice(0)) cancel(); };
 
   function load() {
-    if (started || state === "destroyed") return ready;
+    if (started || state === "destroyed" || state === "failed") return ready;
     started = true;
     stopWaiting();
     state = "loading";
@@ -199,6 +204,13 @@ export function lazyScene(container, loader, options = {}) {
     load,
     destroy,
   };
+  if (!container || container.nodeType !== 1) { // a selector that matched nothing: say so, and do nothing
+    state = "failed";
+    handle.error = new TypeError("lazyScene: there is no container");
+    console.error(handle.error);
+    settle(null);
+    return handle;
+  }
   handles.add(handle);
   if (motionPaused()) pauses.add(TOGGLE); // switched off on an earlier page: the scene starts as a still
   reflect();

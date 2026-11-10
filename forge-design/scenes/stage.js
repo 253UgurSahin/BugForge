@@ -18,19 +18,21 @@
  *     const stage = createStage(container, { ...options, stillTime: 6 });
  *     if (stage.failed) return stage.handle();   // no WebGL: the poster shows, every method does nothing
  *     const material = new THREE.ShaderMaterial({
- *       uniforms: { ...stage.uniforms, uAmount: { value: 1 } },   // uTime, uPointer, uAccent ... keep themselves up to date
+ *       uniforms: { ...stage.uniforms, uAmount: { value: 1 } },   // uTime, uPointer, uAccent ... stay up to date
  *       vertexShader, fragmentShader, transparent: true, depthWrite: false,
  *     });
- *     let mesh = null;
+ *     const mesh = new THREE.Mesh(undefined, material);
+ *     stage.scene.add(mesh);
  *     stage.onQuality((quality) => {             // runs now, and again when the stage steps down
- *       if (mesh) stage.dispose(mesh);
- *       mesh = new THREE.Mesh(new THREE.TorusKnotGeometry(1, 0.3, quality.pick(96, 180, 320), 16), material);
- *       stage.scene.add(mesh);
+ *       mesh.geometry.dispose();                 // keep the object and its material, swap the geometry
+ *       mesh.geometry = new THREE.TorusKnotGeometry(1, 0.3, quality.pick(96, 180, 320), 16);
  *     });
  *     stage.onTokens((tokens) => { material.blending = tokens.blending; });   // glow on dark, ink on light
  *     stage.onResize((size) => { stage.camera.position.z = size.aspect < 1 ? 7 : 5; });
  *     stage.onFrame((time, delta) => { mesh.rotation.y = time * 0.1 + stage.pointer.x * 0.3; });
- *     return stage.handle({ setData(values) { material.uniforms.uAmount.value = values[0]; stage.invalidate(); } });
+ *     return stage.handle({
+ *       setData(values) { material.uniforms.uAmount.value = values[0]; stage.invalidate(); },
+ *     });
  *   }
  *
  * THE PAGE
@@ -43,23 +45,32 @@
  * no `data-scene` attribute until the first frame is on screen, then `data-scene="live"`, or
  * `data-scene="fallback"` when WebGL is missing, the context is lost, or a frame threw. A child
  * marked `data-scene-poster` is faded out when the scene goes live and shown again on fallback;
- * a poster set as a background image needs one rule: `.hero-scene[data-scene="live"] { background-image: none; }`.
+ * a poster set as a background image needs one rule:
+ * `.hero-scene[data-scene="live"] { background-image: none; }`. A scene behind a whole page belongs
+ * in a fixed container the size of the viewport, not in one as tall as the page. Call destroy()
+ * when the page or the component goes away.
  *
  * createStage(container, options) -> stage. Never throws. Options (all optional):
  *   quality       "auto" (default), "low", "medium" or "high". Auto starts from the device (processor
- *                 cores, memory, a coarse pointer, software rendering) and steps down, never up, when the
- *                 average time of about 90 frames is over 22 ms.
- *   antialias     true (default). Lines and edges need it; a scene that fills the screen with one shader
- *                 should pass false.
- *   maxDpr        2. The pixel ratio is capped at this, at 1.5 with a coarse pointer and at 1 in low quality.
+ *                 cores, memory, a coarse pointer; software rendering starts low) and steps down, never
+ *                 up, when the average time of about 90 frames is over 22 ms.
+ *   antialias     true (default). Lines and edges need it; a scene that fills the screen with one
+ *                 shader should pass false.
+ *   maxDpr        2. The pixel ratio is capped at this, at 1.5 with a coarse pointer and at 1 in low
+ *                 quality, and lowered further to keep the drawing buffer within 2.1, 3.6 or 8.3
+ *                 million pixels (low, medium, high), however large the screen.
  *   renderScale   1. Draw at a part of that resolution: a number, or [low, medium, high]. A soft
  *                 atmosphere looks the same at 0.5 and costs a quarter.
- *   camera        { fov: 45, near: 0.1, far: 100, position: [0, 0, 5], lookAt: [0, 0, 0] }, or a THREE camera.
- *   tokens        other names for the colours, or more of them: { accent: "--brand", glow: "--color-glow" }.
- *                 A value that does not start with -- is read as a CSS colour.
+ *   camera        { fov: 45, near: 0.1, far: 100, position: [0, 0, 5], lookAt: [0, 0, 0] }, or a THREE
+ *                 camera of your own.
+ *   tokens        other names for the colours, or more of them: { accent: "--brand", glow: "--glow" }
+ *                 (the second gives tokens.glow and uniforms.uGlow). A value that does not start
+ *                 with -- is read as a CSS colour.
  *   stillTime     8. The moment, in seconds, that the one still frame shows (see "Still frames").
- *   still         false. true behaves as if the visitor asked for reduced motion.
- *   pointerEase   0.18, progressEase 0.25: seconds the eased pointer and progress need for most of the way.
+ *   still         false. true behaves as if the visitor asked for reduced motion: the way to make a
+ *                 poster.
+ *   pointerEase   0.18, progressEase 0.25: seconds the eased pointer and progress need for most of
+ *                 the way.
  *   fade          400. Milliseconds the canvas takes to fade in on its first frame; 0 shows it at once.
  * A scene passes its own options straight through, so do not reuse these names for something else.
  *
@@ -80,12 +91,14 @@
  *                       --color-border on the container (a missing one gets a sensible stand-in);
  *                       css has the same colours as CSS text; dark is true when the background is dark;
  *                       blending is THREE.AdditiveBlending on dark and THREE.NormalBlending on light.
- *                       The Color objects stay the same objects and change in place.
+ *                       The Color objects stay the same objects and change in place: read them, copy
+ *                       them (material.color.copy(tokens.accent), in onTokens), never change them.
  *   uniforms            ready to spread into a ShaderMaterial, kept up to date by the stage: uTime,
  *                       uResolution (drawing buffer pixels), uPixelRatio, uPointer (eased, -1..1),
  *                       uProgress (eased, 0..1), uBg, uText, uMuted, uAccent, uAccent2, uSurface, uBorder
  *                       (vec3, linear working colours) and uDark (1 or 0). glsl.js has the matching
- *                       declarations in `stageUniforms`.
+ *                       declarations in `stageUniforms`. Do not clone() a material that uses them:
+ *                       a clone gets copies, and those stand still.
  *   pointer             { x, y, raw: { x, y }, inside, active, speed }: x and y run from -1 to 1 across the
  *                       container (y up, so raw fits THREE.Raycaster.setFromCamera), eased; raw is where
  *                       the pointer or finger is now, or the middle once it has left; inside says
@@ -96,7 +109,8 @@
  *   progress            0..1, as last given to setProgress. progressEased follows it smoothly.
  *   still               true when only still frames are drawn (reduced motion, or the still option).
  *   running             true while the frame loop runs.
- *   failed              false, or why there is no picture: "no-webgl", "context-lost" or "error".
+ *   failed              false, or why there is no picture: "no-webgl", "no-container" (createStage
+ *                       was given no element), "context-lost" or "error" (a frame threw).
  *
  *   onFrame(fn)         fn(time, delta, stage) before every frame is drawn. Returns a function that
  *                       removes it, as every on...() does.
@@ -122,18 +136,20 @@
  *   viewSize(distance)  { width, height } of what the camera sees at that distance (default: the
  *                       distance to the origin), in world units: place things by the visible area.
  *   dispose(object)     take an object out of the scene graph and free its geometries, materials and
- *                       textures.
+ *                       textures (its children's too). For a new count, swap the geometry instead.
  *   handle(methods)     the object a scene's mount() returns: { stage, setProgress, setPointer, setData,
- *                       pause, resume, destroy } plus the scene's own methods, which replace these.
+ *                       pause, resume, destroy } plus the scene's own methods, which replace these
+ *                       (a setProgress or setPointer of your own should still call the stage's).
  *   destroy()           stop, remove every listener and observer, free the scene graph and the
  *                       renderer, remove the canvas, put the container back. Safe to call twice;
  *                       createStage() on the same container afterwards works.
  *
- *   progressOf(element, mode)   exported next to createStage: how far an element has travelled through
- *                       the viewport, 0..1. "cover" (default): 0 as its top enters at the bottom, 1 as
- *                       its bottom leaves at the top. "contain": for a section taller than the screen
- *                       (a pinned chapter): 0 as its top reaches the top, 1 as its bottom reaches the
- *                       bottom. Typical use: stage.onFrame(() => scene.setProgress(progressOf(section))).
+ *   progressOf(element, mode)   on the stage, and exported next to createStage: how far an element
+ *                       has travelled through the viewport, 0..1. "cover" (default): 0 as its top
+ *                       enters at the bottom, 1 as its bottom leaves at the top. "contain": for a
+ *                       section taller than the screen (a pinned chapter): 0 as its top reaches the
+ *                       top, 1 as its bottom reaches the bottom. Typical use:
+ *                       stage.onFrame(() => scene.setProgress(progressOf(section)));
  *
  * STILL FRAMES
  *
@@ -150,8 +166,11 @@
  * - No requestAnimationFrame, resize, visibility or pointer listener of your own: use the stage.
  * - Every colour comes from stage.tokens or stage.uniforms. In a ShaderMaterial end the fragment
  *   shader with `#include <colorspace_fragment>`, or the colours come out too dark.
- * - Do not paint the page's background: leave pixels transparent so the page shows through.
- * - Build counts from stage.quality inside onQuality, and free the old ones with stage.dispose().
+ * - Do not paint a flat background: where there is nothing to draw, leave the pixels transparent,
+ *   so the page shows through.
+ * - Build counts from stage.quality inside onQuality, and dispose() the geometry you replace.
+ * - Geometry that the vertex shader moves needs `frustumCulled = false`: three cannot know where
+ *   it ends up, and would drop it at the wrong moment.
  * - Things outside the scene graph are yours to free, in onDestroy.
  */
 
@@ -180,7 +199,7 @@ const DEFAULTS = {
 };
 const CAMERA = { fov: 45, near: 0.1, far: 100, position: [0, 0, 5], lookAt: [0, 0, 0] };
 const TIERS = ["low", "medium", "high"];
-const MAX_PIXELS = { low: 2.1e6, medium: 3.6e6, high: 6e6 }; // drawing buffer budget: 1080p, and up
+const MAX_PIXELS = { low: 2.1e6, medium: 3.6e6, high: 8.3e6 }; // drawing buffer budget: 1080p, between, 4K
 const MAX_DELTA = 0.1;   // seconds: a longer gap between two frames counts as this
 const SLOW_FRAME = 22;   // milliseconds: an average above this (under 45 frames a second) is too slow
 const SAMPLE = 90;       // frames in one measurement, about a second and a half
@@ -234,12 +253,16 @@ function disposeTree(root) {
   root.traverse((object) => {
     if (object.geometry) object.geometry.dispose();
     for (const material of [].concat(object.material || [])) disposeMaterial(material);
-    for (const key of ["background", "environment"]) if (object[key] && object[key].isTexture) object[key].dispose();
-    if (typeof object.dispose === "function") object.dispose(); // instanced and batched meshes, lights with shadows
+    for (const key of ["background", "environment"]) {
+      if (object[key] && object[key].isTexture) object[key].dispose();
+    }
+    if (typeof object.dispose === "function") object.dispose(); // instanced meshes, lights with shadows
   });
 }
 
-export function createStage(container, options = {}) {
+export function createStage(element, options = {}) {
+  // No element to draw in (a selector that matched nothing): that ends as a failed stage, not as a crash.
+  const container = element && element.nodeType === 1 ? element : document.createElement("div");
   if (stages.has(container)) stages.get(container).destroy(); // mounted twice: hot reload, a double effect
   const o = { ...DEFAULTS, ...options };
   const tokenNames = { ...TOKEN_NAMES, ...o.tokens };
@@ -249,7 +272,7 @@ export function createStage(container, options = {}) {
   const lists = { frame: [], resize: [], tokens: [], quality: [], pointer: [], destroy: [] };
   const cleanups = [];   // one function per listener and observer: destroy() runs them all
   const pauses = new Set();
-  const posters = [];    // [element, its inline opacity, its inline transition]
+  const posters = [];    // [poster element, its inline opacity, its inline transition]
   let destroyed = false, inView = typeof IntersectionObserver !== "function", rafId = 0, last = null;
   let dirty = true;      // the picture on screen is out of date (or there is none yet)
   let live = false, auto = !TIERS.includes(o.quality), tokenSignature = null, madeRelative = false;
@@ -265,7 +288,7 @@ export function createStage(container, options = {}) {
   };
   const emit = (list, ...args) => { for (const fn of list.slice()) fn(...args, stage); };
   const subscribe = (list, fn, now) => {
-    if (destroyed || stage.failed === "no-webgl" || typeof fn !== "function") return nothing;
+    if (destroyed || !renderer || typeof fn !== "function") return nothing;
     list.push(fn);
     const first = now && now();
     if (first) fn(first, stage);
@@ -276,11 +299,13 @@ export function createStage(container, options = {}) {
   //    without WebGL 2 ends in the fallback quietly instead of in an exception and a console error.
   const canvas = document.createElement("canvas");
   canvas.setAttribute("aria-hidden", "true");
-  canvas.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;display:block;pointer-events:none;opacity:0";
+  canvas.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;display:block;"
+    + "pointer-events:none;opacity:0"; // invisible until the first frame is drawn
   let renderer = null, gl = null;
   try {
-    gl = canvas.getContext("webgl2", { alpha: true, antialias: o.antialias !== false, depth: true, stencil: false,
-                                       premultipliedAlpha: true, powerPreference: "high-performance" });
+    const wanted = { alpha: true, antialias: o.antialias !== false, depth: true, stencil: false,
+                     premultipliedAlpha: true, powerPreference: "high-performance" };
+    if (container === element) gl = canvas.getContext("webgl2", wanted);
     if (gl) {
       renderer = new THREE.WebGLRenderer({ canvas, context: gl, alpha: true, antialias: o.antialias !== false,
                                            premultipliedAlpha: true, stencil: false });
@@ -304,14 +329,17 @@ export function createStage(container, options = {}) {
   const clock = { time: 0, delta: 0, frame: 0 };
   const size = { width: 0, height: 0, aspect: 1, dpr: 1, pixels: new THREE.Vector2(1, 1) };
   const pointer = { x: 0, y: 0, raw: { x: 0, y: 0 }, inside: false, active: false, speed: 0 };
-  const quality = { name: "high", value: 1, pick: (low, medium, high) => [low, medium, high][TIERS.indexOf(quality.name)] };
+  const quality = { name: "high", value: 1 };
+  quality.pick = (low, medium, high) => [low, medium, high][TIERS.indexOf(quality.name)];
   const tokens = { css: {}, dark: false, blending: THREE.NormalBlending };
   for (const name of Object.keys(tokenNames)) tokens[name] = new THREE.Color();
   const uniforms = {
     uTime: { value: 0 }, uResolution: { value: size.pixels }, uPixelRatio: { value: 1 },
     uPointer: { value: new THREE.Vector2() }, uProgress: { value: 0 }, uDark: { value: 0 },
   };
-  for (const name of Object.keys(tokenNames)) uniforms["u" + name[0].toUpperCase() + name.slice(1)] = { value: tokens[name] };
+  for (const name of Object.keys(tokenNames)) { // uBg, uText, uAccent ...: the same Color objects, so they follow
+    uniforms["u" + name[0].toUpperCase() + name.slice(1)] = { value: tokens[name] };
+  }
 
   const stage = {
     container,
@@ -329,7 +357,7 @@ export function createStage(container, options = {}) {
     progressEased: 0,
     still: Boolean(o.still) || reducedQuery.matches,
     running: false,
-    failed: renderer ? false : "no-webgl",
+    failed: renderer ? false : (container === element ? "no-webgl" : "no-container"),
     onFrame: (fn) => subscribe(lists.frame, fn),
     onResize: (fn) => subscribe(lists.resize, fn, () => (size.width > 0 && size.height > 0 ? size : null)),
     onTokens: (fn) => subscribe(lists.tokens, fn, () => tokens),
@@ -346,13 +374,15 @@ export function createStage(container, options = {}) {
     viewSize,
     dispose,
     handle,
+    progressOf,
     destroy,
   };
   stages.set(container, stage);
 
   // 2. The loop. One requestAnimationFrame at a time, asked for in schedule() only. update() works
   //    out from every reason at once whether the loop should run, so the reasons cannot fight.
-  const visible = () => !destroyed && !stage.failed && inView && !document.hidden && size.width > 0 && size.height > 0;
+  const visible = () => !destroyed && !stage.failed && inView && !document.hidden
+    && size.width > 0 && size.height > 0;
 
   function update() {
     const run = visible() && !stage.still && pauses.size === 0;
@@ -411,8 +441,9 @@ export function createStage(container, options = {}) {
     pointer.x += (pointer.raw.x - pointer.x) * k;
     pointer.y += (pointer.raw.y - pointer.y) * k;
     pointer.speed = still ? 0 : Math.hypot(pointer.x - px, pointer.y - py) / delta;
-    const first = still || clock.frame === 0; // nothing drawn yet: start where the page put it
-    stage.progressEased += (stage.progress - stage.progressEased) * (first ? 1 : 1 - Math.exp(-delta / Math.max(o.progressEase, 0.001)));
+    const jump = still || clock.frame === 0; // a still, or nothing drawn yet: start where the page put it
+    const j = jump ? 1 : 1 - Math.exp(-delta / Math.max(o.progressEase, 0.001));
+    stage.progressEased += (stage.progress - stage.progressEased) * j;
   }
 
   // Quality "auto": time the frames, and step down when a window of them was too slow on average.
@@ -485,8 +516,8 @@ export function createStage(container, options = {}) {
     const computed = getComputedStyle(canvas).color;
     canvas.style.color = "";
     const numbers = (computed.match(/-?[\d.]+(?:e-?\d+)?%?/g) || []).map(parseFloat);
-    if (/^rgba?\(/.test(computed) && numbers.length >= 3) return numbers.slice(0, 3).map((n) => clamp(n / 255, 0, 1));
-    if (/^color\(srgb /.test(computed) && numbers.length >= 3) return numbers.slice(0, 3).map((n) => clamp(n, 0, 1));
+    const scale = /^rgba?\(/.test(computed) ? 255 : (/^color\(srgb /.test(computed) ? 1 : 0);
+    if (scale && numbers.length >= 3) return numbers.slice(0, 3).map((n) => clamp(n / scale, 0, 1));
     try {
       const context = document.createElement("canvas").getContext("2d");
       context.fillStyle = computed;
@@ -502,7 +533,8 @@ export function createStage(container, options = {}) {
     for (let node = container; node && node.nodeType === 1; node = node.parentNode) {
       const color = getComputedStyle(node).backgroundColor;
       const numbers = (color.match(/-?[\d.]+/g) || []).map(parseFloat);
-      const seeThrough = color === "transparent" || (/^rgba\(|\/ /.test(color) && numbers[numbers.length - 1] === 0);
+      const alpha = /^rgba\(|\/ /.test(color) ? numbers[numbers.length - 1] : 1;
+      const seeThrough = color === "transparent" || alpha === 0;
       if (!seeThrough) return resolveColor(color) || [1, 1, 1];
     }
     const scheme = getComputedStyle(document.documentElement).colorScheme || "";
@@ -534,7 +566,8 @@ export function createStage(container, options = {}) {
     for (const name of Object.keys(tokenNames)) {
       const [r, g, b] = rgb[name] || rgb.text;
       tokens[name].setRGB(r, g, b, THREE.SRGBColorSpace); // stored as linear working colour, as three expects
-      tokens.css[name] = found[name] ? raw[name] : `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`;
+      const stand = [r, g, b].map((value) => Math.round(value * 255)).join(" ");
+      tokens.css[name] = found[name] ? raw[name] : `rgb(${stand})`;
     }
     // Relative luminance of the background (the Color holds linear values). Under 0.2 light adds up
     // to a glow that reads; above it only darker "ink" does.
@@ -619,16 +652,16 @@ export function createStage(container, options = {}) {
 
   // 7. Live, fallback and the poster.
   function showPosters(show) {
-    for (const [element, opacity, transition] of posters) {
-      element.style.transition = show || stage.still || !o.fade ? transition : `opacity ${o.fade}ms ease-out`;
-      element.style.opacity = show ? opacity : "0";
+    for (const [poster, opacity, transition] of posters) {
+      poster.style.transition = show || stage.still || !o.fade ? transition : `opacity ${o.fade}ms ease-out`;
+      poster.style.opacity = show ? opacity : "0";
     }
   }
 
   function goLive() {
     live = true;
     container.setAttribute("data-scene", "live");
-    getComputedStyle(canvas).opacity; // read it once, so the change below is a transition and not a jump
+    void getComputedStyle(canvas).opacity; // read it once, so the change below is a transition, not a jump
     if (o.fade && !stage.still) canvas.style.transition = `opacity ${o.fade}ms ease-out`;
     canvas.style.opacity = "1";
     showPosters(false);
@@ -646,11 +679,11 @@ export function createStage(container, options = {}) {
 
   function destroy() {
     if (destroyed) return;
+    destroyed = true;
+    stage.running = false;
     for (const fn of lists.destroy.slice()) {
       try { fn(); } catch (error) { console.error(error); } // one scene's mistake must not stop the clean-up
     }
-    destroyed = true;
-    stage.running = false;
     if (rafId) cancelAnimationFrame(rafId);
     rafId = 0;
     for (const off of cleanups.splice(0)) off();
@@ -669,7 +702,7 @@ export function createStage(container, options = {}) {
     if (stages.get(container) === stage) stages.delete(container);
   }
 
-  // 8. No WebGL: say so on the container and stop here. Every method above is already a no-op.
+  // 8. No WebGL (or no container): say so and stop here. Every method above is already a no-op.
   if (!renderer) {
     container.setAttribute("data-scene", "fallback");
     return stage;
@@ -680,8 +713,8 @@ export function createStage(container, options = {}) {
     container.style.position = "relative";
     madeRelative = true;
   }
-  for (const element of container.querySelectorAll("[data-scene-poster]")) {
-    posters.push([element, element.style.opacity, element.style.transition]);
+  for (const poster of container.querySelectorAll("[data-scene-poster]")) {
+    posters.push([poster, poster.style.opacity, poster.style.transition]);
   }
   container.insertBefore(canvas, container.firstChild);
   quality.name = auto ? guessQuality(gl, coarse) : o.quality;
@@ -739,6 +772,7 @@ export function createStage(container, options = {}) {
     fail("context-lost");
   });
   listen(canvas, "webglcontextrestored", () => {
+    if (stage.failed !== "context-lost") return; // a scene that threw stays down
     stage.failed = false;
     invalidate();
   });
