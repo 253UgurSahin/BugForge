@@ -126,7 +126,8 @@ varying float vTop, vDepth;
 void main() {
   float h = max(aState.x, 0.008) * uSize.z * breath(aCell);
   h = (h + aState.y * (0.25 * h + 0.06 * uSize.z)) * aState.w;   // hover lifts it by about a quarter
-  vec3 p = vec3(aCell.x + position.x * uSize.x * aState.w, position.y * h, aCell.y + position.z * uSize.y * aState.w);
+  float foot = aState.w * smoothstep(0.004, 0.07, aState.x + aState.y);   // values near zero shrink into the floor
+  vec3 p = vec3(aCell.x + position.x * uSize.x * foot, position.y * h, aCell.y + position.z * uSize.y * foot);
   vWorld = p;
 #ifdef MIRROR
   p.y = -p.y;           // the reflection: the same bar upside down under the floor
@@ -162,27 +163,27 @@ void main() {
   float fromTop = vTop - vLocal.y, rise = clamp(vLocal.y / max(vTop, 0.0001), 0.0, 1.0);
   if (n.y > 0.5) {
     // The cap is where the light comes from: the tone at full strength, hot where the light is.
-    vec3 night = mix(mix(bg, tone, 0.6), tone, glowing);
+    vec3 night = mix(mix(bg, tone, 0.8), mix(tone, text, 0.55), glowing);
     vec3 paper = mix(mix(surface, tone, 0.6), tone, glowing);
     color = mix(mix(paper, night, uDark), flare, clamp(hot * 0.85 + hover * 0.7, 0.0, 1.0));
   } else {
     // A side: turned to the key light or away from it (the shaded side clearly darker). On a dark
     // page tinted glass that fades into the floor; on paper a tint that deepens towards the floor.
     float facing = smoothstep(0.15, 0.85, clamp(dot(n, normalize(uLight)) * 0.5 + 0.5, 0.0, 1.0));
-    vec3 glass = mix(surface, tone, 0.3 + 0.3 * glowing);
-    vec3 night = mix(bg, glass, (0.05 + 0.9 * pow(rise, 1.6)) * mix(0.4, 1.0, facing));
+    vec3 glass = mix(surface, tone, 0.08 + 0.16 * glowing);
+    vec3 night = mix(bg, glass, (0.04 + 0.85 * pow(rise, 2.4)) * mix(0.4, 1.0, facing));
     vec3 deep = mix(tone, text, 0.35);
     vec3 face = mix(mix(surface, tone, 0.34 + 0.2 * glowing), mix(tone, deep, 0.3), 0.8 * pow(1.0 - rise, 1.4));
     vec3 paper = mix(mix(face, deep, 0.45), face, facing);
     color = mix(paper, night, uDark);
     // The cap's light runs a little way down the column (all of it when hovered); a bright lip
     // where the side meets the cap.
-    float bleed = exp(-fromTop / (0.09 * uSize.z + 0.02));
-    float glow = bleed * (0.3 + 0.6 * glowing) * mix(0.35, 1.0, uDark) + hover * (0.25 + 0.5 * rise) + hot * bleed * 0.4;
+    float bleed = exp(-fromTop / (0.04 * uSize.z + 0.012));
+    float glow = bleed * (0.35 + 0.5 * glowing) * mix(0.35, 1.0, uDark) + hover * (0.25 + 0.5 * rise) + hot * bleed * 0.4;
     color = mix(color, mix(tone, flare, hot * uDark), clamp(glow, 0.0, 1.0));
     color = mix(color, mix(tone, flare, 0.5 * uDark), lineAlpha(fromTop, 1.3 * uPixelRatio) * (0.45 + 0.55 * glowing));
   }
-  color = mix(mix(mix(bg, border, 0.3), surface, 0.4 * uDark), color, 0.08 + 0.92 * stand);
+  color = mix(mix(bg, mix(border, surface, uDark), 0.25), color, 0.04 + 0.96 * stand);
   color = mix(bg, color, 1.0 - 0.68 * aheadAt(vWorld));   // the columns the front has not reached
   float haze = max(fogLinear(vDepth, uFog.x, uFog.y), focusFade(vWorld));
   gl_FragColor = vec4(pow(mix(color, bg, haze * 0.94), vec3(2.2)), 1.0);
@@ -407,7 +408,7 @@ export function mount(container, options = {}) {
     const bar = span.pitchX * (1 - o.gap);
     uniforms.uSize.value.set(bar, span.pitchZ * (1 - o.gap), span.tall, o.intensity);
     uniforms.uFloor.value.set(WIDTH / 2, span.depth / 2, ridges ? 0 : 2 * span.pitchX, 2 * span.pitchZ);
-    floor.scale.set(WIDTH + 5, 1, span.depth + 5);
+    floor.scale.set(WIDTH + 3, 1, span.depth + 3);
     build();
   }
 
@@ -541,7 +542,7 @@ export function mount(container, options = {}) {
   let fit = 1;
   stage.onResize((size) => {
     const narrow = size.aspect < 0.9;
-    const across = narrow ? 0 : { right: 0.22, left: -0.22 }[o.side] || 0, down = narrow ? 0.29 : 0.03;
+    const across = narrow ? 0 : { right: 0.24, left: -0.24 }[o.side] || 0, down = narrow ? 0.29 : 0.09;
     const room = narrow ? [1, 0.36] : [o.side === "center" ? 0.8 : 0.52, 0.72];   // share of width, height
     const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     fit = 1 / Math.min(tan * room[1], tan * size.aspect * room[0]);
@@ -563,7 +564,7 @@ export function mount(container, options = {}) {
     const az = 0.42 + 0.38 * half + 0.28 * rise + (still ? 0 : Math.sin(time * 0.09) * 0.04) + pointer.x * 0.3;   // round the sculpture
     const el = 0.24 + 0.09 * half + (ridges ? 0.14 : 0.3) * rise + pointer.y * 0.14;                               // above the floor
     const radius = 0.5 * Math.hypot(WIDTH, Math.max(span.depth, 3.6), span.tall * 0.7);
-    const distance = radius * fit * (ridges ? 0.86 * (1 - 0.12 * rise) : 0.62 + 0.05 * rise);
+    const distance = radius * fit * (ridges ? 0.86 * (1 - 0.12 * rise) : 0.52 + 0.12 * rise);
     target.set(0.35 * (1 - rise), span.tall * 0.2, 0.3 * (1 - rise)).lerp(close.set(focus.x, span.tall * (0.25 + 0.3 * focus.y), focus.z), rise);
     camera.position.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).multiplyScalar(distance).add(target);
     camera.lookAt(target);

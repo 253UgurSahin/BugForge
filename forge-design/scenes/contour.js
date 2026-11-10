@@ -18,7 +18,7 @@
  *
  * Options (all optional; the stage's own options, see stage.js, pass straight through):
  *   levels         16: contour intervals over the height range. More is a denser chart.
- *   lineWidth      1: CSS pixels of a contour line. Index lines are 1.7 times as wide.
+ *   lineWidth      1: CSS pixels of a contour line (index lines: see indexStrength).
  *   indexEvery     5: every so many lines is an index line. 0 makes them all the same.
  *   indexStrength  1: how much index lines stand out, 0..2. 0 draws them with the width, colour
  *                  and strength of the others (they only still survive on a cliff); 1 is 1.7
@@ -133,9 +133,8 @@ vec2 frameSize() { return 0.5 * uResolution / unitPixels(); }
 // The flow carried in the direction dir: dir times the flow at first, turning with the circle.
 vec2 drift(vec2 dir) { return mat2(dir, vec2(-dir.y, dir.x)) * uFlow; }
 
-// Layers of noise, each twice as fine and 0.42 as strong (a little rougher than half, so the land
-// keeps some grain), and the slope of their sum. Layer i is
-// read at A q (A doubles and turns 37 degrees each time, so the grids never line up), and by the
+// Layers of noise, each twice as fine and 0.42 as strong (a little under half: smooth land, with the
+// fine layers only as grain), and the slope of their sum. Layer i is read at A q (A doubles and turns 37 degrees each time, so the grids never line up), and by the
 // chain rule its slope with respect to q is A-transposed times the slope the noise reports. Each
 // layer slides its own way, slowly, finer ones faster: their sum keeps changing shape, which costs
 // far less than noise in three dimensions with time as the third.
@@ -144,7 +143,7 @@ vec3 layers(vec2 q) {
   float weight = 0.5;
   mat2 A = mat2(1.0);
   for (int i = 0; i < OCTAVES; i++) {
-    float turn = float(i) * 2.4;
+    float turn = float(i) * 2.4;   // 2.4 radians apart, near the golden angle: no two slide alike
     vec3 n = snoiseGrad(A * q + drift(vec2(cos(turn), sin(turn))) * SLIDE * float(i + 1));
     sum += weight * vec3(n.x, transpose(A) * n.yz);
     A = mat2(1.6, 1.2, -1.2, 1.6) * A;
@@ -301,9 +300,8 @@ void main() {
   // at that point and the step is taken twice more: every pixel of a mark then agrees on where the
   // top is, how high it is and how calm the chart is there, so a mark is drawn whole or not at
   // all. A saddle (det H < 0) gets no mark. A top gets one only when the innermost ring round it
-  // is small (within about 30 pixels), as on a real chart; when that ring would be a speck under
-  // 9 pixels, it reads as a stray "0", so the ring is left out and the mark stands alone.
-  float mark = 0.0, speck = 0.0;
+  // is small (within about 30 pixels), as on a real chart.
+  float mark = 0.0;
   mat2 H = mat2(dFdx(perPixel), dFdy(perPixel));
   H = 0.5 * (H + transpose(H));
   vec2 to = -inverse(H) * perPixel;
@@ -357,13 +355,10 @@ void main() {
       float toLevel = (top > 0.5 ? level - floor(level) : ceil(level) - level) * interval;
       float reach = sqrt(2.0 * toLevel / max(weakest, 1e-12)) / uPixelRatio;   // CSS px to the innermost ring
       float calmThere = calmAt(centre);
-      float innermost = top > 0.5 ? floor(level) : ceil(level);
       // Settled: the last step was under a pixel, so the steps have closed in on one point. On a
       // flat stretch with fine ripples they jump about instead, and a pixel can land next to a
-      // "top" that its neighbours never find: a speck. Those get no mark and remove no ring.
+      // "top" that its neighbours never find: a speck. Those get no mark.
       float settled = 1.0 - smoothstep(0.35, 0.9, length(last));
-      // This pixel's line is the innermost ring when it is the level next to the top.
-      speck = settled * (1.0 - smoothstep(7.5, 9.5, reach)) * step(abs(floor(h / interval + 0.5) - innermost), 0.5);
       float r = length(to) / uPixelRatio;
       float spot = 1.0 - smoothstep(1.4, 2.3, r);                         // a top: a solid dot
       vec2 a = abs(rotate45 * to) / uPixelRatio;                          // a hollow: a small x
@@ -375,8 +370,8 @@ void main() {
       mark = keep * mix(ex, spot, top);
     }
   }
-  minor *= 1.0 - max(speck, tiny);
-  index *= 1.0 - max(speck, tiny);
+  minor *= 1.0 - tiny;
+  index *= 1.0 - tiny;
 
   // Registration crosses where the lines of a map grid meet, half a map unit apart; they move with
   // the map, so travel shows even over flat ground. Each fades by the calm at its own centre.
