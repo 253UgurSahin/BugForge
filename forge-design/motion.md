@@ -1,7 +1,10 @@
 # Motion reference
 
-The numbers, the recipes and the library table for forge-design motion. The CSS of the recipes is ready in
-`../forge-design/motion.css`; the hero example is `../forge-design/wireform.example.js`.
+The numbers, the recipes, the patterns per look level and the budgets for `/forge-design motion`
+(its steps: `../forge-design/steps/motion.md`; the levels: `../forge/levels.md`). Sections 1 to 7 hold
+for every level; the CSS of the recipes is ready in `../forge-design/motion.css`. Level 3 adds section 8,
+level 4 section 9, level 5 section 10; section 11 is the budget per level. The scene kit of levels 4 and 5
+is described in `../forge-design/scenes.md`.
 
 ## 1. Principles
 
@@ -18,6 +21,7 @@ Motion has one of four jobs. If a moment has none of them, it gets no motion.
 - **One thing moves at a time** per area. A list may stagger; a whole screen may not dance.
 - **Enter is slower than exit.** Things arrive in `base` or `slow` and leave in `fast`.
 - **Small things move fast, big things slower**, and nothing in the interface takes over 500ms.
+  A scroll scene follows the scrollbar and a hero scene runs by itself: neither is a wait.
 - **Travel is a hint, not a journey**: 4 to 24px. Slide a full width only for sheets and drawers.
 - **Only `transform` and `opacity` animate.** They run on the compositor (off the main thread), so
   they stay smooth while JavaScript works. Width, height, top, left, margin and padding make the
@@ -82,8 +86,9 @@ live in `size` and become `--size-<key>` in px.
 }
 ```
 
-`pulse` is one pass of the skeleton sheen, `loop` one round of a marquee. The three directions are
-the same tokens with other values:
+`pulse` is one pass of the skeleton sheen, `loop` one round of a marquee. The motion has a
+character that fits the chosen concept. Three are a starting point, the same tokens with other
+values; the concept tunes them:
 
 | token | calm | lively | technical-HUD |
 | --- | --- | --- | --- |
@@ -91,7 +96,7 @@ the same tokens with other values:
 | ease (standard) | `cubic-bezier(.2,.8,.2,1)` | the same | `cubic-bezier(.2,0,0,1)`: sharper |
 | stagger | 30ms | 40ms | 25ms |
 | shift-sm / shift / shift-lg | 4 / 8 / 16 | 4 / 12 / 24 | 2 / 8 / 16 |
-| character | fades and small rises, no loops, no spring | spring on small controls, staggered lists, count-ups | thin lines that draw themselves, numbers that tick in a mono font, a slow wireframe hero; nothing bounces |
+| character | fades and small rises, no loops, no spring | spring on small controls, staggered lists, count-ups | thin lines that draw themselves, numbers that tick in a mono font, a slow line hero; nothing bounces |
 
 Reading a token in JavaScript, so scripts hold no numbers either:
 
@@ -119,7 +124,10 @@ Use the first layer that can do the job.
    still elsewhere. Never a `scroll` event listener.
 4. **Web Animations API** (`element.animate()`): sequences, and values only known at run time. It
    returns an object with `.finished` (a promise), `.cancel()` and `.playbackRate`.
-5. **A library**: section 5.
+5. **CSS 3D** (level 3 and up): `perspective`, `rotateX`/`rotateY` and `translateZ` on cards and
+   panels, through the kit's `depth.js` (section 8).
+6. **WebGL** (level 4 and up): a scene of the kit, mounted lazily (section 9).
+7. **A library** other than three: section 5.
 
 The app's CSP (forge-build pack's nginx.conf, Django's CSP middleware, next.config) blocks inline styles
 in markup. Scripts may still set them: `element.style.setProperty("--m-tab-x", "40px")` and
@@ -134,7 +142,8 @@ One script switches the scroll recipes on and pauses loops nobody can see:
 
 ```js
 // motion.js: load it as a module on every page
-document.documentElement.dataset.motion = "on";   // from here on, .m-reveal starts hidden
+document.documentElement.dataset.motion ||= "on";   // from here on, .m-reveal starts hidden;
+                                                    // ||= keeps "paused" from the kit's motionToggle
 
 const seen = new IntersectionObserver((entries) => {
   for (const entry of entries) {
@@ -360,13 +369,14 @@ then stuck with it), and no reduced-motion check, because CSS media queries do n
 
 ## 5. Libraries
 
-CSS and the Web Animations API first. A library is justified only by a row of this table, and each
-one goes into `## Libraries` of `forge-work/motion.md` with the reason.
+CSS and the Web Animations API first. Levels 1 to 3 add no library. From level 4 three is part of
+the level; any other library is justified only by a row of this table, and each one goes into
+`## Libraries` of `forge-work/motion.md` with the reason.
 
 | library | take it when | do not take it for | size, measured 10 Nov 2026 (min / gzip) | licence: verify |
 | --- | --- | --- | --- | --- |
 | GSAP 3.15 (`gsap`) | a timeline of 5+ steps that must be scrubbed, reversed or tied to scroll with pinning; morphing or drawing complex SVG | fades, reveals, one-off sequences | core 73 / 28 KB, ScrollTrigger 45 / 18 KB | not open source: package.json names "Standard 'no charge' license" with a link and ships no licence file. Read the linked page and tell the user its conditions |
-| Three.js 0.187 (`three`) | real 3D: lighting, filled faces, thousands of lines, post-processing, a model file | a wireframe of a few thousand lines: adapt wireform.example.js | a small scene after tree-shaking: about 540 / 134 KB | MIT, in `LICENSE` |
+| Three.js 0.187 (`three`) | look level 4 and 5: the scene kit needs it, and the level is the user's yes, so install it without asking again | levels 1 to 3: no WebGL there | a small scene after tree-shaking: about 540 / 134 KB | MIT, in `LICENSE` |
 | lottie-web 5.13 (`lottie-web`) | an animation a designer exported from After Effects, owned by the user | anything you could write in CSS; files from a stock site without a licence for this use | `lottie_light` (SVG only) 168 / 46 KB; full 306 / 76 KB | MIT, in `LICENSE.md`. The animation file has its own licence: ask the user where it came from |
 | Motion 14 (`motion`) | a React app (next) that needs layout or gesture animation | plain enter and exit: CSS does it | import only what is used; the whole package is 189 / 63 KB | MIT |
 
@@ -417,21 +427,26 @@ Lazy loading per profile:
 
 ## 6. The hero visual
 
-A generative piece is drawn by code from formulas. It is the user's idea: ask for it in their words
-("something like a slowly turning knot of light", "a field of dots that follows the cursor").
+The hero is the chosen concept made to move: the one picture people remember. It comes from the
+brief (`forge-work/design/brief.md`), never from a style list and never from a stock shape.
 
-- **From maths, never from a picture.** Do not trace, measure or rebuild a reference image, another
-  site's hero or a stock animation. A reference tells you the mood (dark, thin lines, slow), not
-  the shape. Pick the shape yourself: a parametric curve, a noise field, a lattice, a spirograph.
-- **Start from `../forge-design/wireform.example.js`** and change its formulas. Its top says when
-  Three.js is the better tool.
-- **Technical-HUD look**: a near-black background from the tokens, 1px lines in the accent at
+- **From the app's world, drawn by code.** Water and depth contours for an angling app, a ledger
+  that folds for a bookkeeping app, a field of points that settles into the app's own numbers.
+  Do not trace, measure or rebuild a reference image, another site's hero or a stock animation. A
+  reference tells you the mood (dark, thin lines, slow), never the shape.
+- **Per level.** Levels 1 and 2 have no hero visual: the heading, the type and the page's own
+  entrance carry the first screen. Level 3: the signature moment may be a drawn line piece on a
+  2D canvas; start from `../forge-design/wireform.example.js` and change its formulas until it is
+  the concept's own shape. Levels 4 and 5: a WebGL scene from the kit (section 9), tuned until it
+  could only belong here; a plain torus knot, a default particle cloud or the kit's own defaults
+  are a failed hero.
+- **Technical look**: a near-black background from the tokens, 1px lines in the accent at
   different opacities, one glow pass, digits in `--font-mono` with `tabular-nums`, slow movement
   (a full turn takes 40 to 60 seconds). No scan lines that flicker, no glitch effects: they flash.
 - **It is decoration.** `aria-hidden="true"`, no text inside it, the page's heading and button are
-  HTML on top. With reduced motion it draws one still frame.
-- **It has a budget**: sharpness capped at 2 device pixels per CSS pixel, paused off-screen and in
-  hidden tabs, one `stroke()` per group of lines, not per line.
+  HTML on top, readable in light and dark. With reduced motion it shows one still frame.
+- **It has a budget** (section 11): sharpness capped at 2 device pixels per CSS pixel, paused
+  off-screen and in hidden tabs, nothing of three in the first load.
 
 ## 7. Accessibility and performance, in numbers
 
@@ -444,6 +459,343 @@ A generative piece is drawn by code from formulas. It is the user's idea: ask fo
 | what animates | `transform` and `opacity` (exceptions: accordion rows, a chart's stroke) | motioncheck.py |
 | long tasks | none over 50ms caused by animation | Performance panel, or a `PerformanceObserver` for `longtask` |
 | frame rate | 60 a second on a mid-range phone: DevTools at 390px with 4x CPU slowdown | the Performance panel's frames row |
-| script added | first load: under 15 KB gzip for all motion code; a lazy hero: under 150 KB gzip | the build output's file sizes |
+| script added | per level: section 11 | the build output's file sizes |
 | focus | never lost: after a modal closes it is back on its button; after a page transition on the new heading | Tab through each transition |
 | layout shift | motion never pushes content around (CLS stays under 0.1) | skeletons have the size of their content |
+
+## 8. Level 3: Expressive
+
+Everything above, plus scroll storytelling, springs, charts that draw and morph, real depth with
+CSS 3D and one signature moment. No library: CSS, the Web Animations API and the kit's
+`depth.js`. Each pattern ran in Chromium with motion on and with reduced motion.
+
+**Sticky scroll scene.** A section three screens tall whose stage stays in place while its steps
+follow the scroll. The script writes the progress (0 to 1) as `--progress` and the current step as
+`data-at`; CSS does the rest.
+
+```html
+<section class="story" data-story>
+  <div class="story__stage">
+    <svg class="story__chart" aria-hidden="true">...</svg>
+    <ol class="story__steps">
+      <li data-step>The lake at dawn</li><li data-step>Where the fish were</li><li data-step>Your best spot</li>
+    </ol>
+  </div>
+</section>
+```
+```css
+.story { height: 300vh; }                         /* three screens of scrolling for one scene */
+.story__stage { position: sticky; top: 0; height: 100vh; display: grid; place-items: center; overflow: clip; }
+.story__steps > * { opacity: .35; }
+.story[data-at="0"] li:nth-child(1), .story[data-at="1"] li:nth-child(2), .story[data-at="2"] li:nth-child(3) { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .story__chart { transform: translateX(calc((1 - var(--progress, 1)) * -30%)) scale(calc(.8 + var(--progress, 1) * .2)); }
+  .story__steps > * { transition: opacity var(--duration-slow) linear; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story { height: auto; }
+  .story__stage { position: static; height: auto; }
+  .story__steps > * { opacity: 1; }
+}
+```
+```js
+// story.js: the scroll progress of a sticky scene, 0 at its start and 1 at its end
+import { reduce } from "./tokens.js";
+
+export function story(section, onProgress = () => {}) {
+  const steps = section.querySelectorAll("[data-step]").length || 1;
+  let frame = 0;
+  const update = () => {
+    const box = section.getBoundingClientRect();
+    const progress = Math.min(Math.max(-box.top / (box.height - innerHeight), 0), 1);
+    section.style.setProperty("--progress", progress.toFixed(4));
+    section.dataset.at = String(Math.min(Math.floor(progress * steps), steps - 1));
+    onProgress(progress);                                  // a scene: hero.setProgress(progress)
+    frame = requestAnimationFrame(update);
+  };
+  const near = new IntersectionObserver(([entry]) => {     // runs only while the section is on screen
+    cancelAnimationFrame(frame);
+    if (entry.isIntersecting && !reduce.matches) frame = requestAnimationFrame(update);
+  });
+  near.observe(section);
+  return () => { near.disconnect(); cancelAnimationFrame(frame); };
+}
+```
+
+Reduced: the section is as tall as its content, every step is there at full strength, and the
+chart stands in its end state (`--progress` falls back to 1). Mistake: an ancestor with
+`overflow: hidden` or `auto` (sticky then never sticks: use `clip`), a section so short that the
+scene is over in one flick, text people must read moving with the scroll, and a `scroll` listener
+that sets `top` or `height`.
+
+**Spring.** A real spring, from a duration token and a bounce, as a CSS `linear()` curve that the
+Web Animations API plays. Browsers without `linear()` get the `--ease-spring` curve.
+
+```js
+// spring.js: a real spring for element.animate(), from a duration token and a bounce
+export function spring(duration, bounce = 0.2) {
+  const zeta = 1 - Math.min(Math.max(bounce, 0.05), 0.6);      // damping: 1 would not overshoot
+  const w = (2 * Math.PI) / (duration / 1000);                  // one swing in about `duration`
+  const wd = w * Math.sqrt(1 - zeta * zeta);
+  const at = (t) => 1 - Math.exp(-zeta * w * t) * (Math.cos(wd * t) + ((zeta * w) / wd) * Math.sin(wd * t));
+  const settle = Math.log(1000 * (1 + (zeta * w) / wd)) / (zeta * w);   // seconds to within 0.1%
+  const points = Array.from({ length: 41 }, (_, i) => (i === 40 ? 1 : +at((settle * i) / 40).toFixed(3)));
+  const easing = `linear(${points.join(", ")})`;
+  const supported = globalThis.CSS?.supports?.("transition-timing-function", easing);
+  return { duration: Math.round(settle * 1000), easing: supported ? easing : null };
+}
+```
+```js
+import { spring } from "./spring.js";
+import { ms, token, reduce } from "./tokens.js";
+
+export function pop(card) {
+  if (reduce.matches) return;
+  const { duration, easing } = spring(ms("--duration-slow"), 0.35);
+  card.animate([{ transform: "scale(.92)" }, { transform: "none" }],
+               { duration, easing: easing ?? token("--ease-spring") });
+}
+```
+
+A bounce of 0.2 overshoots about 1 percent, 0.35 about 7 percent, 0.6 (the most it takes) about 25
+percent. Reduced: nothing; the card is already in its end state. Mistake: a spring on a whole
+panel or page (it wobbles the reading place), a bounce over 0.4 on anything with text, and a
+spring on things that leave (they use `--ease-exit`).
+
+**Chart that morphs between periods.** Bars scale to their new share; a short stagger shows which
+bar changed most.
+
+```css
+.bars { display: flex; align-items: end; gap: 4px; height: 160px; }
+.bars__bar { flex: 1; height: 100%; transform-origin: bottom; transform: scaleY(var(--value, 0)); background: var(--color-accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .bars__bar { transition: transform var(--duration-slower) var(--ease-move);
+               transition-delay: calc(var(--index, 0) * var(--duration-stagger)); }
+}
+```
+```js
+export function showPeriod(chart, values) {
+  const top = Math.max(...values, 1e-9);
+  chart.querySelectorAll(".bars__bar").forEach((bar, index) => {
+    bar.style.setProperty("--index", String(index));
+    bar.style.setProperty("--value", String((values[index] ?? 0) / top));
+  });
+}
+```
+
+Reduced: the bars jump to their new height. Mistake: animating `height` (layout on every frame),
+the values only in the bars (keep the numbers as labels or a table), and a line chart morphed by
+animating `d`, which only some browsers do: draw the new line with `m-draw` instead.
+
+**Tilt card with depth.js.** TILT-PATTERN
+
+**The signature moment.** One moment that could only belong to this app, from the concept: a
+float that dips when a catch is saved, a stamp that lands on a paid invoice, a tide line that
+rises to today's height. It is built from the patterns above, placed where people look first, and
+written in the inventory as its own row.
+
+## 9. Level 4: Showpiece
+
+Everything above, plus a WebGL hero from the scene kit, light and depth that follow the pointer,
+3D inside the interface and depth while scrolling. Which scene fits which concept, and the
+wiring per stack, is in `../forge-design/scenes.md`; the API of each file is the comment at its
+top.
+
+- `npm install three` in the app; the level is the user's yes, so do not ask again. Read the
+  licence of the installed version (MIT, in `node_modules/three/LICENSE`) and write it in
+  `## Libraries`.
+- Copy `stage.js`, `glsl.js`, `lazy.js` and the scene into a `scenes/` folder of the app's scripts:
+  the app serves them itself.
+- The hero container gets a poster: a still of the scene. Mount it once with `{ still: true }` at
+  the size of the hero, take a screenshot, save it as WebP next to the app's images.
+
+**Mounting a kit scene in a plain page.** With no bundler, an import map points `three` at a file
+the app serves itself: copy `node_modules/three/build/three.module.js` and `three.core.js` to the
+app's static folder with an npm script, never from a CDN. The import map is inline, so a strict
+CSP needs its hash in `script-src`.
+
+```html
+<script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.js" } }</script>
+<div class="hero-scene" aria-hidden="true"><img data-scene-poster src="/static/img/hero-poster.webp" alt=""></div>
+<button type="button" id="motion">Pause motion</button>
+<script type="module" src="/static/js/hero.js"></script>
+```
+```js
+// hero.js
+import { lazyScene, motionToggle } from "./scenes/lazy.js";
+import { story } from "./story.js";
+
+const hero = lazyScene(document.querySelector(".hero-scene"), () => import("./scenes/form.js"),
+                       { side: "right", shapes: ["ring", "knot", "coil"] });
+motionToggle(document.querySelector("#motion"));
+story(document.querySelector("[data-story]"), (progress) => hero.setProgress(progress));
+```
+```css
+.hero-scene { position: relative; min-height: 80vh; }
+.hero-scene [data-scene-poster] { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+@media (prefers-reduced-motion: reduce) { #motion { display: none; } }
+```
+
+Nothing of three loads until the hero is near the screen and the page is idle; the poster shows
+until the first frame, and stays when WebGL is missing (`data-scene="fallback"`). Reduced: the
+stage draws one still frame; the toggle is hidden. Mistake: importing the scene at the top of a
+module (three is then in the first load), a hero with no size of its own (the canvas is 0 high),
+a poster that does not match the still (the page jumps), and text inside the container.
+
+**Mounting a kit scene in React (and Next).** A client component; the effect mounts, its cleanup
+destroys. React runs effects twice in development: `destroy()` and a new `lazyScene()` on the same
+element are safe.
+
+```jsx
+"use client";
+import { useEffect, useRef } from "react";
+import { lazyScene } from "../scenes/lazy.js";
+
+export default function Hero({ progress = 0 }) {
+  const box = useRef(null);
+  const scene = useRef(null);
+  useEffect(() => {
+    scene.current = lazyScene(box.current, () => import("../scenes/form.js"), { side: "right" });
+    return () => scene.current.destroy();
+  }, []);
+  useEffect(() => { scene.current?.setProgress(progress); }, [progress]);
+  return (
+    <div ref={box} className="hero-scene" aria-hidden="true">
+      <img data-scene-poster src="/hero-poster.webp" alt="" />
+    </div>
+  );
+}
+```
+
+lazy.js imports nothing, so this component costs the first load almost nothing, and the dynamic
+`import()` makes Next and Vite split the scene and three into their own file. Reduced: as above.
+Mistake: `lazyScene` called during render (it runs on the server and on every render), no cleanup
+(a second WebGL context on every page change, until the browser drops the oldest), and the scene
+remounted on every prop change instead of fed through its methods.
+
+## 10. Level 5: Cinematic
+
+Everything above, plus a scroll-driven journey, custom shaders, GPU particles, forms that react to
+the pointer and to the app's live data, and screens that change in 3D space.
+
+- **The journey**: the kit's `journey.js` moves the camera through chapters along a tall section
+  and fires an event per chapter, so the page can bring in each chapter's text. Its comment and
+  `../forge-design/scenes.md` say how; the chapters come from the concept, not from the kit's demo.
+- **Custom shaders**: a `THREE.ShaderMaterial` that spreads `stage.uniforms` (time, pointer,
+  progress, the theme's colours) and builds on the noise of `glsl.js`; the fragment shader ends with
+  `#include <colorspace_fragment>`. The comment at the top of `stage.js` shows a whole scene.
+- **GPU particles**: `field.js`, its formations set by `setProgress`, its amplitude by `setData`.
+
+**Feeding setData from fetched data.** The app's own endpoint, the same origin, never made-up
+numbers. Values go in as numbers from 0 to 1 (what each scene does with them: its comment).
+
+```js
+// feed.js: pull the app's own data every so often and hand it to whatever shows it
+export function feed(url, use, every = 30000) {
+  let controller;
+  const pull = async () => {
+    if (document.hidden) return;                          // nobody looks: no request
+    controller?.abort();
+    controller = new AbortController();
+    try {
+      const response = await fetch(url, { signal: controller.signal, headers: { accept: "application/json" } });
+      if (response.ok) use(await response.json());
+    } catch {
+      // offline, or aborted: the scene and the numbers keep their last values
+    }
+  };
+  pull();
+  const timer = setInterval(pull, every);
+  return () => { clearInterval(timer); controller?.abort(); };
+}
+
+export const share = (numbers) => {                       // to 0..1, the largest is 1
+  const top = Math.max(...numbers, 1e-9);
+  return numbers.map((n) => Math.max(n, 0) / top);
+};
+```
+```js
+import { feed, share } from "./feed.js";
+
+feed("/api/catches/week", (rows) => {
+  hero.setData(share(rows.map((row) => row.count)));
+  setCatches(rows.reduce((sum, row) => sum + row.count, 0));   // the count below
+});
+```
+
+Reduced: the still frame is drawn again with the new values (the stage redraws on new data).
+Mistake: data from another host (it is not the app's, and the browser sends that host every
+visitor's address), a request every second, a scene that waits for data before its first frame,
+and private numbers shown in a way the page itself does not show them.
+
+**A count that follows live data.** A number that moves to each new value from where it stands
+now, also when a new value arrives half-way. The screen reader gets the new value once.
+
+```html
+<span class="sr-only" id="catches-label" data-unit="catches">49 catches</span>
+<span class="tile__value" id="catches" aria-hidden="true" data-value="49">49</span>
+```
+```js
+// livecount.js: a number that moves to each new value from where it stands now
+import { ms, reduce } from "./tokens.js";
+
+export function liveCount(el, label) {
+  const format = new Intl.NumberFormat(document.documentElement.lang || undefined);
+  let shown = Number(el.dataset.value) || 0;
+  let frame = 0;
+  return (value) => {
+    cancelAnimationFrame(frame);
+    label.textContent = `${format.format(value)} ${label.dataset.unit}`;   // read out once, not per step
+    if (reduce.matches || document.hidden) {
+      shown = value;
+      el.textContent = format.format(value);
+      return;
+    }
+    const from = shown;
+    const duration = ms("--duration-slower");
+    let start;
+    const step = (now) => {
+      start ??= now;
+      const progress = Math.min((now - start) / duration, 1);
+      shown = from + (value - from) * (1 - (1 - progress) ** 3);   // a new value mid-way starts from here
+      el.textContent = format.format(Math.round(shown));
+      if (progress < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+  };
+}
+```
+
+Use it as `const setCatches = liveCount(document.querySelector("#catches"),
+document.querySelector("#catches-label"))`. Reduced: the new number at once. Mistake: counting
+from 0 on every refresh, an `aria-live` region on the moving digits (it reads out every step), and
+digits that jiggle (give the value `font-variant-numeric: tabular-nums`).
+
+**Screens that change in 3D space.** The page change of section 4, turned in perspective. Both
+pages load this CSS; within one page, `swap()` of section 4 plays it.
+
+```css
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) { animation: screen-out var(--duration-slower) var(--ease-move) both; transform-origin: left center; }
+  ::view-transition-new(root) { animation: screen-in var(--duration-slower) var(--ease-move) both; transform-origin: right center; }
+}
+@keyframes screen-out { to { opacity: 0; transform: perspective(1600px) rotateY(10deg) translateZ(-160px); } }
+@keyframes screen-in { from { opacity: 0; transform: perspective(1600px) rotateY(-10deg) translateZ(-160px); } }
+```
+
+For a scene that stays between screens, keep its container in the layout outside the part that
+changes, and move its camera (`setProgress`, or the journey's next chapter) on each route change.
+Reduced: the plain change of page. Mistake: a turn over 15 degrees or longer than 500ms on every
+navigation (people feel it in their stomach), and a scene remounted on every page change.
+
+## 11. The budget per level
+
+Measured on the built app: gzip sizes from the build output, frames in the Performance panel.
+
+| level | motion code in the first load | loaded later | frames | also |
+| --- | --- | --- | --- | --- |
+| 1 Subtle | motion.css, about 4 KB; scripts none or under 2 KB | nothing | 60 a second | no layout shift |
+| 2 Polished | under 15 KB for all motion code | nothing | 60 a second on a mid-range phone (390px, 4x CPU slowdown) | CLS under 0.1, no long task over 50ms |
+| 3 Expressive | under 25 KB, depth.js included | nothing | the same, also while a sticky scene scrolls | no library |
+| 4 Showpiece | the same as level 3: nothing of three | the hero (three after tree-shaking, the kit and one scene) under 200 KB, only on the screens that show it, after the page is idle; a poster under 100 KB | 60 on a mid-range laptop; 30 or more on a mid-range phone at low quality | the largest paint is the heading or the poster, never later than before |
+| 5 Cinematic | the same as level 3 | the scenes, the journey and the shaders together under 300 KB; one WebGL context per page | the same as level 4, also during the journey | GPU particles at the count the stage's quality picks |

@@ -1,11 +1,17 @@
-"""Tests for forge-design motion's reference files: motion.css, motion.md, wireform.example.js and SKILL.md.
+"""Tests for /forge-design motion's files: motion.css, motion.md, wireform.example.js and steps/motion.md.
 
 motion.css holds no values of its own: every variable it reads is one theme.py writes from the
 design tokens (forge-design design's template plus the keys motion.md section 2 adds), or one it sets
 itself, or one a script sets and that has a fallback. It has the reduced-motion block, keeps the
 rules motioncheck.py checks, and has every class the recipes in motion.md name. The hero example is
 valid JavaScript with no imports, and in a fake browser it draws, pauses off-screen, draws one
-still frame for reduced motion and cleans up. Those two tests need Node."""
+still frame for reduced motion and cleans up. Those two tests need Node.
+
+The level parts: the steps file reads the look level, asks the one question, has the table of what
+each level adds as forge/levels.json has it, builds per level and proves the result as rule 9 of
+forge/rules.md says; the reference has a part per level 3, 4 and 5 with patterns and a budget per
+level. Its scripts parse, and the spring, the live count and the data feed run in Node with a
+make-believe browser."""
 
 import json
 import os
@@ -227,6 +233,209 @@ class WireformTests(unittest.TestCase):
         out = json.loads(done.stdout)
         self.assertGreater(out["strokes at start"], 0)
         self.assertEqual((out["frames at start"], out["frames back on screen"], out["cancelled off-screen"]), (0, 0, 0))
+
+
+LEVELS = os.path.join(ROOT, "forge", "levels.json")
+PATTERNS = {  # the section of motion.md, and the patterns it must hold
+    "## 8. Level 3": ["Sticky scroll scene", "Spring", "Chart that morphs between periods", "Tilt card with depth.js"],
+    "## 9. Level 4": ["Mounting a kit scene in a plain page", "Mounting a kit scene in React (and Next)"],
+    "## 10. Level 5": ["Feeding setData from fetched data", "A count that follows live data",
+                       "Screens that change in 3D space"],
+}
+
+# A make-believe browser for the scripts of the level parts: time and frames run by hand.
+LEVEL_BROWSER = r"""
+const { pathToFileURL } = require("url");
+const [folder, mode] = process.argv.slice(2);
+let now = 0, queue = [], fetched = [], timers = 0;
+globalThis.window = { matchMedia: () => ({ matches: mode === "reduced" }) };
+globalThis.document = { hidden: false, documentElement: { lang: "en" } };
+globalThis.getComputedStyle = () => ({ getPropertyValue: (name) => (name === "--duration-slower" ? " 480ms " : "") });
+globalThis.requestAnimationFrame = (callback) => { queue.push(callback); return queue.length; };
+globalThis.cancelAnimationFrame = () => { queue = []; };
+const tick = (ms) => { now += ms; const run = queue; queue = []; run.forEach((callback) => callback(now)); };
+globalThis.CSS = { supports: () => true };
+globalThis.setInterval = () => ++timers;
+globalThis.clearInterval = () => { timers--; };
+globalThis.fetch = async (url) => { fetched.push(url); return { ok: true, json: async () => [{ count: 2 }, { count: 8 }] }; };
+const url = (name) => pathToFileURL(folder + "/" + name).href;
+(async () => {
+  const out = {};
+  const { spring } = await import(url("spring.mjs"));
+  for (const bounce of [0.2, 0.35, 0.6]) {
+    const result = spring(320, bounce);
+    const points = result.easing.slice(7, -1).split(", ").map(Number);
+    out["spring " + bounce] = { duration: result.duration, first: points[0], last: points[points.length - 1],
+                                most: Math.max(...points), count: points.length };
+  }
+  const { liveCount } = await import(url("livecount.mjs"));
+  const el = { dataset: { value: "0" }, textContent: "0" }, label = { dataset: { unit: "catches" }, textContent: "" };
+  const set = liveCount(el, label);
+  set(1000);
+  out.label = label.textContent;
+  tick(0); tick(100);
+  out["after 100ms"] = el.textContent;
+  set(500);
+  tick(0);
+  out["new value mid-way starts at"] = el.textContent;
+  for (let i = 0; i < 40; i++) tick(16);
+  out.end = el.textContent;
+  out["frames left"] = queue.length;
+  const { feed, share } = await import(url("feed.mjs"));
+  let used = null;
+  const stop = feed("/api/week", (rows) => { used = share(rows.map((row) => row.count)); });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  out.fetched = fetched;
+  out.used = used;
+  out.timers = timers;
+  stop();
+  out["timers after stop"] = timers;
+  document.hidden = true;
+  feed("/api/hidden", () => {});
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  out["fetched while hidden"] = fetched.length;
+  console.log(JSON.stringify(out));
+})();
+"""
+
+
+def code_blocks(text, language):
+    return re.findall(r"```%s\n(.*?)```" % language, text, re.S)
+
+
+def block_with(text, needle):
+    found = [block for block in code_blocks(text, "js") if needle in block]
+    assert len(found) == 1, needle
+    return found[0]
+
+
+class StepsLevelTests(unittest.TestCase):
+    def setUp(self):
+        self.steps = read(SKILL)
+
+    def test_says_which_skill_it_is_part_of_and_where_the_rules_are(self):
+        top = "\n".join(self.steps.splitlines()[:6])
+        for part in ["`/forge-design`", "`SKILL.md`", "`../forge/rules.md`", "section 9", "section 10"]:
+            self.assertIn(part, top)
+        self.assertLessEqual(len(self.steps.splitlines()), 240)
+
+    def test_reads_records_and_asks_for_the_level(self):
+        for part in ["python3 ../forge/level.py get look", "python3 ../forge/level.py show look",
+                     "python3 ../forge/level.py set look", "--said '", "ONE question", "auto mode too",
+                     "python3 ../forge/level.py check look --report forge-work/motion.md", "`Level: N"]:
+            self.assertIn(part, self.steps)
+
+    def test_the_level_table_says_what_levels_json_says(self):
+        with open(LEVELS, encoding="utf-8") as handle:
+            look = json.load(handle)["domains"]["look"]["levels"]
+        rows = {int(match.group(1)): match.group(0) for match in re.finditer(r"(?m)^\| (\d) \|.*$", self.steps)}
+        self.assertEqual(sorted(rows), [1, 2, 3, 4, 5])
+        for level in look:
+            with self.subTest(level=level["level"]):
+                row = rows[level["level"]]
+                self.assertTrue(row.startswith("| %d | %s | %s |" % (level["level"], level["name"], level["nl"])), row)
+                for item in level["includes"]:
+                    self.assertIn(item, row)
+
+    def test_builds_per_level_and_proves_the_result(self):
+        for part in ["../forge-design/concepts.md", "`Concept:`", "../forge-design/motion.css",
+                     "../forge-design/scenes/depth.js", "../forge-design/scenes.md", "npm install three",
+                     "lazyScene", "data-scene-poster", "motionToggle", "journey.js", "setData",
+                     "../forge-design/shots.example.mjs", "--frames", "--video", "--reduced",
+                     "python3 ../forge-design/changed.py forge-work/motion-shots/before forge-work/motion-shots/after",
+                     "python3 ../forge-design/changed.py --moves", "python3 ../forge-design/motioncount.py . --level auto",
+                     "motioncount.py . --min 8", "python3 ../forge-design/motioncheck.py . --fail-on medium",
+                     "Agent or Task", "git branch --show-current", "git worktree list", "service worker",
+                     "git switch", ".webm"]:
+            self.assertIn(part, self.steps)
+        order = ["## Step 1", "## Step 2: the level", "## Step 3: the concept", "## Step 4: the inventory",
+                 "## Step 5", "## Step 6: build", "## Step 7: accessibility", "## Step 8", "## Step 9", "## Output",
+                 "## Next"]
+        self.assertEqual([self.steps.index(name) for name in order], sorted(self.steps.index(name) for name in order))
+        header = "| screen | moment | job | what is built | the file to change | what reduced motion shows |"
+        self.assertIn(header, self.steps)
+
+
+class ReferenceLevelTests(unittest.TestCase):
+    def setUp(self):
+        self.text = read(REFERENCE)
+
+    def test_has_a_part_per_level_with_its_patterns(self):
+        heads = ["## 7. ", "## 8. Level 3", "## 9. Level 4", "## 10. Level 5", "## 11. The budget per level"]
+        self.assertEqual([self.text.index(head) for head in heads], sorted(self.text.index(head) for head in heads))
+        for head, names in PATTERNS.items():
+            part = self.text[self.text.index(head):]
+            part = part[:part.index("\n## ", 4)] if "\n## " in part[4:] else part
+            for name in names:
+                with self.subTest(pattern=name):
+                    piece = part[part.index("**%s.**" % name):]
+                    piece = piece[:piece.index("\n**", 4)] if "\n**" in piece[4:] else piece
+                    self.assertIn("Reduced", piece)
+                    self.assertIn("Mistake", piece)
+
+    def test_the_budget_has_a_row_per_level(self):
+        budget = self.text[self.text.index("## 11. The budget per level"):]
+        for level, name in enumerate(["Subtle", "Polished", "Expressive", "Showpiece", "Cinematic"], 1):
+            self.assertRegex(budget, r"(?m)^\| %d %s \|" % (level, name))
+
+    def test_no_code_reaches_another_host(self):
+        for language in ["js", "jsx", "html", "css"]:
+            for block in code_blocks(self.text, language):
+                self.assertNotRegex(block, r"https?://|//cdn|unpkg|jsdelivr")
+
+    def node(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node is not installed")
+        return node
+
+    def test_every_script_parses(self):
+        node = self.node()
+        with tempfile.TemporaryDirectory() as folder:
+            for number, block in enumerate(code_blocks(self.text, "js")):
+                path = os.path.join(folder, "block%d.mjs" % number)
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write(block)
+                done = subprocess.run([node, "--check", path], timeout=60, stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE, universal_newlines=True)
+                self.assertEqual(done.returncode, 0, block[:80] + done.stderr)
+
+    def run_scripts(self, mode):
+        node = self.node()
+        with tempfile.TemporaryDirectory() as folder:
+            files = {"tokens.js": block_with(self.text, "// tokens.js"),
+                     "spring.mjs": block_with(self.text, "export function spring("),
+                     "livecount.mjs": block_with(self.text, "export function liveCount("),
+                     "feed.mjs": block_with(self.text, "export function feed(")}
+            files["livecount.mjs"] = files["livecount.mjs"].replace('"./tokens.js"', '"./tokens.mjs"')
+            files["tokens.mjs"] = files.pop("tokens.js")
+            files["browser.cjs"] = LEVEL_BROWSER
+            for name, code in files.items():
+                with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
+                    handle.write(code)
+            done = subprocess.run([node, os.path.join(folder, "browser.cjs"), folder, mode], timeout=60,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return json.loads(done.stdout)
+
+    def test_the_spring_live_count_and_feed_work(self):
+        out = self.run_scripts("moving")
+        for bounce, most in [("0.2", (1.005, 1.03)), ("0.35", (1.04, 1.1)), ("0.6", (1.15, 1.35))]:
+            spring = out["spring " + bounce]
+            self.assertEqual((spring["first"], spring["last"], spring["count"]), (0, 1, 41))
+            self.assertGreater(spring["duration"], 320)  # it settles after one swing
+            self.assertTrue(most[0] < spring["most"] < most[1], spring)
+        self.assertEqual(out["label"], "1,000 catches")  # the screen reader gets the value once
+        self.assertTrue(0 < int(out["after 100ms"].replace(",", "")) < 1000)
+        self.assertEqual(out["new value mid-way starts at"], out["after 100ms"])  # from where it stands
+        self.assertEqual((out["end"], out["frames left"]), ("500", 0))
+        self.assertEqual((out["fetched"], out["used"], out["timers"], out["timers after stop"]),
+                         (["/api/week"], [0.25, 1], 1, 0))
+        self.assertEqual(out["fetched while hidden"], 1)  # nobody looks: no request
+
+    def test_reduced_motion_gives_the_number_at_once(self):
+        out = self.run_scripts("reduced")
+        self.assertEqual((out["after 100ms"], out["end"], out["frames left"]), ("1,000", "500", 0))
 
 
 if __name__ == "__main__":

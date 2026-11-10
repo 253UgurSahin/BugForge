@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check the numbers a dashboard shows, as written down in forge-work/dashboard.md.
 
-forge-design dashboard lists every number of the dashboard in one table under "## Numbers":
+/forge-design dashboard lists every number of the dashboard in one table under "## Numbers":
 
     | number | definition | source | unit | period | compared with | form |
     | --- | --- | --- | --- | --- | --- | --- |
@@ -18,25 +18,38 @@ This script reads that table and reports:
 Empty means nothing, "-", "?", "tbd", "todo", "n/a", "none" or a <placeholder>. A row with
 `forge:allow` in it is not checked. Tables inside code blocks are not read.
 
+--level N (1 to 5, the dashboard level of ../forge/levels.md) also reports, as high: a count of
+numbers that does not fit the level (3 to 5 at level 1, at most 7 at level 2, at most 9 from level
+3; this replaces the medium rule); from level 3, no form cell that names a form that moves or drills
+down ("draws in", "morphs", "animated", "drill-down", "click-through"); and a file without exactly
+one line `Level: N` for that level outside comments and code blocks (`Level: 4 (Showpiece)` is fine).
+From level 4 a 3D form whose cell also names a table is no finding: the table carries the values.
+--level auto reads the dashboard level from forge-work/levels.json (next to DASHBOARD.md when that
+sits in forge-work, else under the current folder), which ../forge/level.py writes. None: exit 2.
+
 Usage:
     python3 dashcheck.py forge-work/dashboard.md                    fail on high or worse
     python3 dashcheck.py forge-work/dashboard.md --fail-on medium   fail on medium findings too
+    python3 dashcheck.py forge-work/dashboard.md --level auto       also check the chosen level
     python3 dashcheck.py forge-work/dashboard.md --json             machine-readable output
 
 --json prints {"file", "numbers": [{"line", "number", "definition", "source", "unit", "period",
 "compared with", "form"}], "findings": [{"rule", "severity", "what", "where", "line", "why",
-"fix"}], "summary": {"numbers", "critical", "high", "medium", "low", "fail_on", "failed"}}.
+"fix"}], "summary": {"numbers", "level" (null without --level), "critical", "high", "medium", "low",
+"fail_on", "failed"}}.
 
 Exit codes:
     0  no finding at or above --fail-on (default: high)
     1  at least one finding at or above --fail-on
     2  the check could not run: the file is missing, unreadable or too big, it has no
        "## Numbers" section, or that section has no table with the columns number, definition,
-       source, unit and form, or the table has no rows. Never a pass.
+       source, unit and form, or the table has no rows; or --level auto found no dashboard level
+       (no forge-work/levels.json, none in it, or it is a link): ask the user. Never a pass.
 """
 
 import argparse
 import json
+import os
 import re
 import sys
 
@@ -60,6 +73,16 @@ FORMS = [  # rule, pattern in the form cell, why it misleads, the better form
      "two small charts under each other on one time axis, or both series indexed to 100"),
 ]
 SPAN = re.compile(r"`[^`]*`|\\\|")  # code spans and escaped pipes: a | inside them does not split a cell
+COUNTS = {1: (3, 5), 2: (1, 7), 3: (1, 9), 4: (1, 9), 5: (1, 9)}  # numbers on screen per dashboard level
+NAMES = {1: ("Subtle", "Subtiel"), 2: ("Polished", "Verzorgd"), 3: ("Expressive", "Expressief"),
+         4: ("Showpiece", "Showpiece"), 5: ("Cinematic", "Cinematisch")}
+MOVES = re.compile(r"\b(?:draw(?:s|n)?[- ](?:in|on)|morph\w*|animat\w*|drill(?:s|ed|ing)?[- ]?(?:down|through)"
+                   r"|clicks?[- ]through)\b", re.IGNORECASE)
+TABLE = re.compile(r"\btables?\b", re.IGNORECASE)
+UNSEEN = re.compile(r"<!--.*?(?:-->|\Z)|^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1|\Z)", re.S | re.M)  # comments, code
+ABOUT = re.compile(r"(?im)^[ \t>#*_]*level[ \t*_]*:.*$")  # a line about the level, decorated or not
+ASK = ("Ask the user how rich the dashboard should be, 1 to 5 (python3 ../forge/level.py show dashboard has "
+       "the table), then record it: python3 ../forge/level.py set dashboard N --said '<their words>'")
 
 
 def cells(line):
@@ -107,8 +130,9 @@ def read_numbers(text):
     return rows, "" if rows else "the table under ## Numbers has no rows: list each number the dashboard shows"
 
 
-def check(rows, path):
-    """The findings for the rows of the Numbers table, in table order."""
+def check(rows, path, level=None, text=""):
+    """The findings for the rows of the Numbers table, in table order; with LEVEL also those of that
+    dashboard level, TEXT being the whole file (for its `Level: N` line)."""
     findings = []
 
     def add(row, rule, severity, what, why, fix):
@@ -141,14 +165,66 @@ def check(rows, path):
                 "nobody can compare more than 5 slices by eye, and the small ones cannot be labelled",
                 "a horizontal bar chart sorted by value; or the top 4 parts plus Other")
         for rule, pattern, why, better in FORMS:
-            if pattern.search(form):
+            if pattern.search(form) and not (rule == "form-3d" and (level or 0) >= 4 and TABLE.search(form)):
                 add(row, rule, "medium", "'%s' is shown as '%s'" % (name, form), why, better)
-    if len(checked) > MAX_NUMBERS:
+    if level is None and len(checked) > MAX_NUMBERS:
         add(checked[MAX_NUMBERS], "too-many-numbers", "medium",
             "%d numbers on one dashboard (at most %d)" % (len(checked), MAX_NUMBERS),
             "with this many numbers nothing stands out, and the ones that drive a decision drown",
             "keep the 5 to 7 that change what the reader does; move the rest to a detail page or a table")
+    if level is not None and rows:
+        findings.extend(level_findings(rows, checked, path, level, text))
     return findings
+
+
+def level_findings(rows, checked, path, level, text):
+    """The findings of the dashboard LEVEL: the count of numbers, a form that moves, the report's line."""
+    (found, (low, high)), first = ([], COUNTS[level]), (checked or rows)[0]
+
+    def add(line, rule, what, why, fix):
+        found.append({"rule": rule, "severity": "high", "what": what, "line": line,
+                      "where": "%s:%d" % (path, line), "why": why, "fix": fix})
+    if not low <= len(checked) <= high:
+        wanted = "%d to %d" % (low, high) if low > 1 else "at most %d" % high
+        add(checked[high]["line"] if len(checked) > high else first["line"], "level-numbers",
+            "%d numbers on a level %d dashboard (%s)" % (len(checked), level, wanted),
+            "the level is a promise both ways: a calm dashboard with too many numbers is not calm, and one "
+            "with too few shows less than the level asks",
+            "keep the %s numbers that change what the reader does; the rest go to a detail page or a table; "
+            "another level is the user's call" % wanted)
+    if level >= 3 and not any(MOVES.search(row["form"]) for row in checked):
+        add(first["line"], "level-form", "no form on this level %d dashboard moves or drills down" % level,
+            "from level 3 charts draw in and morph between periods, and a number clicks through to its rows",
+            "build it, then name it in the form column: 'line, draws in, morphs between periods; drill-down "
+            "to the orders'")
+    seen = UNSEEN.sub(lambda match: "\n" * match.group(0).count("\n"), text.replace("\r\n", "\n"))
+    lines = [(index + 1, line.rstrip()) for index, line in enumerate(seen.split("\n")) if ABOUT.match(line)]
+    names = "|".join(re.escape(name) for name in NAMES[level])  # the same test as ../forge/level.py check
+    if len(lines) != 1 or not re.match(r"Level: *%d(?: *\(?(?i:%s)\)?)?\Z" % (level, names), lines[0][1]):
+        add(lines[0][0] if lines else 1, "level-report",
+            "the report needs exactly one line `Level: %d (%s)` (found: %s)"
+            % (level, NAMES[level][0], " / ".join(line for _, line in lines)[:120] or "none"),
+            "the report must say which level the work was done at, so the gate can check it",
+            "do the work of level %d, then write the one line `Level: %d (%s)` near the top" % (level, level, NAMES[level][0]))
+    return found
+
+
+def level_on_record(path):
+    """The dashboard level in forge-work/levels.json (see the top). ValueError, saying to ask, when there is none."""
+    folder = os.path.dirname(os.path.abspath(path))
+    record = os.path.join(folder if os.path.basename(folder) == "forge-work" else "forge-work", "levels.json")
+    try:
+        if os.path.islink(os.path.dirname(os.path.abspath(record))) or os.path.islink(record):
+            raise ValueError("it is a link, so it was not read: tell the user")
+        if not os.path.isfile(record) or os.path.getsize(record) > MAX_BYTES:
+            raise ValueError("there is no such file (of at most 1 MB)")
+        with open(record, encoding="utf-8", errors="replace") as handle:
+            level = json.load(handle)["dashboard"]["level"]
+        if type(level) is int and 1 <= level <= 5:
+            return level
+        raise ValueError("its dashboard level is %r, not 1 to 5" % (level,))
+    except (OSError, ValueError, LookupError, TypeError, RecursionError) as error:
+        raise ValueError("no dashboard level on record in %s (%s). %s" % (record, error, ASK))
 
 
 def say(text, stream=None):
@@ -164,6 +240,8 @@ def format_human(findings, summary, path):
         lines += ["%-8s  %s" % (item["severity"].upper(), item["what"]), "          where: %s" % item["where"],
                   "          why:   %s" % item["why"], "          fix:   %s" % item["fix"], ""]
     counts = ", ".join("%d %s" % (summary[name], name) for name in SEVERITIES if summary[name]) or "no findings"
+    if summary["level"]:
+        lines.append("Level: %d (%s)" % (summary["level"], NAMES[summary["level"]][0]))
     lines.append("%s: %d number%s, %s." % (path, summary["numbers"], "" if summary["numbers"] == 1 else "s", counts))
     lines.append("FAIL: at least one finding is %s or worse." % summary["fail_on"] if summary["failed"]
                  else "PASS: no finding is %s or worse." % summary["fail_on"])
@@ -177,27 +255,34 @@ def main(argv=None):
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     parser.add_argument("--fail-on", choices=SEVERITIES, default="high",
                         help="exit 1 when a finding is this bad or worse (default: high)")
+    parser.add_argument("--level", choices=["1", "2", "3", "4", "5", "auto"], metavar="N|auto",
+                        help="also check the dashboard level, 1 to 5, or auto: the one in forge-work/levels.json")
     args = parser.parse_args(argv)
+    try:
+        level = level_on_record(args.file) if args.level == "auto" else int(args.level or 0) or None
+    except ValueError as error:
+        say("error: %s The level was not checked, so this is not a pass." % error, sys.stderr)
+        return 2
     try:
         with open(args.file, "rb") as handle:
             data = handle.read(MAX_BYTES + 1)
     except OSError as error:
-        say("error: cannot read %s: %s. forge-design dashboard writes it in Step 1." % (args.file, error.strerror or error),
+        say("error: cannot read %s: %s. /forge-design dashboard writes it in Step 3." % (args.file, error.strerror or error),
             sys.stderr)
         return 2
     problem = "it is larger than %d bytes" % MAX_BYTES if len(data) > MAX_BYTES else (
         "it holds NUL bytes: save it as UTF-8 text" if b"\x00" in data else "")
-    rows = []
+    rows, text = [], data.decode("utf-8-sig", errors="replace")
     if not problem:
-        rows, problem = read_numbers(data.decode("utf-8-sig", errors="replace"))
+        rows, problem = read_numbers(text)
     if problem:
         say("error: %s cannot be checked: %s. The numbers were not checked, so this is not a pass."
             % (args.file, problem), sys.stderr)
         return 2
-    findings = check(rows, args.file)
+    findings = check(rows, args.file, level, text)
     worst = SEVERITIES.index(args.fail_on)
     summary = {name: len([item for item in findings if item["severity"] == name]) for name in SEVERITIES}
-    summary.update(numbers=len(rows), fail_on=args.fail_on,
+    summary.update(numbers=len(rows), level=level, fail_on=args.fail_on,
                    failed=any(SEVERITIES.index(item["severity"]) <= worst for item in findings))
     if args.json:
         numbers = [{key: value for key, value in row.items() if key != "raw"} for row in rows]

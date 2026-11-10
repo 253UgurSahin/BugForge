@@ -1,10 +1,14 @@
 """Tests for forge-design/dashcheck.py: each rule on the ## Numbers table fires and does not fire,
-the exit codes 0, 1 and 2, the JSON shape, and that a table it cannot read is never a pass."""
+the exit codes 0, 1 and 2, the JSON shape, and that a table it cannot read is never a pass. The level
+rules (--level N|auto): the count of numbers, a form that moves from level 3, the report's one
+`Level: N` line, and no level on record is exit 2. And that steps/dashboard.md and dashboard.md say
+what the script and ../forge/levels.json say."""
 
 import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -15,6 +19,9 @@ from _load import ROOT, load, run_cp1252  # noqa: E402
 
 dashcheck = load("forge-design", "dashcheck")
 SCRIPT = os.path.join(ROOT, "forge-design", "dashcheck.py")
+STEPS = os.path.join(ROOT, "forge-design", "steps", "dashboard.md")
+REFERENCE = os.path.join(ROOT, "forge-design", "dashboard.md")
+LEVELS = os.path.join(ROOT, "forge", "levels.json")
 HEADER = "| number | definition | source | unit | period | compared with | form |\n| --- | --- | --- | --- | --- | --- | --- |\n"
 GOOD = [
     "| Revenue | paid orders, refunds taken off | `orders` where status = paid | EUR | this month | last month | tile + line |",
@@ -66,7 +73,7 @@ class Rules(DashCase):
         code, report = self.check(GOOD)
         self.assertEqual((code, report["findings"]), (0, []))
         self.assertEqual(report["summary"], {"critical": 0, "high": 0, "medium": 0, "low": 0, "numbers": 3,
-                                             "fail_on": "high", "failed": False})
+                                             "level": None, "fail_on": "high", "failed": False})
 
     def test_no_definition_no_source_no_unit(self):
         for empty in ("", "-", "?", "TBD", "todo", "n/a", "<what is counted>", "--"):
@@ -236,17 +243,228 @@ class Reading(DashCase):
         self.assertEqual(json.loads(out)["numbers"][0]["number"], "→ \U0001f600 Omzet")
 
 
+MOVING = "line, draws in, morphs between periods; drill-down to the orders"
+
+
+def numbers(count, form="tile"):
+    return [row(number="N%d" % index, form=form) for index in range(count)]
+
+
+class Levels(DashCase):
+    def level(self, rows, level, said="Level: %d\n", *more):
+        """(exit code, report) at --level LEVEL for a dashboard.md with these rows and line SAID."""
+        text = said % level if "%d" in said else said
+        code, out, err = run(self.write(text + page(rows)), "--json", "--level", str(level), *more)
+        self.assertIn(code, (0, 1), err)
+        return code, json.loads(out)
+
+    def level_rules(self, rows, level, said="Level: %d\n"):
+        return [(item["rule"], item["severity"]) for item in self.level(rows, level, said)[1]["findings"]]
+
+    def test_the_count_of_numbers_fits_the_level(self):
+        cases = {1: ([3, 4, 5], [1, 2, 6, 7]), 2: ([1, 5, 7], [8, 9]), 3: ([1, 9], [10, 12]),
+                 4: ([9], [10]), 5: ([9], [10])}
+        for level, (fine, wrong) in cases.items():
+            for count in fine:
+                with self.subTest(level=level, count=count):
+                    self.assertEqual(self.level_rules(numbers(count, MOVING), level), [])
+            for count in wrong:
+                with self.subTest(level=level, count=count):
+                    code, report = self.level(numbers(count, MOVING), level)
+                    self.assertEqual([(item["rule"], item["severity"]) for item in report["findings"]],
+                                     [("level-numbers", "high")], "and no too-many-numbers next to it")
+                    self.assertEqual((code, report["summary"]["level"]), (1, level))
+                    self.assertIn("%d numbers on a level %d dashboard" % (count, level), report["findings"][0]["what"])
+        self.assertIn("3 to 5", self.level(numbers(2), 1)[1]["findings"][0]["what"])
+        self.assertEqual(self.level(numbers(12, MOVING), 3)[1]["findings"][0]["line"], 12 + 9)
+
+    def test_without_a_level_the_old_rule_holds(self):
+        self.assertEqual(self.rules(numbers(2)), [])
+        self.assertEqual(self.rules(numbers(10)), [("too-many-numbers", "medium")])
+
+    def test_from_level_3_a_form_moves_or_drills_down(self):
+        for level in (1, 2):
+            self.assertEqual(self.level_rules(numbers(4), level), [], level)
+        for level in (3, 4, 5):
+            with self.subTest(level=level):
+                code, report = self.level(numbers(4), level)
+                self.assertEqual([item["rule"] for item in report["findings"]], ["level-form"])
+                self.assertEqual(code, 1)
+                self.assertIn("form column", report["findings"][0]["fix"])
+        for form in ("line, draws in", "bars, drawn in", "line, draw-on", "area that morphs", "bars, morphing",
+                     "animated line", "tile, drill-down to the rows", "tile, drills down to orders",
+                     "table, click-through", "bars, clicks through to the region", "tile, drill through"):
+            with self.subTest(form=form):
+                self.assertEqual(self.level_rules(numbers(3) + [row(form=form)], 3), [])
+        for form in ("line", "drawer with a table", "tile, live", "bars, drawing", "tile (click)"):
+            with self.subTest(form=form):
+                self.assertEqual(self.level_rules([row(form=form)], 3), [("level-form", "high")])
+        allowed = [row(form=MOVING + " <!-- forge:allow -->"), row(form="tile")]
+        self.assertEqual(self.level_rules(allowed, 3), [("level-form", "high")], "a skipped row does not count")
+
+    def test_the_report_says_the_level_once(self):
+        for said in ("Level: 3", "Level: 3 (Expressive)", "Level: 3 (Expressief)", "Level: 3 Expressive",
+                     "Level:3", "Level: 3  "):
+            with self.subTest(said=said):
+                self.assertEqual(self.level_rules(numbers(3, MOVING), 3, said + "\n"), [])
+        for said in ("", "Level: 4", "Level: 3 (Showpiece)", "Level: 3\nLevel: 3", "Level: 3 or 4",
+                     "## Level: 3", "**Level:** 3", "level: 3", "<!-- Level: 3 -->", "```\nLevel: 3\n```"):
+            with self.subTest(said=said):
+                code, report = self.level(numbers(3, MOVING), 3, said + "\n")
+                self.assertEqual([(item["rule"], item["severity"]) for item in report["findings"]],
+                                 [("level-report", "high")])
+                self.assertIn("Level: 3 (Expressive)", report["findings"][0]["what"])
+        finding = self.level(numbers(3, MOVING), 3, "Level: 2\n")[1]["findings"][0]
+        self.assertEqual(finding["line"], 1)
+        self.assertIn("found: Level: 2", finding["what"])
+
+    def test_from_level_4_a_3d_view_next_to_a_table_is_no_finding(self):
+        depth = "bars with depth (3D, CSS) + table, draws in"
+        self.assertEqual(self.level_rules([row(form=depth)], 4), [])
+        self.assertEqual(self.level_rules([row(form="3D field (datascape) and a table, draws in")], 5), [])
+        self.assertEqual(self.level_rules([row(form="3D bars, draws in")], 4), [("form-3d", "medium")])
+        self.assertEqual(self.level_rules([row(form=depth)], 3), [("form-3d", "medium")])
+        self.assertEqual(self.rules([row(form=depth)]), [("form-3d", "medium")])
+        self.assertEqual(self.level_rules([row(form="gauge and a table, draws in")], 5), [("form-gauge", "medium")])
+
+    def test_the_human_report_names_the_level(self):
+        code, out, _ = run(self.write(page(numbers(4, MOVING), before="Level: 4 (Showpiece)\n\n")), "--level", "4")
+        self.assertEqual(code, 0)
+        self.assertIn("Level: 4 (Showpiece)", out)
+        self.assertNotIn("Level:", run(self.write(page(GOOD)))[1])
+        with self.assertRaises(SystemExit) as caught, contextlib.redirect_stderr(io.StringIO()):
+            dashcheck.main(["a.md", "--level", "6"])
+        self.assertEqual(caught.exception.code, 2)
+
+
+class LevelOnRecord(DashCase):
+    def project(self, record, rows=None, said="Level: 4\n\n"):
+        """forge-work/dashboard.md and, unless RECORD is None, forge-work/levels.json holding RECORD."""
+        work = os.path.join(self.folder, "forge-work")
+        os.makedirs(work, exist_ok=True)
+        if record is not None:
+            with open(os.path.join(work, "levels.json"), "w", encoding="utf-8") as handle:
+                handle.write(record if isinstance(record, str) else json.dumps(record))
+        path = os.path.join(work, "dashboard.md")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(page(rows or numbers(4, MOVING), before=said))
+        return path
+
+    def test_auto_reads_the_dashboard_level(self):
+        record = {"look": {"level": 2, "said": "2", "at": "x"}, "dashboard": {"level": 4, "said": "4", "at": "x"}}
+        code, out, err = run(self.project(record), "--level", "auto", "--json")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(json.loads(out)["summary"]["level"], 4)
+        code, out, _ = run(self.project(record, rows=numbers(4)), "--level", "auto", "--json")
+        self.assertEqual([item["rule"] for item in json.loads(out)["findings"]], ["level-form"])
+
+    def test_auto_reads_forge_work_under_the_current_folder_for_a_file_elsewhere(self):
+        self.project({"dashboard": {"level": 1, "said": "1", "at": "x"}})
+        other = self.write(page(numbers(4), before="Level: 1 (Subtiel)\n\n"), name="elsewhere.md")
+        here = os.getcwd()
+        os.chdir(self.folder)
+        self.addCleanup(os.chdir, here)
+        code, out, err = run(other, "--level", "auto", "--json")
+        self.assertEqual((code, json.loads(out)["summary"]["level"]), (0, 1), err)
+
+    def test_no_level_on_record_is_exit_2_and_ask_the_user(self):
+        here = os.getcwd()
+        os.chdir(self.folder)
+        self.addCleanup(os.chdir, here)
+        for record in (None, {"look": {"level": 4}}, {"dashboard": {"level": 9}}, {"dashboard": {"level": "4"}},
+                       {"dashboard": {"level": True}}, "{not json", "[]", "\"x\"", "x" * (dashcheck.MAX_BYTES + 1)):
+            with self.subTest(record=str(record)[:40]):
+                if record is None and os.path.exists(os.path.join(self.folder, "forge-work", "levels.json")):
+                    os.remove(os.path.join(self.folder, "forge-work", "levels.json"))
+                code, out, err = run(self.project(record), "--level", "auto")
+                self.assertEqual((code, out), (2, ""))
+                for part in ("no dashboard level on record", "Ask the user", "level.py set dashboard", "not a pass"):
+                    self.assertIn(part, err)
+
+    def test_a_linked_record_is_not_read(self):
+        target = os.path.join(self.folder, "real.json")
+        with open(target, "w", encoding="utf-8") as handle:
+            json.dump({"dashboard": {"level": 4}}, handle)
+        path = self.project(None)
+        try:
+            os.symlink(target, os.path.join(self.folder, "forge-work", "levels.json"))
+        except (OSError, NotImplementedError):
+            self.skipTest("this system cannot make links")
+        code, _, err = run(path, "--level", "auto")
+        self.assertEqual(code, 2)
+        self.assertIn("link", err)
+
+
+def read(path):
+    with open(path, encoding="utf-8") as handle:
+        return handle.read()
+
+
 class SkillAgrees(unittest.TestCase):
-    """The table the skill tells Claude to write is the table this script reads."""
+    """The table the skill tells Claude to write is the table this script reads, and the steps file and
+    the reference say what the levels say."""
+
+    def setUp(self):
+        self.steps = read(STEPS)
 
     def test_the_skill_shows_the_same_columns(self):
-        with open(os.path.join(ROOT, "forge-design", "steps", "dashboard.md"), encoding="utf-8") as handle:
-            skill = handle.read()
+        skill = self.steps
         self.assertIn("| " + " | ".join(dashcheck.COLUMNS) + " |", skill)
         example = skill[skill.index("```markdown"):].split("```")[1].replace("markdown\n", "", 1)
         rows, problem = dashcheck.read_numbers("## Numbers\n\n" + example)
         self.assertEqual((problem, len(rows)), ("", 1))
         self.assertEqual(dashcheck.check(rows, "SKILL.md"), [])
+        self.assertEqual(dashcheck.check(rows, "SKILL.md", 3, "Level: 3\n"), [], "the example moves")
+
+    def test_says_which_skill_it_is_part_of_and_where_the_rules_are(self):
+        top = "\n".join(self.steps.splitlines()[:6])
+        for part in ["`/forge-design`", "`SKILL.md`", "`../forge/rules.md`", "section 9", "section 10"]:
+            self.assertIn(part, top)
+        self.assertLessEqual(len(self.steps.splitlines()), 240)
+        for clumsy in ("forge-design design", "forge-design dashboard's", "forge-check test's"):
+            self.assertNotIn(clumsy, self.steps)
+
+    def test_reads_records_and_asks_for_the_level(self):
+        for part in ["python3 ../forge/level.py get dashboard", "python3 ../forge/level.py show dashboard",
+                     "python3 ../forge/level.py set dashboard", "--said '", "ONE question", "auto mode too",
+                     "python3 ../forge/level.py check dashboard --report forge-work/dashboard.md", "`Level: N",
+                     "python3 ../forge-design/dashcheck.py forge-work/dashboard.md --level auto"]:
+            self.assertIn(part, self.steps)
+
+    def test_the_level_table_says_what_levels_json_says(self):
+        with open(LEVELS, encoding="utf-8") as handle:
+            levels = json.load(handle)["domains"]["dashboard"]["levels"]
+        rows = {int(match.group(1)): match.group(0) for match in re.finditer(r"(?m)^\| (\d) \|.*$", self.steps)}
+        self.assertEqual(sorted(rows), [1, 2, 3, 4, 5])
+        for level in levels:
+            with self.subTest(level=level["level"]):
+                row = rows[level["level"]]
+                self.assertTrue(row.startswith("| %d | %s | %s |" % (level["level"], level["name"], level["nl"])), row)
+                for item in level["includes"]:
+                    self.assertIn(item, row)
+                low, high = dashcheck.COUNTS[level["level"]]
+                self.assertIn("%d to %d" % (low, high) if low > 1 else "up to %d" % high, row)
+
+    def test_shows_the_result_and_proves_it(self):
+        for part in ["git branch --show-current", "git worktree list", "service worker", "`Served:`",
+                     "../forge-design/shots.example.mjs", "--frames", "--video",
+                     "python3 ../forge-design/changed.py forge-work/dashboard/before forge-work/dashboard/after",
+                     "python3 ../forge-design/changed.py --moves", "VISIBLE CHANGE", "git switch",
+                     "../forge-design/scenes/datascape.js", "npm install three", "lazyScene", "setData",
+                     "second user", "show as table"]:
+            self.assertIn(part, self.steps)
+        order = ["## Step 1", "## Step 2: the level", "## Step 3", "## Step 4", "## Step 5", "## Step 6",
+                 "## Step 7", "## Step 8", "## Step 9", "## Step 10", "## Output", "## Next"]
+        self.assertEqual([self.steps.index(name) for name in order], sorted(self.steps.index(name) for name in order))
+        for section in ("Audience", "Numbers", "Layout", "Charts", "States", "Checks"):
+            self.assertIn("`## %s`" % section, self.steps[self.steps.index("## Output"):])
+
+    def test_the_reference_shows_each_level_the_hud_and_the_data_scene(self):
+        reference = read(REFERENCE)
+        for part in ["## 12. What each level looks like", "## 13. The HUD composition (level 4)",
+                     "## 14. The data scene (level 5)", "datascape.js", "setData", "onHover", "aria-keyshortcuts",
+                     "prefers-reduced-motion", "data-scene"]:
+            self.assertIn(part, reference)
 
 
 if __name__ == "__main__":

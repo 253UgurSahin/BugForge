@@ -1,13 +1,16 @@
 # Design brief: {{app name}}
 
+Concept: {{the letter and name the user picked, such as B (Open book), with the colours of A}}. The user said: "{{their words, as they typed them}}"
+Level: {{the look level on record (python3 ../forge/level.py get look), as a number and its name: 4 (Showpiece)}}
 Date: {{YYYY-MM-DD}}
 Kind: {{new app | redesign of an app that exists}}
-Decided by: {{the user, in their words | forge in auto mode, to change on request}}
 
-<!-- Replace every {{...}}, then delete this comment. The brief is one page: short lines, real
-     choices. A line that would fit any app ("clean and modern") is not a choice: write what this
-     app does that another would not. Clone mode: the feel comes from this brief, the measurements
-     from the original's screenshots, the colours from forge-design brand. -->
+<!-- Replace every {{...}}, then delete this comment. Fill it in from the concept the user picked on
+     the board (forge-work/design/concepts/): the brief carries that concept through every choice.
+     One page: short lines, real choices. A line that would fit any app ("clean and modern") is not
+     a choice: write what this app does that another would not. Clone mode: the measurements come
+     from the original's screenshots, the feel and the colours from the concept, never from the
+     original's look. -->
 
 ## Who and where
 
@@ -20,8 +23,8 @@ Decided by: {{the user, in their words | forge in auto mode, to change on reques
 
 - One sentence, taken from the product's own world (its material, tool, place or ritual), that every
   later choice can be tested against: {{an appointment book that lies open on the counter}}
-- What the user likes, and the principle to learn from each (never the pixels):
-  {{app or site: what exactly, such as "how little it shows per screen"}}
+- Where it comes from in `forge-work/design/world.md`: {{the things of its world it uses}}
+- What the user notices first: {{the week as a strip of paper tabs that slides open}}
 
 ## Type
 
@@ -50,9 +53,10 @@ Decided by: {{the user, in their words | forge in auto mode, to change on reques
 - Icons: {{set, licence, stroke width}}. Pictures: {{none | the user's own photos | drawn from the data itself}}
 - Empty states: {{what they show and say}}
 
-## Motion
+## Motion and depth, at the level
 
 - {{calm | lively | technical}}: what moves, and what it explains. Detail: /forge-design motion
+- What the level brings in this concept: {{level 3: the day cards tilt as you scroll; level 4 and 5: which scene of the kit, and what it becomes here}}
 
 ## Signature
 
