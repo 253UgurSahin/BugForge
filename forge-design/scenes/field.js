@@ -38,13 +38,13 @@
  * { still: true } in the page at the size you need and take a screenshot.
  *
  * Cost: one draw call. The vertex shader evaluates up to two formations and two steps of curl noise
- * (six simplex lookups) per point; in low quality one step (three lookups). 150 000 points cost a
- * desktop graphics chip about 1 ms; a phone gets 60 000 at most. The fragment work is small round
- * points with no textures. On a light page only 55% of the points are drawn.
+ * (six simplex lookups) per point; in low quality one step (three lookups). 150 000 points are
+ * meant for a desktop graphics chip; a phone starts at 60 000 and the stage steps down when slow. The fragment work is small round
+ * points with no textures. On a light page only 55% of the points are drawn, with no gas or soft discs.
  */
 import * as THREE from "three";
 import { createStage } from "./stage.js";
-import { stageUniforms, common, curl, oklab, pointSize, pointSprite, grain } from "./glsl.js";
+import { stageUniforms, common, curl, pointSize, pointSprite, grain } from "./glsl.js";
 
 const FORMATIONS = ["cloud", "ring", "wave", "grid"];
 const COUNTS = [20000, 60000, 150000];   // low, medium, high
@@ -56,7 +56,6 @@ const vertexShader = `
 ${stageUniforms}
 ${common}
 ${curl}
-${oklab}
 ${pointSize}
 attribute vec4 aSeed;         // four random numbers per point; x and y are tied to its grid site
 uniform float uSpeed, uSpread, uSize, uAlpha, uWake, uDataOn, uTanHalf, uFocus;
@@ -92,7 +91,7 @@ vec3 cloud(vec4 s, float t, inout float fade) {
   vec3 across = vec3(0.3 * cos(u * 3.0), cos(twist), sin(twist));
   vec3 thick = vec3(0.0, -sin(twist), cos(twist));
   float width = mix(0.12, 0.95, smoothstep(0.0, 0.75, u)) * (0.55 + 0.9 * dataAt(u));
-  return spine + width * (across * tri(s.y, s.z) + thick * 0.22 * tri(rnd(s, 1u), rnd(s, 2u)));
+  return spine + width * (across * tri(s.y, s.z) + thick * 0.12 * tri(rnd(s, 1u), rnd(s, 2u)));
 }
 // RING: a tilted ring of points that orbit slowly, thicker in a few places along the way round.
 vec3 ring(vec4 s, float t, inout float fade) {
@@ -104,11 +103,11 @@ vec3 ring(vec4 s, float t, inout float fade) {
 }
 // WAVE: a sheet seen from a little above; travelling swells whose height follows the data.
 vec3 wave(vec4 s, float t, inout float fade) {
-  float x = (s.x - 0.5) * 7.2, z = (s.y - 0.5) * 4.4;
+  float x = (s.x - 0.5) * 6.6 + 0.3, z = (s.y - 0.5) * 4.4;
   float amp = 0.25 + 1.1 * dataAt(s.x);
   float y = amp * (0.32 * sin(x * 1.05 + z * 0.35 - t * 0.55) + 0.14 * sin(x * 2.2 - z * 1.3 - t * 0.8))
           + 0.18 * snoise(vec3(x * 0.35, z * 0.35, t * 0.06));
-  fade = smoothstep(0.0, 0.08, s.x) * smoothstep(1.0, 0.92, s.x) * (1.0 - 0.6 * smoothstep(0.6, 1.0, abs(s.y - 0.5) * 2.0));
+  fade = smoothstep(0.0, 0.2, s.x) * smoothstep(1.0, 0.92, s.x) * (1.0 - 0.6 * smoothstep(0.6, 1.0, abs(s.y - 0.5) * 2.0));
   return turnX(0.32) * vec3(x, y - 0.1, z * 0.9);
 }
 // GRID: every point belongs to a lattice site (the position attribute) and sits close round it,
@@ -186,7 +185,7 @@ void main() {
   float alpha = uAlpha * fade / (grow * grow) * 1.8 * min(1.0, pow(pixels / least, 2.0));
   gl_PointSize = max(pixels, least);
   alpha *= 1.0 - 0.65 * smoothstep(uFocus + 0.5, uFocus + 5.5, depth);
-  alpha *= (dust ? mix(0.3, 0.55, uDark) : 1.0) * (gas ? mix(0.045, 0.09, uDark) : 1.0) * (s.w > 0.988 ? 2.2 : 1.0) * (0.8 + 0.2 * sin(t * 1.3 + s.w * 60.0));
+  alpha *= (dust ? mix(0.15, 0.55, uDark) : 1.0) * (gas ? 0.09 * uDark : 1.0) * (s.w > 0.988 ? 2.2 : 1.0) * (0.8 + 0.2 * sin(t * 1.3 + s.w * 60.0));
 
   // Calm behind the headline: points in its box show at a quarter (soft edges, by screen position).
   vec2 screen = gl_Position.xy / gl_Position.w;
@@ -196,13 +195,12 @@ void main() {
 
   // Colour: accent on the left of the volume, second accent on the right. Each point mostly takes
   // one of the two (a random shift decides where it changes), so the middle is a mingling of both
-  // colours and never the grey a half-and-half mix of two opposite colours gives.
-  float hue = smoothstep(0.38, 0.62, (p.x + 3.2) / 6.4 + 0.45 * (rnd(s, 4u) - 0.5));
-  vec3 lab = linearToOklab(mixOklab(uAccent, uAccent2, hue));
-  lab.x *= mix(0.8, 1.0, uDark);                         // ink on a light page: a shade deeper
-  vColor = max(oklabToLinear(lab), 0.0);
+  // colours and never the grey a half-and-half mix of two opposite colours gives. On a light page
+  // the ink is a shade deeper (0.62 in linear light is about 85% of the lightness).
+  float hue = smoothstep(0.4, 0.6, (p.x + 3.2) / 6.4 + 0.45 * (rnd(s, 4u) - 0.5));
+  vColor = mix(uAccent, uAccent2, hue) * mix(0.62, 1.0, uDark);
   vAlpha = clamp(alpha, 0.0, 1.0);
-  vBlur = gas ? 2.0 : blur;
+  vBlur = gas ? 2.0 : blur * uDark;   // on a light page no soft discs and no gas: they read as smudges
 }`;
 
 const fragmentShader = `
@@ -229,7 +227,7 @@ const number = (value, fallback, low, high) =>
 
 export function mount(container, options = {}) {
   const settings = {
-    count: number(options.count, 0, 0, 300000),
+    count: options.count ? number(options.count, 0, 2000, 300000) : 0,
     formation: pick(options.formation, FORMATIONS, "cloud"),
     speed: number(options.speed, 1, 0, 4),
     spread: number(options.spread, 1, 0.2, 2.5),
@@ -261,7 +259,7 @@ export function mount(container, options = {}) {
   stage.scene.add(group);
 
   let count = 0, fit = 1, baseSize = 0.016, dataOn = 0, dataOnGoal = 0, wake = 0;
-  const drift = new THREE.Vector2(), lastPointer = new THREE.Vector2();
+  const drift = new THREE.Vector2(), lastPointer = new THREE.Vector2(), moved = new THREE.Vector2();
 
   // Brightness: many points share the light, few points each carry more; the light page less again.
   function setAlpha() {
@@ -290,7 +288,7 @@ export function mount(container, options = {}) {
     geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 4));
     points.geometry.dispose();
     points.geometry = geometry;
-    material.defines.CURL_STEPS = 2;
+    material.defines.CURL_STEPS = quality.name === "low" ? 1 : 2;
     uniforms.uSize.value = baseSize * quality.pick(1.12, 1.05, 1);   // fewer points: each a little larger
     material.needsUpdate = true;
     setAlpha();
@@ -333,7 +331,7 @@ export function mount(container, options = {}) {
     const wakeGoal = p.inside && !still ? Math.min(1, 0.6 + 0.4 * p.speed) : 0;
     wake = still ? wakeGoal : THREE.MathUtils.damp(wake, wakeGoal, 2.5, delta);
     uniforms.uWake.value = wake;
-    const moved = new THREE.Vector2(p.x - lastPointer.x, p.y - lastPointer.y).clampLength(0, 0.05).multiplyScalar(20);
+    moved.set(p.x - lastPointer.x, p.y - lastPointer.y).clampLength(0, 0.05).multiplyScalar(20);   // which way, 0..1
     drift.lerp(moved, still ? 1 : 1 - Math.exp(-delta * 3));
     lastPointer.set(p.x, p.y);
     uniforms.uDrift.value.copy(still ? drift.set(0, 0) : drift);

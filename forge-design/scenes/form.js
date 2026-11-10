@@ -37,9 +37,10 @@
  * until the first frame and again when WebGL is missing. Make it by mounting with { still: true }
  * at the size of the hero and taking a screenshot: that is the reduced-motion frame.
  *
- * Cost: one draw call of thin strips (high: 160 strands x 340 segments, about 110k vertices, each
- * reading 3D simplex noise twice) and one of a dozen points. Low: 64 x 150. No textures, no
- * render targets. Pauses itself off screen (stage.js).
+ * Cost: one draw call of camera-facing strips and one of a dozen points. High: 160 strands x 440
+ * segments (about 140k vertices, each reading 3D simplex noise twice) with a soft glow; medium
+ * 120 x 340; low 80 x 260 and no glow, which doubles the pixels drawn. No textures, no render
+ * targets. It pauses off screen and in a hidden tab (stage.js).
  */
 import * as THREE from "three";
 import { createStage } from "./stage.js";
@@ -52,7 +53,7 @@ import { stageUniforms, common, simplex3D, grain } from "./glsl.js";
 const SHAPES = {
   ring: { knot: [1, 2, 1.4, 0.14], tube: [0.34, 0.05, 0, 0.5], bend: 1.0, tilt: 1.0 },
   knot: { knot: [2, 3, 0.98, 0.46], tube: [0.25, 0.25, 2, 0], bend: 1.0, tilt: 0.45 },
-  coil: { knot: [1, 15, 1.25, 0.24], tube: [0.07, 0.07, 1, 0.35], bend: 0.35, tilt: 1.0 },
+  coil: { knot: [1, 18, 1.25, 0.17], tube: [0.065, 0.065, 1, 0], bend: 0.4, tilt: 0.95 },
   star: { knot: [2, 5, 1.0, 0.42], tube: [0.17, 0.17, 3, 0], bend: 0.8, tilt: 0.5 },
   bloom: { knot: [3, 2, 0.92, 0.56], tube: [0.22, 0.22, 1, 0], bend: 1.0, tilt: 0.6 },
 };
@@ -63,18 +64,18 @@ const surface = `
 ${stageUniforms}
 ${common}
 ${simplex3D}
-uniform vec4 uKnot[3];
-uniform vec4 uTube[3];
+uniform vec4 uKnot[3], uTube[3];
 uniform vec3 uWeights;   // how much of each shape: they add up to 1
-uniform float uBend;
-uniform float uData[${DATA_SLOTS}];
-uniform float uSwell;    // 0 without data
-uniform float uClock;    // seconds times speed
+uniform float uData[${DATA_SLOTS}], uSwell;   // uSwell: 0 without data
+uniform float uClock, uBend;                  // uClock: seconds times speed
 uniform vec3 uSeed;
+// The data along the loop, read between its slots with a Catmull-Rom curve: smooth, no kinks.
 float dataAt(float s) {
-  float x = fract(s) * float(${DATA_SLOTS});
+  const int n = ${DATA_SLOTS};
+  float x = fract(s) * float(n), f = fract(x);
   int i = int(floor(x));
-  return mix(uData[i], uData[(i + 1) % ${DATA_SLOTS}], fract(x));
+  float a = uData[(i + n - 1) % n], b = uData[i], c = uData[(i + 1) % n], d = uData[(i + 2) % n];
+  return b + 0.5 * f * (c - a + f * (2.0 * a - 5.0 * b + 4.0 * c - d + f * (3.0 * (b - c) + d - a)));
 }
 // The noise is read on a small circle that goes round once per breath (8 seconds), so the bending
 // moves and comes back to where it was.
@@ -86,17 +87,24 @@ vec3 noiseAt() {
 // skin returns the direction from the tube's core line to the point: the surface's normal.
 vec3 strandPoint(float s, vec4 strand, out vec3 skin) {
   float t = s * TAU;
-  vec3 c = vec3(0.0), v = vec3(0.0);
+  // The knots are mixed as distance from the axis, angle round it and height, not as points:
+  // a plain mix of two knots can pass through the axis mid-morph, and crumple there.
+  float rho = 0.0, turn = 0.0, z = 0.0, dRho = 0.0, dZ = 0.0;
   vec4 tube = vec4(0.0);
   for (int i = 0; i < 3; i++) {
-    // The knot's core line and its direction (the derivative, worked out by hand), mixed by weight.
     vec4 k = uKnot[i];
-    float w = uWeights[i], a = k.x * t, b = k.y * t, ring = k.z + k.w * cos(b);
-    c += w * vec3(ring * cos(a), ring * sin(a), k.w * sin(b));
-    v += w * vec3(-k.w * k.y * sin(b) * cos(a) - ring * k.x * sin(a),
-                  -k.w * k.y * sin(b) * sin(a) + ring * k.x * cos(a), k.w * k.y * cos(b));
+    float w = uWeights[i], b = k.y * t;
+    rho += w * (k.z + k.w * cos(b));
+    dRho -= w * k.w * k.y * sin(b);
+    turn += w * k.x;
+    z += w * k.w * sin(b);
+    dZ += w * k.w * k.y * cos(b);
     tube += w * uTube[i];
   }
+  vec2 around = vec2(cos(turn * t), sin(turn * t));
+  vec3 c = vec3(rho * around, z);
+  // The direction of the line: its derivative along t, worked out by hand.
+  vec3 v = vec3(dRho * around + rho * turn * vec2(-around.y, around.x), dZ);
   // A frame that travels with the line: along it (T), away from the axis (N) and across (B).
   vec3 T = normalize(v);
   vec3 B = normalize(cross(T, normalize(vec3(c.xy, 0.0))));
@@ -108,7 +116,7 @@ vec3 strandPoint(float s, vec4 strand, out vec3 skin) {
   c += (N * n.x * 0.2 + B * n.w * 0.035) * uBend;
   // Breathing: everything swells a little, once every 8 seconds; data swells it where it is high.
   float breath = sin(uClock * TAU / 8.0);
-  float swell = (1.0 + 0.07 * breath + 0.09 * n.z) * (1.0 + uSwell * (dataAt(s) - 0.5) * 1.3);
+  float swell = (1.0 + 0.07 * breath + 0.09 * n.z) * (1.0 + uSwell * (dataAt(s) - 0.5) * 1.8);
   // Round the tube: the strand's angle grows along the loop, so it winds as a helix. The section is
   // an ellipse (a flat band for the ring) that may itself turn along the loop.
   float angle = strand.x + t * (tube.z + strand.z);
@@ -118,6 +126,13 @@ vec3 strandPoint(float s, vec4 strand, out vec3 skin) {
 }
 `;
 
+// Calm where the headline is: fade the form out toward the side of the screen away from it.
+const calm = `
+uniform vec4 uCalm;      // xy: toward where the form sits on screen, zw: the fade from calm to full
+float calmAt(vec2 pixel) {
+  return mix(0.08, 1.0, smoothstep(uCalm.z, uCalm.w, dot(pixel / uResolution - 0.5, uCalm.xy) + 0.5));
+}`;
+
 const strandVertex = `
 ${surface}
 attribute vec2 aLocal;   // x: 0..1 along the strand, y: -1 or 1, the two edges of the ribbon
@@ -125,13 +140,10 @@ attribute vec4 aStrand;
 attribute vec3 aSpan;    // where on the loop it starts, how much of the loop it covers, its colour
 uniform float uWidth;    // world units
 uniform vec2 uFade;      // depth where the form is nearest and farthest
-uniform float uIntensity;
+uniform float uIntensity;  // brightness times density: a thin tube packs its strands tighter
 uniform float uHalo;     // pixels of soft glow on each side, on dark only
-varying float vAcross;   // pixels from the middle of the ribbon
-varying float vCore;     // half the line's width in pixels
-varying float vAlpha;
-varying float vPulse;
-varying float vKind;
+// vAcross: pixels from the middle of the ribbon; vCore: half the line's width in pixels.
+varying float vAcross, vCore, vAlpha, vPulse, vKind;
 void main() {
   float s = aSpan.x + aLocal.x * aSpan.y;
   vec3 skin, unused;
@@ -143,18 +155,21 @@ void main() {
   // The ribbon faces the camera: push the two edges apart across the line's direction on screen.
   vec2 along = (c1.xy / c1.w - c0.xy / c0.w) * uResolution;
   vec2 across = normalize(vec2(-along.y, along.x) + 1e-6);
-  // A pulse: a short bright stretch that runs the strand's length every few seconds.
+  // One strand in ten carries a pulse that runs its length every 11 seconds: a comet with a sharp
+  // head and a tail that fades behind it.
   float pulse = 0.0;
-  if (fract(aStrand.w * 7.31) < 0.075) {
-    float at = fract(uClock * 0.11 + aStrand.w * 3.7) * 1.4 - 0.2;
-    pulse = exp(-pow((aLocal.x - at) / 0.035, 2.0));
+  if (fract(aStrand.w * 7.31) < 0.1) {
+    float x = aLocal.x - (fract(uClock * 0.09 + aStrand.w * 3.7) * 1.5 - 0.25);
+    pulse = x > 0.0 ? exp(-pow(x / 0.012, 2.0)) : exp(x / 0.08);
   }
   // Ends taper; data and pulses widen. Width follows depth like a real thread, but never under
   // about a pixel: a thinner line would flicker, so it gets fainter instead.
   float depth = -m0.z;
   float taper = sqrt(sin(PI * aLocal.x));
   float swell = 1.0 + uSwell * (dataAt(s) - 0.5) * 1.6;
-  float pixels = uWidth * swell * (1.0 + 1.2 * pulse) * taper * projectionMatrix[1][1] * uResolution.y * 0.5 / depth;
+  float far = smoothstep(uFade.x, uFade.y, depth);   // 0 in front, 1 at the back
+  float pixels = uWidth * swell * (1.0 + 0.8 * pulse) * mix(1.25, 0.75, far) * taper
+               * projectionMatrix[1][1] * uResolution.y * 0.5 / depth;
   float core = max(pixels, uPixelRatio);
   float extent = core * 0.5 + uPixelRatio + uDark * uHalo * 1.8 * uPixelRatio; // room for the soft edge and glow
   c0.xy += across * aLocal.y * extent * 2.0 / uResolution * c0.w;
@@ -164,7 +179,6 @@ void main() {
   // Brighter where the surface turns away (its normal across the view): the rims of the tube.
   vec3 normal = normalize(normalMatrix * skin);
   float rim = 1.0 - abs(dot(normal, normalize(-m0.xyz)));
-  float far = smoothstep(uFade.x, uFade.y, depth);   // 0 in front, 1 at the back
   vAlpha = uIntensity * (pixels / core) * mix(0.3, 1.0, rim * rim) * mix(1.0, 0.18, far)
          * (0.6 + 0.4 * swell) * smoothstep(0.0, 0.18, aLocal.x) * smoothstep(1.0, 0.82, aLocal.x);
   vPulse = pulse * (1.0 - 0.6 * far);
@@ -175,22 +189,17 @@ const strandFragment = `
 ${stageUniforms}
 ${grain}
 uniform float uHalo;
-uniform vec4 uCalm;      // xy: toward where the form sits on screen, z..w: the fade from calm to full
-varying float vAcross;
-varying float vCore;
-varying float vAlpha;
-varying float vPulse;
-varying float vKind;
+${calm}
+varying float vAcross, vCore, vAlpha, vPulse, vKind;
 void main() {
   float d = abs(vAcross);
   float lineCover = 1.0 - smoothstep(vCore - 0.5 * uPixelRatio, vCore + 0.5 * uPixelRatio, d);
   float glow = uDark * 0.16 * exp(-pow(d / (max(uHalo, 0.01) * uPixelRatio), 2.0)) * step(0.01, uHalo);
-  vec2 uv = gl_FragCoord.xy / uResolution - 0.5;
-  float calm = mix(0.08, 1.0, smoothstep(uCalm.z, uCalm.w, dot(uv, uCalm.xy) + 0.5));
+  float calm = calmAt(gl_FragCoord.xy);
   vec3 ink = vKind > 0.5 ? uAccent2 : uAccent;
   // On dark, a pulse runs white-hot toward the text colour; on light it is a darker, denser stroke.
   vec3 color = mix(ink, mix(ink, uText, mix(0.75, 0.55, uDark)), vPulse);
-  float alpha = (lineCover + glow) * vAlpha * calm * (1.0 + vPulse * mix(1.2, 3.0, uDark)) * (1.0 + vKind * 0.5);
+  float alpha = (lineCover + glow) * vAlpha * calm * (1.0 + vPulse * mix(1.5, 4.0, uDark)) * (1.0 + vKind * 0.6 * uDark);
   gl_FragColor = vec4(color, min(alpha, 1.0));
   #include <colorspace_fragment>
   gl_FragColor.rgb += dither(gl_FragCoord.xy) * gl_FragColor.a;
@@ -215,7 +224,7 @@ void main() {
 const nodeFragment = `
 ${stageUniforms}
 ${grain}
-uniform vec4 uCalm;
+${calm}
 uniform float uIntensity;
 varying float vAlpha;
 void main() {
@@ -224,9 +233,8 @@ void main() {
   float d = length(q) * 2.0, edge = fwidth(d);
   float ring = 1.0 - smoothstep(0.0, edge * 1.5, abs(d - 0.45) - 0.025);
   float inkDot = 1.0 - smoothstep(0.13 - edge, 0.13 + edge, d);
-  float light = 1.0 - smoothstep(0.1 - edge, 0.1 + edge, d) + 0.6 * exp(-d * d * 18.0) + 0.3 * exp(-d * d * 5.0);
-  vec2 uv = gl_FragCoord.xy / uResolution - 0.5;
-  float calm = mix(0.08, 1.0, smoothstep(uCalm.z, uCalm.w, dot(uv, uCalm.xy) + 0.5));
+  float light = 1.0 - smoothstep(0.09 - edge, 0.09 + edge, d) + 0.7 * exp(-d * d * 22.0) + 0.35 * exp(-d * d * 6.0);
+  float calm = calmAt(gl_FragCoord.xy);
   float alpha = mix(max(inkDot, ring * 0.75), light * (1.0 - smoothstep(0.85, 1.0, d)), uDark)
               * vAlpha * calm * min(uIntensity * 2.0, 1.0);
   vec3 color = mix(mix(uAccent, uText, 0.5), mix(uAccent, uText, 0.45), uDark);
@@ -237,9 +245,9 @@ void main() {
 
 /** A small seeded random generator, so a seed always gives the same form. */
 function random(seed) {
-  let state = (Math.floor(Math.abs(seed) * 9973) + 0x6d2b79f5) >>> 0;
+  let state = (Math.floor(Math.abs(seed) * 9973) + 1831565813) >>> 0;
   return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
+    state = (state + 1831565813) >>> 0;
     let x = Math.imul(state ^ (state >>> 15), 1 | state);
     x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
     return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
@@ -327,25 +335,19 @@ export function mount(container, options = {}) {
   if (stage.failed) return stage.handle();
   const num = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
   const speed = Math.max(0, num(o.speed, 1)), seed = num(o.seed, 1);
-  const shapes = [0, 1, 2].map((i) => SHAPES[(o.shapes || [])[i]] || SHAPES[["ring", "knot", "coil"][i]]);
+  const shapes = [0, 1, 2].map((i) => SHAPES[(o.shapes || [])[i]] || SHAPES[["ring", "knot", "coil"][i]])
+    .map((shape) => ({ ...shape, thick: Math.max(shape.tube[0], shape.tube[1]) }));
   const seedRand = random(seed + 5);
 
   const shared = {
     ...stage.uniforms,
     uKnot: { value: shapes.map((s) => new THREE.Vector4(...s.knot)) },
     uTube: { value: shapes.map((s) => new THREE.Vector4(...s.tube)) },
-    uWeights: { value: new THREE.Vector3(1, 0, 0) },
-    uData: { value: new Array(DATA_SLOTS).fill(0.5) },
-    uSwell: { value: 0 },
-    uBend: { value: 1 },
-    uClock: { value: 0 },
+    uWeights: { value: new THREE.Vector3(1, 0, 0) }, uBend: { value: 1 }, uClock: { value: 0 },
+    uData: { value: new Array(DATA_SLOTS).fill(0.5) }, uSwell: { value: 0 },
     uSeed: { value: new THREE.Vector3(seedRand() * 40, seedRand() * 40, seedRand() * 40) },
-    uFade: { value: new THREE.Vector2(7, 11) },
-    uCalm: { value: new THREE.Vector4(1, 0, 0.3, 0.52) },
-    uIntensity: { value: 1 },
-    uWidth: { value: 0.011 },
-    uNodeSize: { value: 15 },
-    uHalo: { value: 2 },
+    uFade: { value: new THREE.Vector2(7, 11) }, uCalm: { value: new THREE.Vector4(1, 0, 0.3, 0.52) },
+    uIntensity: { value: 1 }, uWidth: { value: 0.011 }, uNodeSize: { value: 15 }, uHalo: { value: 2 },
   };
   // One uniforms object for both materials, so a value set once reaches both.
   const strandMaterial = new THREE.ShaderMaterial({ uniforms: shared, vertexShader: strandVertex,
@@ -353,26 +355,23 @@ export function mount(container, options = {}) {
   const nodeMaterial = new THREE.ShaderMaterial({ uniforms: shared, vertexShader: nodeVertex,
     fragmentShader: nodeFragment, transparent: true, depthWrite: false, depthTest: false });
 
-  const place = new THREE.Group();   // where it sits, how large, and the lean toward the pointer
-  const form = new THREE.Group();    // its own tilt and slow turn
+  const place = new THREE.Group(), form = new THREE.Group(); // place: where, how large, the lean; form: tilt, turn
   const strands = new THREE.Mesh(undefined, strandMaterial);
   const nodes = new THREE.Points(undefined, nodeMaterial);
   strands.frustumCulled = nodes.frustumCulled = false; // the shader places every vertex
   nodes.renderOrder = 1;
-  form.add(strands, nodes);
-  place.add(form);
-  stage.scene.add(place);
+  stage.scene.add(place.add(form.add(strands, nodes)));
 
   // Fewer strands (low quality) each draw a little stronger, so the whole keeps its weight.
-  let dim = 1;
+  let dim = 1, intensity = 1;
   const setIntensity = () => {
-    shared.uIntensity.value = num(o.intensity, 1) * dim * (stage.tokens.dark ? 0.5 : 0.7) * stage.quality.pick(1.25, 1.1, 1);
+    intensity = num(o.intensity, 1) * dim * (stage.tokens.dark ? 0.5 : 0.7) * stage.quality.pick(1.25, 1.1, 1);
   };
   stage.onQuality((quality) => {
     const count = Math.max(12, Math.round(num(o.strands, 160) * quality.pick(0.5, 0.75, 1)));
     const list = makeStrands(count, seed);
     strands.geometry.dispose();
-    strands.geometry = buildStrandGeometry(list, quality.pick(220, 300, 400));
+    strands.geometry = buildStrandGeometry(list, quality.pick(260, 340, 440));
     nodes.geometry.dispose();
     nodes.geometry = buildNodeGeometry(makeNodes(list, quality.pick(6, 9, 12), seed));
     shared.uHalo.value = quality.pick(0, 1.6, 2.2);   // the glow doubles the pixels drawn: not on weak devices
@@ -407,7 +406,7 @@ export function mount(container, options = {}) {
     place.scale.setScalar(diameter / 4);  // the shapes are about 4 units across
     const reach = diameter * 0.55;
     shared.uFade.value.set(9 - reach, 9 + reach);
-    shared.uNodeSize.value = (phone ? 20 : 34) * place.scale.x;
+    shared.uNodeSize.value = (phone ? 24 : 44) * place.scale.x;
     setIntensity();
   });
 
@@ -425,13 +424,13 @@ export function mount(container, options = {}) {
     const mixed = (key) => (smooth[0] * shapes[0][key] + smooth[1] * shapes[1][key] + smooth[2] * shapes[2][key]) / total;
     const tilt = mixed("tilt");
     shared.uBend.value = mixed("bend");
+    // A thin tube packs its strands close together: draw each fainter so it does not burn out.
+    shared.uIntensity.value = intensity * (0.5 + 0.5 * THREE.MathUtils.smoothstep(mixed("thick"), 0.05, 0.22));
     leanX = ease(leanX, stage.pointer.x, 1.6);
     leanY = ease(leanY, stage.pointer.y, 1.6);
-    swell = ease(swell, swellTarget, 2.5);
-    shared.uSwell.value = swell;
+    shared.uSwell.value = swell = ease(swell, swellTarget, 2.5);
     for (let i = 0; i < DATA_SLOTS; i++) data[i] = ease(data[i], dataTarget[i], 2.5);
-    const clock = time * speed;
-    shared.uClock.value = clock;
+    const clock = (shared.uClock.value = time * speed);
     // One turn in 75 seconds round its own axis, a slow sway of the tilt, and a lean of up to
     // about 7 degrees toward the pointer.
     form.rotation.set(-tilt + 0.06 * Math.sin(clock * 0.13), 0.32 + 0.05 * Math.sin(clock * 0.09),

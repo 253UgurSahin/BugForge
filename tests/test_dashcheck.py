@@ -429,7 +429,7 @@ class SkillAgrees(unittest.TestCase):
                      "python3 ../forge/level.py set dashboard", "--said '", "ONE question", "auto mode too",
                      "python3 ../forge/level.py check dashboard --report forge-work/dashboard.md", "`Level: N",
                      "python3 ../forge-design/dashcheck.py forge-work/dashboard.md --level auto"]:
-            self.assertIn(part, self.steps)
+            self.assertTrue(part in self.steps, part)
 
     def test_the_level_table_says_what_levels_json_says(self):
         with open(LEVELS, encoding="utf-8") as handle:
@@ -452,7 +452,7 @@ class SkillAgrees(unittest.TestCase):
                      "python3 ../forge-design/changed.py --moves", "VISIBLE CHANGE", "git switch",
                      "../forge-design/scenes/datascape.js", "npm install three", "lazyScene", "setData",
                      "second user", "show as table"]:
-            self.assertIn(part, self.steps)
+            self.assertTrue(part in self.steps, part)
         order = ["## Step 1", "## Step 2: the level", "## Step 3", "## Step 4", "## Step 5", "## Step 6",
                  "## Step 7", "## Step 8", "## Step 9", "## Step 10", "## Output", "## Next"]
         self.assertEqual([self.steps.index(name) for name in order], sorted(self.steps.index(name) for name in order))
@@ -464,7 +464,7 @@ class SkillAgrees(unittest.TestCase):
         for part in ["## 12. What each level looks like", "## 13. The HUD composition (level 4)",
                      "## 14. The data scene (level 5)", "datascape.js", "setData", "onHover", "aria-keyshortcuts",
                      "prefers-reduced-motion", "data-scene"]:
-            self.assertIn(part, reference)
+            self.assertTrue(part in reference, part)
 
 
 if __name__ == "__main__":

@@ -1,23 +1,27 @@
-# forge-check test reference: the walk, the edge cases, the budget and the screenshots
+# The walk, the edge cases, the budget and the screenshots
 
-Detail for `../forge-check/steps/test.md`. The walk and the edge cases are active tests: only the user's
-own app, after `../forge-check/scope.py` exits 0 for the base URL.
+Detail for the test part of `/forge-check` (`../forge-check/steps/test.md`). The walk and the edge
+cases are active tests: only the user's own app, after `../forge-check/scope.py` exits 0 for the
+base URL. Which of this runs depends on the test level (`python3 ../forge/level.py get test`); the
+table of what each level adds is in the steps file and in `../forge/levels.md`.
 
 ## The edge list
 
-Go down this list for every flow in Step 1 and keep the cases that apply:
+Go down this list for every flow in Step 1 and keep the cases that apply, up to the level on record:
 
-- empty input; very long input (a 60 character name, a 300 character text); emoji and accents;
-  wrong input for the field (letters in a number, "abc" as an email);
-- text that looks like HTML or SQL: it comes back as plain text and never runs;
-- double click on submit (one record); two tabs at once;
-- back button mid-flow; refresh mid-flow; slow network; offline; expired session;
-- a second user's data (must be invisible: 403 or 404; no accounts: a second browser sees none);
-- time zones and daylight saving; mobile width (390px); keyboard only; screen reader labels.
+| from level | cases |
+| --- | --- |
+| 3 | empty input; very long input (a 60 character name, a 300 character text); emoji and accents; wrong input for the field (letters in a number, "abc" as an email) |
+| 3 | text that looks like HTML or SQL: it comes back as plain text and never runs |
+| 3 | double click on submit (one record); back button and refresh mid-flow; an expired session |
+| 3 | a second user's data (must be invisible: 403 or 404; no accounts: a second browser sees none); mobile width (390px) |
+| 4 | the same form cases on every form of the app, built from the helpers below; slow network; offline; keyboard only; screen reader labels |
+| 5 | two tabs at once; time zones and summer time; hostile and oversized input on every field; the slow-network matrix ("Level 5" below) |
 
-`../forge-check/edge.example.spec.ts` has a helper for each of the form cases and one worked form.
-Copy it to `e2e/edge.spec.ts`, change `FORM`, and add one `describe` per form. A case that fails
-leaves `forge-work/test/evidence/<case>.png`: name it on the bug's `evidence:` line.
+At level 3 the cases go into the flow specs. From level 4, `../forge-check/edge.example.spec.ts`
+gives a helper for each form case and one worked form: copy it to `e2e/edge.spec.ts` (the gate
+looks for `e2e/**/edge*.spec.*`), change `FORM`, and add one `describe` per form. A case that
+fails leaves `forge-work/test/evidence/<case>.png`: name it on the bug's `evidence:` line.
 
 | helper | what it does |
 | --- | --- |
@@ -39,14 +43,23 @@ leaves `forge-work/test/evidence/<case>.png`: name it on the bug's `evidence:` l
 | medium | broken with a workaround, or visibly wrong |
 | low | cosmetic |
 
-## PWA and offline
+## PWA and offline (level 4)
 
 - `PWA: yes`: install, the offline page styled offline (its `/offline.css` comes from the worker's
   cache), and no signed-in page from the cache after logging out.
 - When plan.md says a static app works offline (profiles.md, "Working offline"), its pages open
   offline after one online visit.
 
-Both have a test in `../forge-check/e2e.example.spec.ts`.
+Both have a test in `../forge-check/e2e.example.spec.ts`. Below level 4 they go under "Not tested".
+
+## Keyboard only (level 4)
+
+Every flow once with the keyboard alone: Tab and Shift+Tab to move, Enter and Space to press,
+Escape to close a dialog, the arrow keys in menus and tabs. Each control can be reached, in an
+order that makes sense, with a focus ring you can see; a dialog keeps the focus inside it and gives
+it back when it closes; nothing needs a mouse. Write it as a spec with `page.keyboard` where you
+can (the case `F01-K1`), and do the rest in the manual pass with a browser tool. A control that
+cannot be reached is a high bug (WCAG 2.1.1), a focus ring you cannot see a medium one.
 
 ## Seed data
 
@@ -72,6 +85,28 @@ loosen them for tests. Clear the counters between runs: laravel `docker compose 
 artisan cache:clear`, django its limiter's store (django-axes: `manage.py axes_reset`), next
 `docker compose restart app` (Better Auth counts in memory by default). The walk signs nobody in:
 it reuses the cookies the setup project saved.
+
+## Level 5
+
+Each of these is a case in test-plan.md and, where a browser can do it, a spec:
+
+- **Every route in every state.** routes.json gets one entry per state a screen can be in: empty
+  (a seed user with no records), full (one with many), an error (a record that is gone), and once
+  per role that may open it. Name them `S03-dashboard-empty`, `S03-dashboard-full`.
+- **Hostile and oversized input on every field**, the user's own app only (scope.py exit 0): the
+  helpers' `HTML_TEXT` and `SQL_TEXT`, `LONG(10000)` and `LONG(100000)`, control characters,
+  right-to-left text, a file upload that is too big or of the wrong type. The app must refuse it
+  plainly or store it as plain text; a 500, a hang or text that runs is a bug.
+- **Two tabs at once**: two pages of one browser context change the same record; the second save
+  must not wipe out the first one without a word.
+- **Time zones and summer time**: `test.use({ timezoneId: 'Pacific/Auckland' })` and
+  `'America/New_York'` next to `'Europe/Amsterdam'`; dates on the last Sunday of March and of
+  October, and around midnight. Times show in the user's zone and are stored in UTC.
+- **The slow-network matrix**: each flow with `slowNetwork(page, ms)` at 0, 400 and 2000 ms, and
+  once offline halfway. Nothing is sent twice, a spinner or message shows, nothing is lost.
+- **Three runs**: `npx playwright test --repeat-each=3`. A case that fails in one run of three is a
+  flaky test or a race in the app: find out which. A race is a bug (medium, high when data is
+  lost); a flaky test is fixed in the test, never by a longer wait alone.
 
 ## routes.json
 
@@ -156,6 +191,11 @@ last bug; `--build` fills in the commit. Paste the blocks above `## To check`, a
 
 ## The budget
 
+The walk measures speed from level 3, and a page over budget is a bug like any other. From level
+4 the budget is enforced: at the end no speed or size finding is left open, whatever its severity
+(`walkcheck.py --json --fail-on low` lists none with the rule `lcp_ms`, `cls`, `ttfb_ms`,
+`load_ms`, `transfer_bytes` or `requests`), unless the user agreed a looser limit (below).
+
 Per page, on a first load (an empty cache), on the local stack:
 
 | key | limit | what it is |
@@ -176,8 +216,9 @@ and write their words in test-plan.md under "Not tested".
 
 ## Rounds of screenshots
 
-`FORGE_ROUND` names the folder of a walk's screenshots: `r1` for the first walk (the baseline),
-`r2` after the first round of fixes, and so on. walk.json is always the last walk.
+Comparing rounds is level 4 and up. `FORGE_ROUND` names the folder of a walk's screenshots: `r1` for the first walk (the baseline),
+`r2` after the first round of fixes, and so on. walk.json is always the last walk. At level 4 and
+up there is always a round r2, also when nothing was fixed: the gate asks for both folders.
 
 `python3 ../forge-check/shotcheck.py forge-work/test/shots/r1 forge-work/test/shots/r2` compares
 the shots with the same name through `../forge-check/imgdiff.py`. A pair under `--min` (default 90)

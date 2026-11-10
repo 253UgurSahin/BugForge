@@ -1,6 +1,12 @@
 # forge-check: diff
 
-A part of `/forge-check`. Its `SKILL.md` has the ground rules, the levels and how the result is shown: read it first.
+A part of `/forge-check`. The ground rules, the levels and "show the result" live in its
+`SKILL.md` and in `../forge/rules.md` (section 9: show the result; section 10: levels; the tables
+are in `../forge/levels.md`): read them first.
+
+This part has no level of its own: it always does every step. It changes nothing in the clone
+itself. A bug it finds is fixed in the fix loop of `/forge-check test`, which shows the fix on the
+user's screen as rules.md section 9 says.
 
 Reads `forge-work/features.csv`, `recon.md` and the original's screenshots in `screens/`, takes the
 clone's again in `clone-screens/`, writes `parity.md`, and diff images and scores in `screens/`.
@@ -9,9 +15,9 @@ clone's again in `clone-screens/`, writes `parity.md`, and diff images and score
 
 Parity means the clone does the same job, not that it looks the same. The feature score is the number
 that matters: can a user do everything they could do in the original? The layout score checks
-structure (the same information in the same places and order), so a switcher feels at home; it
-ignores colour, since forge-design brand changes every colour and the name. Never chase the original's exact
-look: that is its own look and brand, and copying it breaks the clean-room rule.
+structure (the same information in the same places and order), so a switcher feels at home. It
+ignores colour, since `/forge-design brand` changes every colour and the name. Never chase the
+original's exact look: that is its own look and brand, and copying it breaks the clean-room rule.
 Exit 2 from either script means it could not run: fix what the message names and run it again.
 
 ## Step 1: feature parity
@@ -27,19 +33,20 @@ Exit 2 from either script means it could not run: fix what the message names and
    not in the contract, a skip has no reason, a comma in unquoted text shifted the columns, or Excel
    saved the file with semicolons or not as UTF-8. The message says what to fix and where.
 4. `skip` is for what cannot be cloned (licensed content, a partner network, someone else's data),
-   decided with the user at recon. It is never a way past the gate: a skipped must-have shows as a
-   warning in the report. A must-have the user now wants to drop: ask, and write their reason in notes.
+   decided with the user during recon. It is never a way past the gate: a skipped must-have shows as
+   a warning in the report. A must-have the user now wants to drop: ask, and write their reason in notes.
 
 ## Step 2: layout diff
 
 Compare every reference screenshot in `forge-work/screens/` with a clone shot of the same name:
 
-- The original's are forge-research recon's (a new one only from a public page or the user's own account, at
-  human speed; never save its code, bundles or network calls).
-- The clone's: take them all again now, as test's fix loop changed the app after build took them.
-  Rebuild the stack (`docker compose up -d --build --wait`), then, with a short Playwright script
-  (or the browser tool), shoot each as its row under `## Reference screenshots` in recon.md says
-  (how to reach it: which data, which item, which action, which scroll), logged in the same way.
+- The original's were taken by `/forge-research recon`. Take a new one only from a public page or
+  the user's own account, at human speed; never save its code, bundles or network calls.
+- The clone's: take them all again now, because the fix loop of `/forge-check test` changed the app
+  after `/forge-build` took them. Rebuild the stack (`docker compose up -d --build --wait`), then,
+  with a short Playwright script (or the browser tool), shoot each as its row under
+  `## Reference screenshots` in recon.md says (how to reach it: which data, which item, which
+  action, which scroll), logged in the same way.
 - Same viewport, same tool, viewport only unless that row says full page, and the same name as its
   reference: `S07.png` (1440x900), `S07-mobile.png` (390x844); a further state is `S07-<state>.png`
   and `S07-<state>-mobile.png` (lowercase words joined by -: `S07-dialog-open.png`).
@@ -60,22 +67,22 @@ Reading the result:
 - A height difference of 5% or more often means a missing or extra section; the rows only one of the
   two has count against the score. Different words wrap differently, which also costs a few points.
 - Exit 2 (an unreadable PNG, two blank shots): take the shot again; delete the empty `.diff.json`.
-- A low score on a screen you improved on purpose (a fix from forge-research compare) is fine: say so in the
-  report, never move the clone back towards the original's look.
+- A low score on a screen you improved on purpose (a fix from `/forge-research compare`) is fine:
+  say so in the report, and never move the clone back towards the original's look.
 
 ## Step 3: behaviour diff
 
 Walk each flow from `forge-work/recon.md` (F01..) in both apps: the original passively, as any
 visitor would (rule 3; the user logs in to their own account themselves), the clone in the compose
-stack. As forge-research recon says, never send the original's company a contact, sign-up or checkout form,
-and make no items on it, except where its own pages say the data stays in the browser: there, with
-the user's OK, a few ordinary items in a fresh browser profile you throw away after. Compare what
-the scores cannot see: clicks to finish the flow (fewer than the original is a win), errors, empty
-input and empty lists, what is remembered between visits, and which emails arrive and what they say
-(Mailpit in development). Write each difference as: flow, original does, clone does, fix or keep. A
-bug goes into `forge-work/bugs.md` in forge-check test's format (`## B014 [high] [open] Reschedule link
-opens a not-found page`) and is fixed in forge-check test's fix loop, a failing test first. A must-have
-that is missing or half built is no bug: it goes back to /forge-build.
+stack. As `/forge-research recon` says, never send the original's company a contact, sign-up or
+checkout form, and make no items on it, except where its own pages say the data stays in the
+browser: there, with the user's OK, a few ordinary items in a fresh browser profile you throw away
+after. Compare what the scores cannot see: clicks to finish the flow (fewer than the original is a
+win), errors, empty input and empty lists, what is remembered between visits, and which emails
+arrive and what they say (Mailpit in development). Write each difference as: flow, original does,
+clone does, fix or keep. A bug goes into `forge-work/bugs.md` in the format of `/forge-check test`
+(`## B014 [high] [open] Reschedule link opens a not-found page`) and is fixed in its fix loop, a
+failing test first. A must-have that is missing or half built is no bug: it goes back to `/forge-build`.
 
 ## Step 4: the report
 
@@ -96,9 +103,9 @@ The verdict, from the feature score (not the overall score, which mixes in the l
 - **shippable with gaps**: both exit 0, but the feature score is under 80. List the biggest gaps; the
   user decides whether that is enough.
 - **shippable**: both exit 0 and the feature score is 80 or more.
-- **better than the original**: shippable, plus the fixes forge-research compare added to features.csv built
-  (rows with `original` no and `clone` yes). This is the goal: a straight copy gives nobody a reason to switch.
-  When compare was skipped, say that this level was not measured.
+- **better than the original**: shippable, and the fixes `/forge-research compare` added to
+  features.csv are built (rows with `original` no and `clone` yes). This is the goal: a straight copy
+  gives nobody a reason to switch. When compare was skipped, say that this was not measured.
 
 Give honest numbers. A clone at 62% is at 62%. The scripts round down; never round up yourself, and never
 mark a row `yes` or `skip` to get past the gate.
@@ -126,7 +133,7 @@ Every must-have feature is done.
 ## Verdict
 Date: 2026-10-27
 Not shippable yet: 9 of 9 must-haves and features 91.2, but bug B014 (high) is open.
-Not yet better than the original: 1 of 3 fixes from forge-research compare is built.
+Not yet better than the original: 1 of 3 fixes from the compare report is built.
 
 ## Next to build
 1. Fix B014 (reschedule link). 2. Email reminders (should, half built). 3. ...
@@ -137,5 +144,5 @@ Not yet better than the original: 1 of 3 fixes from forge-research compare is bu
 Checkpoint: tell the user in at most 5 plain lines the parity score, must-haves done of total, the
 layout score, the verdict and the top three things to build next. Wait for the user's go. Then open
 bugs go through the fix loop of `/forge-check test`, and missing or half-built must-haves through
-`/forge-build` (then `/forge-check test`); after either, back here from Step 1. Once it is shippable:
-`/forge-design brand`, or back to `/forge` when it runs the phases.
+`/forge-build` (then `/forge-check test`); after either, come back here and start again at Step 1.
+Once it is shippable: `/forge-design brand`, or back to `/forge` when it runs the phases.

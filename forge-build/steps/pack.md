@@ -1,6 +1,10 @@
-# forge-build build: pack
+# forge-build: pack
 
-A part of `/forge-build`. Its `SKILL.md` has the ground rules, the levels and how the result is shown: read it first.
+A part of `/forge-build`. The ground rules, the levels and "show the result" live in its
+`SKILL.md` and in `../forge/rules.md` (section 9: show the result; section 10: levels; the tables
+are in `../forge/levels.md`): read them first. This part has no level. It changes how the app runs,
+not what it shows, so of section 9 it does the first step and the last: it says which address
+serves the app before and after, and hands that over at the checkpoint.
 
 Reads `forge-work/plan.md` and the app. Writes `Dockerfile`, `docker-compose.yml`, `.env.example`,
 `.dockerignore`, `RUN.md` and, for laravel and static, `nginx.conf` in the project root.
@@ -29,7 +33,9 @@ in `.env`), and a RUN.md for that profile.
    called this skill on its own): run `python3 ../forge-check/detect.py .`, propose the profile it
    names in plain words and let the user confirm it. It says `none`: tell the user and ask, using
    `../forge-plan/profiles.md`. `forge-work/security.md` must say `Verdict: PASS`; if it does not,
-   run /forge-check secure first and go on only after its PASS.
+   run /forge-check secure first and go on only after its PASS. Note what serves the user's local
+   address now (a dev server, an older stack on port 8080) and from which branch
+   (`git branch --show-current`): the checkpoint says what serves it after.
 2. **Copy the templates** from this skill's `templates/<profile>/` (a full path from this skill's
    base directory) into the project root. Dotfiles are stored without the dot so they stay visible:
 
@@ -39,7 +45,7 @@ in `.env`), and a RUN.md for that profile.
    | `dockerignore` | `.dockerignore` |
    | `env.example` | `.env.example` |
 
-   forge-build build copied these at the start of the build. When a file exists, compare it with the
+   The build part copied these in its Step 1. When a file exists, compare it with the
    template: keep the project's deliberate changes, add what the template has and the file lacks.
    Never overwrite without looking. Leave an existing `.env` alone: it holds the user's secrets.
 3. **Fit them to the app.**
@@ -116,7 +122,7 @@ in `.env`), and a RUN.md for that profile.
    - `docker compose down` when done. It keeps the data; `down -v` would delete it.
 
    A failure in the container files is fixed here. One in the app is a bug: it goes into
-   `forge-work/bugs.md` and through forge-check test's fix loop (a failing test first), then back here.
+   `forge-work/bugs.md` and through the fix loop of /forge-check test (a failing test first), then back here.
    Never make the setup weaker to get it running: no root user, no published database port, no
    secret in the compose file.
 6. **Commit.** Only on the work branch: `python3 ../forge/gitguard.py .` must exit 0.
@@ -132,9 +138,11 @@ and `nginx.conf` for laravel and static. packcheck.py exits 0 and the stack ran 
 ## Checkpoint
 
 Tell the user in at most 5 plain lines: what runs (the services), that it started healthy and
-answered on http://localhost:8080, the packcheck result (and the forge-check secure verdict when Step 1
-ran it), and that RUN.md explains starting it, backups, updates and HTTPS on their own machine or
-server. Putting it online is their step: forge never touches a server. Then wait for the user's go.
+answered on http://localhost:8080 (or the `APP_PORT` in `.env`) and how to start it again
+(`docker compose up -d`), the branch it was built from, the
+packcheck result (and the verdict of /forge-check secure when Step 1 ran it), and that RUN.md explains
+starting it, backups, updates and HTTPS on their own machine or server. Putting it online is their
+step: forge never touches a server. Then wait for the user's go.
 
 ## Next
 

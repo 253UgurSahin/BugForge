@@ -1,8 +1,9 @@
 # Dashboard reference
 
-For forge-design dashboard. Sizes are px and come from the design tokens where a token exists
-(`--space-*`, `--text-*`, `--color-*`); the numbers here are starting points, not a house style.
-`../forge-design/dashboard.example.html` shows the dense level built from these recipes.
+For the dashboard part of `/forge-design` (`../forge-design/steps/dashboard.md`). Sizes are px and
+come from the design tokens where a token exists (`--space-*`, `--text-*`, `--color-*`); the numbers
+here are starting points, not a house style. `../forge-design/dashboard.example.html` shows the dense
+layout built from these recipes. What each dashboard level looks like: sections 12 to 14.
 
 ## 1. The chart chooser
 
@@ -24,7 +25,9 @@ First ask what the reader wants to know, then pick the form. Go down the table; 
 
 Never: 3D, a gauge or speedometer, two y axes in one chart, a pie over 5 parts, a y axis cut off for
 bars, smoothed lines that invent values between points, a chart for one or two values, a legend when
-a direct label fits, rainbow colours, a red and green pair as the only difference.
+a direct label fits, rainbow colours, a red and green pair as the only difference. The one exception
+is depth at dashboard level 4 and 5 (sections 13 and 14): a view on top of a flat, honest form, with
+every value printed or in a table next to it, never the only way to read a number.
 
 chart.py draws `line`, `area`, `bar`, `spark` and `donut`, and refuses the nonsense above: no points,
 values that are not numbers, a donut with negative values or over 6 parts, stacked series of
@@ -100,10 +103,11 @@ locale write the component in the app's templates (section 6).
   focusable wrapper (`tabindex="0"`, `role="region"`, a label); touch targets stay 44px.
 - Fix the height of chart panels (or use `aspect-ratio`) so loading and loaded are the same size.
 
-## 5. The three density levels
+## 5. The three densities
 
 | | calm | standard | dense (HUD) |
 | --- | --- | --- | --- |
+| dashboard level | 1 | 2 and 3 | 4 and 5 (3 when the reader watches it all day) |
 | for | an owner who looks once a day or week | a team that works in it daily | people who watch it all day, on a big screen |
 | numbers on screen | 3 to 5 | 5 to 7 | 7 to 9, in groups |
 | page padding / gap | 32 / 24 | 24 / 16 | 16 / 12 |
@@ -232,3 +236,96 @@ column when they are asked for. Over about 12 by 12 cells: drop the numbers, add
 - A chart with no empty state: a flat line at zero looks like bad news, not like "no data yet".
 - Hover only: the exact value lives in a tooltip that a phone, a keyboard and a screen reader never see.
 - A dashboard that loads everything on every visit: no cache, no freshness time, a slow first screen.
+
+## 12. What each level looks like
+
+A level includes everything below it, and nothing above it (`../forge/levels.md`). Durations and
+curves come from the motion tokens; under `prefers-reduced-motion: reduce` nothing draws in, morphs
+or counts: the final values show at once, and no information is lost.
+
+- **1 Subtle**: calm. One row of 3 to 5 tiles (value, label, the comparison as text), under it one
+  chart that answers the main question (usually a line over time), under that one table with the
+  rows behind the numbers. The default period only. Motion: hover and focus feedback, a fade in.
+  At 1440px it fits on one screen without scrolling.
+- **2 Polished**: standard. Tiles with their change and a sparkline (section 2), 2 or 3 charts on
+  the 12-column board (8 and 4), a period filter as a form with GET parameters (7 days, 30 days,
+  this month, a range of your own), so a period has a link. Every state of the steps file is
+  designed. Motion: skeleton to content, numbers count up once (at most 600 ms, the final value is
+  in the markup from the start), a period change fades the panels across.
+- **3 Expressive**: standard, or dense for a screen that is watched all day. Charts draw in (a
+  line by its `stroke-dashoffset`, bars grow from the zero baseline) and morph between periods
+  (the same number of points: move each point; else fade across). **Drill-down**: a tile, bar or
+  cell is a link to the rows behind it, with its own URL, served by the same scoped query plus one
+  filter. **Comparison**: the earlier period as a faint second line, or a change column. A value
+  matrix (section 9). **Live refresh**: every 30 to 60 seconds, or server-sent events; it stops in
+  a hidden tab, has a pause control, and only a short summary is `aria-live="polite"`.
+- **4 Showpiece**: dense, dark first: the HUD composition of section 13.
+- **5 Cinematic**: section 13 plus the data scene of section 14, which shows the same data as the
+  table and the matrix in 3D. The table stays one key press away.
+
+Name what moves or drills down in the form column of `## Numbers` ("line, draws in, morphs
+between periods; drill-down to the orders"): `dashcheck.py --level 3` and up looks for it.
+
+## 13. The HUD composition (level 4)
+
+A control room on one screen, at 1440 by 900. Every element is data (section 7):
+
+```
++--------------------------------------------------------------------------------+
+| READOUT STRIP  5 to 8 readouts, a <dl>                  updated 14:02 CET  [||] |
++-----------------------------------+----+---------------------------------------+
+| P-01 main chart, time axis        |  / | P-02 detail                           |
+|      the crosshair runs here      | -- | P-03 detail                           |
+|                                   |  \ | P-04 detail                           |
++-----------------------------------+----+---------------------------------------+
+| P-05 value matrix or depth chart        | P-06 sequence log, newest first      |
++-----------------------------------------+--------------------------------------+
+```
+
+- **Grid**: the strip spans all 12 columns; then the main panel 7, the leader-line column 1, three
+  detail panels stacked in 4; then two panels of 6. Panel numbers (P-01) let the log refer to them.
+- **The linked crosshair**: one position (an index on the shared time axis) drives a thin vertical
+  line on every chart with that axis, and the readouts show the values at that moment ("at 14:00").
+  One small script holds the position and sends a custom event; each chart listens. Pointer: it
+  follows. Keyboard: the arrow keys on the focused main chart move it, Home and End jump, Escape
+  lets go. A text line under the strip says the time and the values, updated at most twice a second.
+  Charts on another axis do not follow it.
+- **Charts with a 3D look**: CSS 3D (a panel tilted by at most 12 degrees, bars as faces with a
+  side and a top, the tilt of the kit's `depth.js` on panels) or canvas 2D drawn with
+  depth (an isometric grid of bars). The depth is a view: no strong perspective (a near bar must
+  never look bigger than a far bar of the same value), one baseline, every value printed or in the
+  table next to it. Write it in the form column with its table: "bars with depth (CSS 3D) + table".
+- **Leader lines** and the **sequence log**: section 7. The log takes the events the readouts
+  react to (an import finished, a threshold crossed), with the panel number.
+- **Motion**: a readout that changes tints its background once (300 ms, never a blink), a new log
+  row slides in, the crosshair follows the pointer without lag.
+- **390px**: the strip in two columns, panels stacked in source order, the leader column hidden,
+  the crosshair moved by tapping the chart and by two buttons (earlier, later).
+
+## 14. The data scene (level 5)
+
+- **What**: `../forge-design/scenes/datascape.js` from the scene kit shows a matrix of the app's
+  own values (region by week, hour by weekday) as a 3D field of bars or ridgelines. It needs three
+  (installed with npm, never a CDN) and the kit's `stage.js`, `glsl.js` and `lazy.js` next to it.
+  Read the comment at the top of datascape.js for its options before you use them.
+- **Fed from the server**: the same query as the table and the matrix, under the same access rules,
+  returns the rows, the columns and the values for the signed-in user's team and the period. The
+  page passes the values to `setData`. The scene draws sample values when it gets none: mount it
+  only when there is data, and show the empty state otherwise. Heights may be scaled from 0 to 1 in
+  the page; the real values stay in the table and in the tooltip.
+- **A filter changes**: fetch the new matrix, call `setData` (the bars spring to their new
+  heights) and ease `setProgress` over the change, which moves the camera. The page's own text
+  says what changed ("week 12 to 24, region North").
+- **Hover**: `onHover({index, row, column, value})` shows an HTML tooltip (escaped text) and marks
+  the matching table cell; `onHover(null)` hides it. The keyboard path is the table, not the canvas.
+- **Accessible**: the scene's container has `role="img"` and an `aria-label` with the text summary
+  (what, period, highest and lowest). The table of the same data is one key press away: a button
+  "Show as table (T)" with `aria-keyshortcuts="t"`; T outside a text field does the same. It swaps
+  the scene for the table and moves focus to the table's caption; the same key goes back. The
+  table is in the page from the start, so a screen reader and find-in-page always reach it.
+- **Calm by default**: `lazyScene` loads three only when the panel is near and the page is idle,
+  with a poster (a still of the scene) until then. Without WebGL the container gets
+  `data-scene="fallback"` and the poster stays; under `prefers-reduced-motion` the scene draws one
+  still frame; one `motionToggle` button pauses every scene. One scene per screen; `destroy()` when
+  the dashboard is left in an app that does not reload the page.
+

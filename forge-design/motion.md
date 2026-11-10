@@ -587,7 +587,24 @@ Reduced: the bars jump to their new height. Mistake: animating `height` (layout 
 the values only in the bars (keep the numbers as labels or a table), and a line chart morphed by
 animating `d`, which only some browsers do: draw the new line with `m-draw` instead.
 
-**Tilt card with depth.js.** TILT-PATTERN
+**Tilt card with depth.js.** Cards that lean toward the pointer, with layers inside them at their
+own depth and a soft glare, and panels stacked in perspective. Copy `../forge-design/scenes/depth.js`
+and `../forge-design/scenes/depth.css` into the app (depth.css after motion.css, depth.js as a
+module on the pages that use it) and mark each card with `data-depth`:
+
+```html
+<article class="card" data-depth>
+  <img src="/img/spot.webp" alt="The north bank at dawn">
+  <h3>North bank</h3>
+</article>
+```
+
+What `data-depth` takes (a tilting card, layers, stacked panels, fold and flip), how the layers
+inside a card are marked and how it starts are in the comment at the top of depth.js: take them from
+there, never from memory. A card stays a normal link or button: the tilt is a transform on top.
+Reduced: the cards lie flat and still; hover gives the shadow of `m-lift`. Mistake: a tilt over
+about 8 degrees (text gets hard to read), tilting a whole form or table, depth on touch screens
+where nobody hovers, and a perspective set on each card instead of once on their container.
 
 **The signature moment.** One moment that could only belong to this app, from the concept: a
 float that dips when a catch is saved, a stamp that lands on a paid invoice, a tide line that
