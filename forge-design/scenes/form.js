@@ -27,11 +27,11 @@
  *   seed       1. Any number: another bend of the noise, another layout of strands and nodes.
  *   shapes     ["ring", "knot", "coil"]. The three shapes setProgress walks through, picked from
  *              "ring" (a wide band that goes round twice and crosses itself), "knot" (a trefoil
- *              rope), "coil" (a loose coil of nine round turns about a ring), "star" (a five-lobed knot) and "bloom"
- *              (a wide seven-lobed flower). Every shape winds twice round its axis, so any two
- *              morph into each other without a seam. Between two shapes the tube draws in a little
- *              and the line changes mostly in the middle, so one shape's windings never crowd
- *              onto the other's wide tube.
+ *              rope), "coil" (a loose coil of nine round turns about a ring), "star" (a five-lobed
+ *              knot) and "bloom" (a wide seven-lobed flower). Every shape winds twice round its
+ *              axis, so any two morph into each other without a seam. Between two shapes the tube
+ *              draws in a little and the line changes mostly in the middle, so one shape's
+ *              windings never crowd onto the other's wide tube.
  *   intensity  1. Brightness on dark, ink strength on light.
  *   stillTime  6. The moment the reduced-motion still shows.
  *
@@ -63,6 +63,8 @@ import { stageUniforms, common, simplex3D, grain } from "./glsl.js";
 // per loop, turns of the band]. follow: 1 when the tube's frame follows the winding (a tight coil,
 // where a frame tied to the axis would flip at every turn). bend: how much the noise may bend it.
 // tilt: how far (radians) the form leans back from facing the camera, to show its best side.
+// reach: the share of its span each strand draws (1 when left out; keep it at 0.45 or more, so the
+// nodes, which sit in the first 36 percent of two strands, are always on a drawn stretch).
 const SHAPES = {
   ring: { knot: [2, 1, 1.05, 0.45], tube: [0.3, 0.08, 0, 1], follow: 0, bend: 1.0, tilt: 0.5 },
   knot: { knot: [2, 3, 0.98, 0.46], tube: [0.25, 0.25, 2, 0], follow: 0, bend: 1.0, tilt: 0.45 },
@@ -356,8 +358,8 @@ function makeNodes(strands, wanted, seed) {
   const rand = random(seed + 17);
   const a = strands.filter((s) => s.family === 0), b = strands.filter((s) => s.family === 1);
   const nodes = [];
-  const gap = 0.5 / wanted;   // spread them along the loop
-  for (let tries = 0; tries < 2000 && nodes.length < wanted && a.length && b.length; tries++) {
+  for (let tries = 0; tries < 4000 && nodes.length < wanted && a.length && b.length; tries++) {
+    const gap = (tries < 2000 ? 0.5 : 0.25) / wanted;   // spread them along the loop, closer if need be
     const i = a[Math.floor(rand() * a.length)], j = b[Math.floor(rand() * b.length)];
     // Only where both strands are drawn at every reach and away from their faded ends.
     const lo = Math.max(i.start + i.length * 0.15, j.start + j.length * 0.15);

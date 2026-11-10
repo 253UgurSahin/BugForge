@@ -5,10 +5,12 @@
  *   "aurora"  slow curtains of light hanging over silk-like folds of colour, as the northern lights
  *             look from far away: the page background stays the main colour, the accent lights the
  *             hem of each curtain, the second accent a higher, broader band above it. On a tall
- *             screen the curtains hang longer and the far ones lower, so a phone sees a sky.
+ *             screen the curtains hang longer and the far ones lower, so a phone sees a sky. Where
+ *             the pointer is, the light gathers and the nearest curtain leans towards it.
  *   "water"   looking down into clear, shallow water: the moving net of light that a wavy surface
- *             throws on the bottom (caustics), with soft rings that spread where the pointer moves
- *             or a finger taps.
+ *             throws on the bottom (caustics), with soft rings that bend the net where the pointer
+ *             sets off and comes to rest over the container, or a finger taps (a mouse click on the
+ *             spot where the pointer already is makes none: the stage reports only moves).
  *   "mist"    three banks of fog, far to near, each a slow ridge with a lit top edge, and a low
  *             light behind them in the second accent; almost without colour, tinted by the accent.
  * On a dark page it is light in the dark; on a light page a pale wash, like watercolour on paper.
@@ -27,7 +29,8 @@
  *   mode        "aurora" (default), "water" or "mist".
  *   calm        "left" (default): the side where the text sits; the effect fades towards it. Also
  *               "right", "top", "bottom", "center" or "none". On a tall, narrow screen "left" and
- *               "right" calm the middle band instead, where text sits on a phone.
+ *               "right" calm the middle band instead, where text sits on a phone (the water, whose
+ *               net runs everywhere, calms a wider band and more).
  *   calmAmount  0.8: how much of the effect is taken away on the calm side (0 none, 1 all).
  *   intensity   1: how strong the colour is. 0.6 for a busy page, 1.4 for an empty dark one.
  *   speed       1: how fast it moves. 0 stands still.
@@ -35,9 +38,12 @@
  *   ripples     true: rings from the pointer in "water" mode.
  *
  * setProgress(p), 0..1: the mood of the page while it scrolls. The balance moves from the accent
- *   to the second accent and the flow calms: in the aurora the second accent takes over the upper
- *   curtains while the hem keeps the accent and its height (clear of the copy), the water grows
- *   deeper (a finer, calmer net), the mist and its light lift. Feed it a section's progress:
+ *   to the second accent. The aurora tells it in three moods: at 0 the full curtain; at 0.5 it
+ *   rises, fans out and folds more, with brighter, denser rays and a faster drift; at 1 it settles
+ *   into a low, quiet, distant band near the horizon, drifting at half the pace, while the second
+ *   accent takes over the upper curtains. The water deepens (sharper lines) and slows to 0.6 of
+ *   its pace, the second accent only in the brightest knots of its net and their fringe; the mist
+ *   and its light lift and slow the same way. Feed it a section's progress:
  *   sky.setProgress(sky.stage.progressOf(section)).
  * setData(values): numbers 0..1, any length. Their average sets the energy: 0 is a slow, faint
  *   breath, 0.5 the normal look, 1 brighter, faster and more folded. An empty list goes back to 0.5.
@@ -59,7 +65,7 @@
  */
 import * as THREE from "three";
 import { createStage } from "./stage.js";
-import { stageUniforms, common, simplex2D, simplex3D, fbm, oklab, grain } from "./glsl.js";
+import { stageUniforms, common, simplex2D, fbm, oklab, grain } from "./glsl.js";
 
 const MODES = { aurora: 0, water: 1, mist: 2 };
 const CALM = { left: [-1, 0], right: [1, 0], top: [0, 1], bottom: [0, -1], center: [0, 0], none: [0, 0] };
@@ -113,11 +119,11 @@ const fragmentShader = `
 ${stageUniforms}
 ${common}
 ${simplex2D}
-${simplex3D}
 ${fbm}
 ${oklab}
 ${grain}
-uniform float uFlow, uIntensity, uScale, uEnergy, uRingOn;
+uniform float uFlow, uIntensity, uScale, uEnergy;
+uniform vec3 uReach;            // the pointer in scene units, and how present it is (0..1)
 uniform vec4 uCalm;            // direction x, y; amount; 1 when the screen is tall and narrow
 uniform vec4 uRings[${RINGS}];  // centre (scene units), start time, strength
 varying vec2 vUv;
@@ -147,6 +153,11 @@ vec2 frameSize() { return 0.5 * uResolution / unitPixels(); }
 // their light.
 float calmAt() {
   vec2 centred = vUv - 0.5;
+  #if MODE == 1
+  // The water's net runs everywhere, the aurora's light mostly above and below the copy: on a
+  // phone the water calms a wider band, and more.
+  if (uCalm.w > 0.5) return 1.0 - uCalm.z * 0.85 * (1.0 - smoothstep(0.2, 0.36, abs(centred.y + 0.01)));
+  #endif
   if (uCalm.w > 0.5) return 1.0 - uCalm.z * 0.65 * (1.0 - smoothstep(0.06, 0.3, abs(centred.y + 0.03)));
   float side = dot(centred, uCalm.xy) * 2.0;
   if (dot(uCalm.xy, uCalm.xy) < 0.5) side = 1.0 - 2.4 * length(centred * vec2(0.6, 1.4));
@@ -157,10 +168,14 @@ float calmAt() {
 // AURORA. Returns (colour, coverage); main() lays it over the page.
 // Each curtain has two bands of light, as the real thing has: a low one in the accent, a thin
 // bright seam at the hem with a quick fade upwards, and a high, broad, streaked one in the second
-// accent. Scrolling lets the high band take over; the hem keeps its colour and its height.
+// accent. Scrolling tells a story in three moods: at 0 the full curtain; towards 0.5 it rises,
+// folds more and fans out, with brighter, denser rays (the outburst); towards 1 it settles into a
+// low, quiet, distant band near the horizon, in the second accent's warmth.
 vec4 sky(vec2 p) {
   float t = uFlow;
   float tall = uCalm.w;
+  float rise = sin(PI * uProgress);                 // 0 at both ends, 1 halfway
+  float settle = smoothstep(0.5, 1.0, uProgress);   // 0 until halfway, then 1
   vec2 q = p / uScale;
   q.y -= tall * 0.07;                        // on a phone the hem crosses at about 40% of the height
   float reach = mix(1.0, 0.45, tall);        // and the curtains hang twice as long, to the top
@@ -169,46 +184,63 @@ vec4 sky(vec2 p) {
   vec2 drift = vec2(0.02, -0.007) * t;
   vec2 warp = vec2(fbm(q * 0.85 + drift), fbm(q * 0.85 + vec2(5.2, -1.3) - drift * 0.7));
   vec2 s = q + warp * (0.07 + 0.07 * uEnergy);
-  float lean = mix(0.2, 0.1, uProgress) * (1.0 - 0.6 * tall);   // the hems rise away from the text
+  float lean = mix(0.2, 0.1, uProgress) * (1.0 - 0.6 * tall) * (1.0 - 0.7 * settle);   // the hems rise away from the text
+  float lift = 0.045 * rise - mix(0.24, 0.12, tall) * settle;   // the whole sky rises, then sinks to the horizon
+  float folds = 1.0 + 0.35 * rise + 0.8 * settle;               // more folds: livelier, then smaller with distance
   float warmth = mix(0.2, 1.0, uProgress);
+  // The pointer: the light gathers where it is, and the nearest curtain leans towards it.
+  vec2 hand = uReach.xy / uScale;
+  float handNear = uReach.z * exp(-dot(s - hand, s - hand) / 0.05);
   float hue = 0.0, amount = 0.0;   // the colour (0..1 along ink) is averaged, weighted by light
   for (int i = 0; i < CURTAINS; i++) {
     float fi = float(i);
     float far = fi / float(CURTAINS - 1);              // 0 the nearest curtain .. 1 the farthest
     // Along the curtain: far curtains are stretched, so their folds are smaller, as in perspective.
     // The pointer moves near curtains more than far ones (parallax), so the sky has depth.
-    float x = (s.x - uPointer.x * 0.035 * (1.0 - 0.7 * far)) * (1.5 + far * 1.6) + fi * 4.7 + t * (0.035 + 0.02 * fi);
+    float along = (s.x - uPointer.x * 0.035 * (1.0 - 0.7 * far)) * (1.5 + far * 1.6) * folds;
+    float x = along + fi * 4.7 + t * (0.035 + 0.02 * fi);
     vec3 wave = snoiseGrad(vec2(x * 0.8, t * 0.04 + fi * 13.0));
     // On a phone the far curtains hang lower instead, towards the horizon, so the lower third
-    // has light too; on a wide screen they hang higher, behind the near ones.
-    float hem = 0.04 + far * mix(0.13, -0.5, tall) + 0.03 * uProgress + lean * s.x + mix(0.25, 0.1, tall) * s.x * s.x + 0.08 * wave.x - uPointer.y * 0.02 * (1.0 - far);
-    // Rays: noise stretched along the height, so the light hangs in vertical streaks.
-    // Two sizes of ray: broad bands and fine threads inside them.
-    float broad = snoise(vec2(x * 8.0, s.y * 0.6 * reach - t * 0.05));
-    float rays = 0.65 * broad + 0.35 * snoise(vec2(x * 23.0, s.y * 1.1 * reach - t * 0.08));
+    // has light too; on a wide screen they hang higher, behind the near ones (more so as they fan out).
+    float hem = 0.04 + lift + far * (mix(0.13, -0.5, tall) + 0.05 * rise) + lean * s.x
+              + mix(0.25, 0.1, tall) * (1.0 - 0.6 * settle) * s.x * s.x
+              + 0.08 * (1.0 + 0.5 * rise - 0.4 * settle) * wave.x - uPointer.y * 0.02 * (1.0 - far);
+    float lean0 = uReach.z * (1.0 - far) * exp(-pow(s.x - hand.x, 2.0) / 0.05);
+    hem = mix(hem, clamp(hand.y, hem - 0.2, hem + 0.12), 0.55 * lean0);
+    // Rays: noise stretched along the height, so the light hangs in vertical streaks. Two sizes of
+    // ray, broad bands and fine threads; in the outburst the threads take over and the rays fan out
+    // upwards, as the real corona does when it is overhead.
+    float fan = 1.0 / (1.0 + 1.2 * rise * max(s.y - hem, 0.0));
+    float rx = x + along * (fan - 1.0);
+    float broad = snoise(vec2(rx * 8.0, s.y * 0.6 * reach - t * 0.05));
+    float fine = snoise(vec2(rx * 23.0, s.y * 1.1 * reach - t * 0.08));
+    float rays = mix(0.65 * broad + 0.35 * fine, 0.35 * broad + 0.65 * fine, rise);
     // Height above the hem. The rays end at slightly different heights, so the hem is a fringe
     // of hanging threads, not the smooth outline of a hill.
-    float d = s.y - hem + 0.009 * broad;
+    float d = s.y - hem + (0.009 + 0.012 * rise) * broad + 0.012 * rise * fine;
     float up = max(d, 0.0) * reach;
     // Where the curtain turns away from us (a steep hem) we look along it, and it is brighter.
     float edgeOn = 1.0 + 0.6 * smoothstep(0.3, 1.5, abs(wave.y));
-    float low = smoothstep(-0.03, 0.01, d) * exp(-up * (6.0 + far * 4.0)) * 0.75 + 0.9 * exp(-d * d / 0.0003);
-    low *= (0.55 + 0.5 * rays) * edgeOn;
-    float high = exp(-pow((up - 0.15 - 0.04 * far) / 0.1, 2.0)) * smoothstep(0.0, 0.1, up);
-    high *= warmth * 0.75 * (0.5 + 0.6 * rays) * edgeOn;
+    float fade = (6.0 + far * 4.0) * (1.0 - 0.35 * rise) * (1.0 + 1.3 * settle);   // short rays far away
+    float seam = 0.9 * exp(-d * d / 0.0003) * max(0.55 + 0.5 * (0.65 * broad + 0.35 * fine), 0.0);
+    float body = smoothstep(-0.03, 0.01, d) * exp(-up * fade) * 0.75 * (1.0 + 0.35 * rise - 0.3 * settle);
+    float low = (seam + body * max(0.55 + 0.05 * rise + (0.5 + 0.25 * rise) * rays, 0.0)) * edgeOn;
+    float top = (0.15 + 0.04 * far) * (1.0 + 0.3 * rise - 0.45 * settle);
+    float high = exp(-pow((up - top) / (0.1 * (1.0 - 0.4 * settle)), 2.0)) * smoothstep(0.0, 0.1, up);
+    high *= warmth * 0.75 * (1.0 + 0.3 * rise) * max(0.5 + 0.6 * rays, 0.0) * edgeOn;
     // Under the hem its light is scattered a little into the haze, longer on a phone.
     float under = (0.16 * exp(min(d, 0.0) * mix(26.0, 12.0, tall)) + 0.035 * exp(min(d, 0.0) * 6.0)) * step(d, 0.0);
-    float dim = mix(1.0, 0.5, far);
+    float dim = mix(1.0, 0.5, far) * (1.0 - 0.3 * settle) * (1.0 + 1.6 * handNear);
     low = (low + under) * dim;
     high *= dim;
     hue += high + low * 0.15 * far;
     amount += low + high;
   }
   // A faint glow behind the curtains, as their light seen through haze; none below the hems, where
-  // the night stays clear.
-  float haze = (0.6 + 0.4 * warp.x) * exp(-pow(max(s.y - lean * s.x - 0.12, 0.0) / 0.25, 2.0))
-             * smoothstep(0.02, 0.16, s.y - lean * s.x) * 0.1;
-  amount += haze;
+  // the night stays clear. And a little where the pointer is.
+  float above = s.y - lean * s.x - lift;
+  float haze = (0.6 + 0.4 * warp.x) * exp(-pow(max(above - 0.12, 0.0) / 0.25, 2.0)) * smoothstep(0.02, 0.16, above) * 0.1;
+  amount += haze + 0.2 * handNear;
   // Short joins between the two inks, so little of the sky sits halfway.
   float tint = smoothstep(0.2, 0.8, hue / max(amount, 1e-4));
   // On dark, faint light in the second accent (amber, say) reads as brown: where the light is
@@ -219,29 +251,33 @@ vec4 sky(vec2 p) {
 }
 #elif MODE == 1
 // WATER. A wavy surface bends sunlight; where bent rays crowd together, the bottom is bright.
-// The surface: two swells that drift across each other, plus the rings. Returned as its slope.
+// The surface: two swells that drift across each other, plus the rings. Returned as its slope,
+// and how much ring crest lies here (a ring is seen as a soft bright circle as well).
 const mat2 TURN = mat2(0.8, 0.6, -0.6, 0.8);
-vec2 surfaceSlope(vec2 p) {
+vec3 surfaceSlope(vec2 p) {
   float t = uFlow;
   vec3 a = snoiseGrad(p * 3.0 + vec2(0.075, 0.045) * t);
   vec2 slope = a.yz * 3.0 * 0.0042;
   vec3 b = snoiseGrad(TURN * p * 4.9 - vec2(0.055, -0.09) * t);
   slope += (b.yz * TURN) * 4.9 * 0.0018;   // b.yz * TURN turns the slope back (chain rule)
+  float crest = 0.0;
   for (int i = 0; i < RING_COUNT; i++) {
     vec4 r = uRings[i];
     float age = uTime - r.z;
-    if (r.w <= 0.0 || age < 0.0 || age > 6.0) continue;
-    vec2 off = p - r.xy;
+    if (r.w <= 0.0 || age < 0.0 || age > 7.0) continue;
+    vec2 off = p - r.xy / uScale;
     float dist = length(off) + 1e-4;
-    float radius = 0.02 + age * 0.16;                  // the ring spreads at a steady pace
-    float x = (dist - radius) / 0.06;                  // across the ring, in ring widths
-    float fade = r.w * exp(-age * 0.75) * uRingOn;
-    // height: a wave packet, cos(6x) under a bell exp(-x^2); its slope along the radius:
+    float radius = 0.02 + age * 0.09;                 // the ring spreads at a slow, steady pace
+    float x = (dist - radius) / (0.03 + age * 0.012);  // across the ring, in ring widths; it softens
+    float fade = r.w * exp(-age * 0.45) * smoothstep(0.0, 0.25, age);
+    // Height: a short wave packet, sin(5x) under a bell exp(-x^2), so one or two crests; its slope
+    // along the radius. Steep enough to bend the lines it crosses, gone after about six seconds.
     float bell = exp(-x * x);
-    float dh = fade * 0.0001 * bell * (-2.0 * x * cos(6.0 * x) - 6.0 * sin(6.0 * x)) / 0.06;
+    float dh = fade * 0.004 * bell * (5.0 * cos(5.0 * x) - 2.0 * x * sin(5.0 * x));
     slope += dh * off / dist;
+    crest += fade * bell * smoothstep(0.2, 1.0, sin(5.0 * x + 1.2));
   }
-  return slope;
+  return vec3(slope, crest);
 }
 vec4 sky(vec2 p) {
   vec2 q = p / uScale;
@@ -252,10 +288,10 @@ vec4 sky(vec2 p) {
   // The bottom is not flat: where it lies deeper the net is larger and softer, where it rises it
   // comes into focus. That variation is what makes it read as depth, not as a pattern.
   float bed = 0.5 + 0.5 * snoise(q * 0.8 + vec2(0.01, 0.0) * uFlow);
-  vec2 g = surfaceSlope(q);
-  vec2 gx = (surfaceSlope(q + vec2(e, 0.0)) - g) / e;
-  vec2 gy = (surfaceSlope(q + vec2(0.0, e)) - g) / e;
-  float depth = mix(1.0, 0.75, uProgress) * (0.85 + 0.3 * uEnergy) * (0.75 + 0.45 * bed);
+  vec3 g = surfaceSlope(q);
+  vec2 gx = (surfaceSlope(q + vec2(e, 0.0)).xy - g.xy) / e;
+  vec2 gy = (surfaceSlope(q + vec2(0.0, e)).xy - g.xy) / e;
+  float depth = mix(1.0, 1.12, uProgress) * (0.85 + 0.3 * uEnergy) * (0.75 + 0.45 * bed);
   // Blue light bends a little more than red: a second, slightly deeper focus gives a soft
   // fringe in the second accent beside every line.
   vec2 det;
@@ -267,9 +303,13 @@ vec4 sky(vec2 p) {
   vec2 lines = smoothstep(0.55, 3.3, lux);
   float fringe = max(lines.y - lines.x, 0.0) * 0.5;
   lines *= 0.6 + 0.6 * bed;                            // light fades with the depth of water above
-  vec3 tint = ink(0.15 + 0.7 * uProgress), glint = ink(0.25 * uProgress), edge = ink(0.35 + 0.4 * uProgress);
+  lines.x += 0.3 * g.z;
+  // On dark the water itself keeps the accent (dim amber over black reads as mud); scrolling lets
+  // the second accent into the brightest knots of the net only, and into the fringe.
+  vec3 tint = ink(0.15 + 0.7 * uProgress), edge = ink(0.3 + mix(0.45, 0.2, uDark) * uProgress);
+  vec3 glint = ink(uProgress * smoothstep(0.6, 1.05, lines.x));
   float base = 0.1 + 0.1 * bed;
-  vec3 light = tint * base + glint * lines.x + edge * fringe;
+  vec3 light = ink(0.0) * base + glint * lines.x + edge * fringe;
   float amount = base + lines.x + fringe;
   // On a light page the water is a wash, and the lines are where the paper shows through it.
   if (uDark < 0.5) {
@@ -368,7 +408,7 @@ export function mount(container, options = {}) {
       uIntensity: { value: num(o.intensity, 1, 0, 3) },
       uScale: { value: num(o.scale, 1, 0.2, 5) },
       uEnergy: { value: 0.5 },
-      uRingOn: { value: o.ripples === false ? 0 : 1 },
+      uReach: { value: new THREE.Vector3() },
       uCalm: { value: new THREE.Vector4() },
       uRings: { value: rings },
     },
@@ -380,7 +420,8 @@ export function mount(container, options = {}) {
   stage.scene.add(quad);
 
   let mode = MODES[o.mode] === undefined ? 0 : MODES[o.mode];
-  let flow = 0, energy = 0.5, energyTarget = 0.5, nextRing = 0, lastRing = null;
+  let flow = 0, energy = 0.5, energyTarget = 0.5, presence = 0, nextRing = 0;
+  let lastRing = { x: 9, y: 9, t: -9 }, settling = null;
   const speed = num(o.speed, 1, 0, 10);
 
   // Shader cost follows the quality: octaves, curtains, noise layers and rings are compiled in.
@@ -403,28 +444,52 @@ export function mount(container, options = {}) {
     material.uniforms.uCalm.value.set(x, y, o.calm === "none" ? 0 : num(o.calmAmount, 0.8, 0, 1), sideways ? 1 : 0);
   });
 
-  // A ring where the pointer has moved far enough, or a finger came down. stage.pointer runs -1..1
-  // over the container; the shader wants scene units, which depend on the shape of the container.
-  stage.onPointer((pointer) => {
-    if (mode !== 1 || stage.still || !pointer.active || o.ripples === false) return;
-    const now = stage.clock.time;
-    const { x, y } = pointer.raw;
-    const moved = lastRing ? Math.hypot(x - lastRing.x, y - lastRing.y) : 1;
-    if (moved < 0.12 && now - (lastRing ? lastRing.t : -9) < 0.9) return;
-    if (moved < 0.02) return;
+  // Water: a ring as the pointer sets off or a finger comes down, at most one every 0.4 s along the
+  // way (a quick sweep would otherwise leave a chain of rings), and one more where it comes to rest.
+  // stage.pointer.raw runs -1..1 over the container; the shader wants scene units, which depend on
+  // the shape of the container. Outside the container the stage clamps raw to its edge: no ring.
+  const toScene = (x, y) => {
     const unit = Math.sqrt(stage.size.width * stage.size.height) || 1;
-    rings[nextRing].set((x * stage.size.width) / (2 * unit), (y * stage.size.height) / (2 * unit), now, Math.min(1, 0.5 + moved));
+    return [(x * stage.size.width) / (2 * unit), (y * stage.size.height) / (2 * unit)];
+  };
+  function drop(x, y, strength) {
+    const now = stage.clock.time;
+    rings[nextRing].set(...toScene(x, y), now, strength);
     nextRing = (nextRing + 1) % RINGS;
     lastRing = { x, y, t: now };
+    settling = null;
+  }
+  stage.onPointer((pointer) => {
+    if (mode !== 1 || stage.still || o.ripples === false) return;
+    if (!pointer.active || !pointer.inside) { settling = null; return; }
+    const { x, y } = pointer.raw;
+    const now = stage.clock.time;
+    const gap = now - lastRing.t;
+    const moved = Math.hypot(x - lastRing.x, y - lastRing.y);
+    // A finger that taps the same spot again a second later still makes a ring.
+    if (gap > 1 || (gap > 0.4 && moved > 0.08)) drop(x, y, 0.8);
+    else settling = { x, y, t: now };
   });
 
   stage.onFrame((time, delta) => {
     // Flow is time that runs at the chosen speed and the data's energy, added up frame by frame so a
-    // change of speed never makes the picture jump.
+    // change of speed never makes the picture jump. Scrolling sets the pace too: the aurora surges
+    // halfway and slows at the end; the water and the mist slow down.
+    const p = stage.progressEased;
+    const pace = mode === 0 ? 1 + 0.6 * Math.sin(Math.PI * p) - 0.45 * p : 1 - 0.4 * p;
     energy = stage.still ? energyTarget : THREE.MathUtils.damp(energy, energyTarget, 1.5, delta);
-    flow = stage.still ? time * speed : flow + delta * speed * (0.55 + 0.9 * energy);
+    flow = stage.still ? time * speed : flow + delta * speed * pace * (0.55 + 0.9 * energy);
     material.uniforms.uFlow.value = flow;
     material.uniforms.uEnergy.value = energy;
+    // Where the pointer is, in scene units, and how present it is: it fades in over the container
+    // and out when it leaves (never in a still frame).
+    const here = stage.pointer.active && stage.pointer.inside && !stage.still;
+    presence = stage.still ? 0 : THREE.MathUtils.damp(presence, here ? 1 : 0, 3, delta);
+    material.uniforms.uReach.value.set(...toScene(stage.pointer.x, stage.pointer.y), presence);
+    if (settling && time - settling.t > 0.15) {
+      if (Math.hypot(settling.x - lastRing.x, settling.y - lastRing.y) > 0.03) drop(settling.x, settling.y, 0.9);
+      settling = null;
+    }
   });
 
   return stage.handle({
