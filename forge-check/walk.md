@@ -61,30 +61,82 @@ it back when it closes; nothing needs a mouse. Write it as a spec with `page.key
 can (the case `F01-K1`), and do the rest in the manual pass with a browser tool. A control that
 cannot be reached is a high bug (WCAG 2.1.1), a focus ring you cannot see a medium one.
 
+## An app that already runs
+
+The usual case for a test on its own: "test mijn app" in the user's folder, with their dev server
+(`npm run dev` on `http://localhost:3000`) or their own containers running.
+
+- Use it at its address, as it is: that is the `Served:` address and the base URL of every run.
+  Never start a second server next to it, never restart it, never stop it.
+- In its folder, install only what is missing. Never `npm ci`, `rm -rf node_modules` or `next
+  build`: the first two pull the packages from under the running server, the last overwrites the
+  `.next` folder it serves from. `e2e/` has its own package.json, so its install touches nothing.
+- Demo accounts the app already has (a README line, a seed file, a login hint): two with the same
+  role are the first and second user. Their emails go in `e2e/helpers.ts` (as `ALICE` and `BOB`;
+  the `.auth/alice.json` and `bob.json` names stay), their passwords in `E2E_PASSWORD` and
+  `E2E_PASSWORD_2`, from where the app documents them, never written into a file in git. Not
+  documented: ask the user.
+- Their database is the one they work with. Specs add records with new names (`Date.now()`) and
+  never delete one they did not make. A record the level needs that the demo accounts lack: make
+  it through the app's own screens in the spec. A seed command that empties a database runs only
+  after the user's go.
+
 ## Seed data
 
-Improve mode without a seeder: write one in `forge-work/` (out of git), or after the user's go
-commit one as `test: add a seed command`, with fake `@example.test` users sharing `SEED_PASSWORD`,
-a record per edge case (a draft, a past item, a nearly full one), on a database that may be emptied
-(unsure: ask). No accounts, data in the browser: no seeder or `E2E_PASSWORD`, each test seeds its
-own data (see the last group of `../forge-check/e2e.example.spec.ts`).
+A forge-built app has a seeder (build-log.md or the README): laravel `php artisan db:seed`, django
+`python manage.py seed`, next `npm run seed`; its users share `SEED_PASSWORD`, which is
+`E2E_PASSWORD`. Improve mode without a seeder or demo accounts: write one in `forge-work/` (out of
+git), or after the user's go commit one as `test: add a seed command`, with fake `@example.test`
+users sharing `SEED_PASSWORD`, a record per edge case (a draft, a past item, a nearly full one), on
+a database that may be emptied (unsure: ask). No accounts, data in the browser: no seeder or
+`E2E_PASSWORD`, each test seeds its own data (see the last group of `../forge-check/e2e.example.spec.ts`).
 
-Seed and unit tests run on the host and reach the database on the override's port ("Where things
-run" in `../forge-build/steps/build.md`): `127.0.0.1:3307` (MariaDB) or `127.0.0.1:5433` (PostgreSQL).
+A forge-built app on its compose stack: the images have no dev packages, so seed and unit tests run
+on the host (`composer install`, a venv with the dev requirements, `npm ci` in a folder no dev
+server runs from) and reach the database on the override's port ("Where things run" in
+`../forge-build/steps/build.md`): `127.0.0.1:3307` (MariaDB) or `127.0.0.1:5433` (PostgreSQL).
 next: the unit tests use `TEST_DATABASE_URL=postgres://app:<DB_PASSWORD>@127.0.0.1:5433/app_test`,
 made once by `docker compose exec db createdb -U app app_test`; the tests migrate it and refuse a
-name without `_test`.
+name without `_test`. Another app: its own test set-up, as its README or package.json says.
 
 Improve mode, after the fix loop: update improve.md: "Tests after", and per fixed bug a line under
 "Found on the way": `B001 fixed in d8a76ff, see bugs.md`.
 
+## The e2e config
+
+Two changes to the config at the top of `../forge-check/e2e.example.spec.ts`. The walk is a
+project of its own that exists only when `FORGE_ROUND` is set, so a run of the suite never opens
+the walk and never writes over walk.json or a round of shots:
+
+```ts
+projects: [
+  { name: 'setup', testMatch: /auth\.setup\.ts/ },
+  { name: 'chromium', testMatch: /\.spec\.ts$/, testIgnore: /walk\.spec\.ts$/, dependencies: ['setup'] },
+  ...(process.env.FORGE_ROUND
+    ? [{ name: 'walk', testMatch: /walk\.spec\.ts$/, dependencies: ['setup'] }] : []),
+],
+```
+
+And with demo accounts, helpers.ts gives each user their own password,
+`const PASSWORDS = { [ALICE]: process.env.E2E_PASSWORD || '', [BOB]: process.env.E2E_PASSWORD_2 ||
+process.env.E2E_PASSWORD || '' }`, and the default password of `signIn` becomes `PASSWORDS[email]`.
+The suite is `npx playwright test --project=chromium`, the walk `FORGE_ROUND=r1 npx playwright test
+--project=walk`, each with `FORGE_BASE_URL` set to the `Served:` address (Step 3 of the steps file).
+
 ## Rate limits
 
 The app's rate limits count every spec and every page of the walk, all from one address. Never
-loosen them for tests. Clear the counters between runs: laravel `docker compose exec app php
-artisan cache:clear`, django its limiter's store (django-axes: `manage.py axes_reset`), next
-`docker compose restart app` (Better Auth counts in memory by default). The walk signs nobody in:
-it reuses the cookies the setup project saved.
+loosen them for tests. Clear the counters between runs, on a stack you started: laravel `docker
+compose exec app php artisan cache:clear`, django its limiter's store (django-axes: `manage.py
+axes_reset`), next on the forge compose stack `docker compose restart app` (Better Auth counts in
+memory by default). A server you did not start (the user's own `npm run dev`) is never restarted:
+an in-memory counter clears after its window, so wait it out, or ask the user to restart it. The
+walk signs nobody in: it reuses the cookies the setup project saved.
+
+"Too many login attempts" runs on a throwaway account the spec signs up first (new email, new
+password), never on a seed or demo account: a locked demo account stops the other specs, and the
+user may use it themselves. No sign-up in the app: leave the case out and write it under "Not
+tested".
 
 ## Level 5
 
@@ -123,8 +175,8 @@ mode: one per route in the app's router. Fill in the ids of seed records (`/item
 
 - `name`: letters, digits, `-` and `_`; each name once. It is part of the screenshot's name.
 - `path`: starts with one `/`.
-- `as`: `null` for a visitor, or a seed user whose cookies the setup project saved in
-  `e2e/.auth/<as>.json`. Walk a page as the user who may see it; a page only an admin may open
+- `as`: `null` for a visitor, or a seed or demo user whose cookies the setup project saved in
+  `e2e/.auth/<as>.json` (`alice` and `bob` are the first and second user, also for demo accounts). Walk a page as the user who may see it; a page only an admin may open
   gets `"as": "admin"` and a third saved sign-in.
 - Not a route: a dialog, a tab or a step with no URL of its own (a flow spec covers it), and pages
   on other hosts (Stripe Checkout).
@@ -196,7 +248,7 @@ The walk measures speed from level 3, and a page over budget is a bug like any o
 (`walkcheck.py --json --fail-on low` lists none with the rule `lcp_ms`, `cls`, `ttfb_ms`,
 `load_ms`, `transfer_bytes` or `requests`), unless the user agreed a looser limit (below).
 
-Per page, on a first load (an empty cache), on the local stack:
+Per page, on a first load (an empty cache), on a production build on this machine:
 
 | key | limit | what it is |
 | --- | --- | --- |
@@ -208,8 +260,22 @@ Per page, on a first load (an empty cache), on the local stack:
 | `requests` | 60 | requests the page made |
 
 Over the limit is medium, over twice the limit high (`requests`: always low). A measurement the
-browser did not give (`null`) is not judged. The local stack is faster than a real server, so a
-page over budget here is over budget everywhere. To change a limit, write
+browser did not give (`null`) is not judged. A production build on this machine is faster than a
+real server, so a page over budget here is over budget everywhere.
+
+A dev server (`next dev`, `vite`, `php artisan serve`, `manage.py runserver`) is not that: it builds
+a route on its first load and sends code that is not minified, so its numbers are not the app's.
+On a dev server, open every route once before the walk (a GET of each path), and write `speed
+measured on a dev server` in test-plan.md. Speed and size findings from a dev server are not bugs
+and never block: list them under `## To check` in bugs.md with their numbers, and Step 6.6 is done
+when walkcheck.py finds nothing else. For real numbers, walk a production build on a free port in a
+copy of the folder: `git worktree add --detach ../<app>-walk HEAD`, then there install, build and
+start it (next: `npm ci`, `npx next build`, `npx next start -p 3100`), with a copy of their `.env`
+files (never printed), and walk `http://localhost:3100`. Never `next build` in the folder whose dev
+server is running. Level 4 enforces the budget, and inside a `/forge` project the gate runs
+walkcheck.py on walk.json: there the walks are of such a production build, rebuilt after each round
+of fixes, and Step 7 takes its before and after shots with shots.mjs from the `Served:` address.
+Remove the copy at the end (`git worktree remove ../<app>-walk`). To change a limit, write
 `forge-work/test/budget.json` with only the keys that differ, such as `{"lcp_ms": 3000}`, and run
 walkcheck.py with `--budget forge-work/test/budget.json`. A looser budget is the user's call: ask,
 and write their words in test-plan.md under "Not tested".

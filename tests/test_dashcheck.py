@@ -330,8 +330,10 @@ class Levels(DashCase):
     def test_the_human_report_names_the_level(self):
         code, out, _ = run(self.write(page(numbers(4, MOVING), before="Level: 4 (Showpiece)\n\n")), "--level", "4")
         self.assertEqual(code, 0)
-        self.assertIn("Level: 4 (Showpiece)", out)
-        self.assertNotIn("Level:", run(self.write(page(GOOD)))[1])
+        self.assertIn("Checked at dashboard level 4 (Showpiece)", out)
+        self.assertNotIn("level", run(self.write(page(GOOD)))[1].lower())
+        pasted = page(numbers(4, MOVING), before="Level: 4 (Showpiece)\n\n", after="\n## Checks\n\n" + out + "\n")
+        self.assertEqual(run(self.write(pasted), "--level", "4")[0], 0, "pasted output adds no second Level line")
         with self.assertRaises(SystemExit) as caught, contextlib.redirect_stderr(io.StringIO()):
             dashcheck.main(["a.md", "--level", "6"])
         self.assertEqual(caught.exception.code, 2)
@@ -458,6 +460,39 @@ class SkillAgrees(unittest.TestCase):
         self.assertEqual([self.steps.index(name) for name in order], sorted(self.steps.index(name) for name in order))
         for section in ("Audience", "Numbers", "Layout", "Charts", "States", "Checks"):
             self.assertIn("`## %s`" % section, self.steps[self.steps.index("## Output"):])
+
+    def test_a_signed_in_app_of_the_users_own_can_be_walked(self):
+        steps, reference = " ".join(self.steps.split()), " ".join(read(REFERENCE).split())
+        first_step = steps.index("## Step 1")
+        self.assertLess(steps.index("python3 ../forge/level.py set dashboard"), first_step, "a level said is recorded first")
+        step1 = steps[first_step:steps.index("## Step 2")]
+        for part in ["python3 ../forge/gitguard.py", "git switch -c forge/dashboard", "never a worktree",
+                     "../forge-design/review.md` section 1", "forge-work/design/signin.mjs", "storageState",
+                     "forge-work/design/alice.json", "demo or seed user", "never the user's"]:
+            self.assertIn(part, step1)
+        step3 = steps[steps.index("## Step 3"):steps.index("## Step 4")]
+        self.assertNotIn("--level", step3.replace("no `--level` yet", ""), "the level is checked after the build")
+        for part in ["already show numbers", "Extend the one", "OK, or is it for the admin?", "<dashboard path>",
+                     "turned into `-`", "--state forge-work/design/alice.json"]:
+            self.assertIn(part, step3)
+        self.assertIn("`Level: N (Name)` as the first line", steps[steps.index("## Step 2"):steps.index("## Step 3")])
+        step7 = steps[steps.index("## Step 7"):steps.index("## Step 8")]
+        for part in ["After the first panel works", "10 minutes", "app's own menu", "over about 200 ms",
+                     "SQLite", "pause control", "own data layer"]:
+            self.assertIn(part, step7)
+        step10 = steps[steps.index("## Step 10"):steps.index("## Step 11")]
+        for part in ["forge-work/dashboard/motion", "-390-f[1-4].png", "the before command of Step 3.4 exactly",
+                     "signin.mjs <URL> <dashboard path>"]:
+            self.assertIn(part, step10)
+        self.assertNotIn("dashboard-390", steps)
+        for part in ["## Built", "one plain line per check", "code block"]:
+            self.assertIn(part, steps[steps.index("## Step 11"):])
+        self.assertIn("map those to the app's own variables", steps)
+        self.assertIn("in the user's language", steps[steps.index("## Next"):])
+        for part in ["## 15. Shots of a signed-in dashboard", "context.storageState", "page.on('console'",
+                     "never a password in a file"]:
+            self.assertIn(part, reference)
+        self.assertNotIn("depth.js", reference + steps, "the scene kit has no depth.js")
 
     def test_the_reference_shows_each_level_the_hud_and_the_data_scene(self):
         reference = read(REFERENCE)

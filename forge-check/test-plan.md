@@ -1,8 +1,8 @@
 # Test plan: {{app name}}
 
 Build: {{commit}}  Date: {{YYYY-MM-DD}}  Profile: {{laravel | django | next | static}}  PWA: {{yes | no}}
-Runs against: {{http://localhost:8080}}, the local compose stack with seed data. scope.py: exit {{0}}
-Served: {{what serves the user's own address: the compose stack on http://localhost:8080, from this folder, branch forge/work; no service worker}}
+Runs against: {{http://localhost:3000, the user's own dev server, with two demo accounts | http://localhost:8080, the local compose stack with seed data}}. scope.py: exit {{0}}
+Served: {{what serves the user's own address: npm run dev on http://localhost:3000, from this folder, branch forge/test (theirs: main); no service worker}}
 
 Level: {{3 (Standard)}}
 
@@ -12,17 +12,17 @@ its own. `python3 ../forge/level.py check test --report forge-work/test-plan.md`
 ## How to run
 
 - Unit and integration tests, on the host (Step 2 of the test part; level 2 and up): `{{php artisan test | pytest | npx vitest run}}`
-- End to end, on the stack as it is now (after any change to the app, first
-  `docker compose up -d --build --wait`), {{on the host | in Playwright's image (../forge-check/e2e.example.spec.ts)}}:
-  `cd e2e && FORGE_BASE_URL=http://localhost:8080 E2E_PASSWORD=<the seed password> npx playwright test`.
+- End to end, on the app as it runs now at the Served address (a compose stack: after any change to
+  the app, first `docker compose up -d --build --wait`), {{on the host | in Playwright's image (../forge-check/e2e.example.spec.ts)}}:
+  `cd e2e && FORGE_BASE_URL={{http://localhost:3000}} E2E_PASSWORD=<the first user's password> {{E2E_PASSWORD_2=<the second user's password>}} npx playwright test --project=chromium`.
   Without `E2E_PASSWORD` every signed-in test is skipped (an app without accounts has none):
   Playwright still exits 0, so read the skipped count and write each skip in the result column.
-  Between two runs, reset the app's rate limits: `{{docker compose exec app php artisan cache:clear | docker compose restart app}}`.
+  Between two runs, reset the app's rate limits: `{{docker compose exec app php artisan cache:clear | docker compose restart app | wait out the window: a dev server forge did not start is never restarted}}`.
 - The walk, level 3 and up, after the flow specs (every route of `forge-work/test/routes.json` at 390, 768 and 1440 px,
-  light and dark; see `../forge-check/walk.md`): `cd e2e && FORGE_BASE_URL=http://localhost:8080
-  FORGE_ROUND={{r1}} npx playwright test walk`, then, from the project root,
+  light and dark; see `../forge-check/walk.md`): `cd e2e && FORGE_BASE_URL={{http://localhost:3000}}
+  E2E_PASSWORD=<...> FORGE_ROUND={{r1}} npx playwright test --project=walk`, then, from the project root,
   `python3 ../forge-check/walkcheck.py forge-work/test/walk.json`.
-- Level 5: every spec three times, `npx playwright test --repeat-each=3`.
+- Level 5: every spec three times, the suite command with `--repeat-each=3`.
 
 ## Cases
 
@@ -50,7 +50,7 @@ Bugs (the counts `../forge-check/bugs.py` prints): {{n}} critical, {{n}} high, {
 {{n}} open, {{n}} fixed, {{n}} wontfix.
 `python3 ../forge-check/bugs.py forge-work/bugs.md`: exit {{0}}.
 The walk (level 3 and up; below it: none), round {{r1}}: {{n}} routes, {{n}} pages; findings left: {{n}} high, {{n}} medium, {{n}} low.
-Slowest page: {{S03-dashboard at 390 px, LCP 1800 ms}}; budget: {{the default | forge-work/test/budget.json}}.
+Slowest page: {{S03-dashboard at 390 px, LCP 1800 ms}}; budget: {{the default | forge-work/test/budget.json}}; {{speed measured on a production build on http://localhost:3100 | speed measured on a dev server}}.
 Screenshots (level 4 and up): {{shotcheck.py r1 r2: 2 changed, both by the fix for B004 | below level 4: not compared}}.
 `python3 ../forge-check/walkcheck.py forge-work/test/walk.json`: exit {{0}}.
-Fixes you can see: {{2, before and after in forge-work/test/fixes/; changed.py: VISIBLE CHANGE | none: every fix is in the server}}.
+Fixes you can see: {{2, before and after in forge-work/test/shots/r1 and r2 or forge-work/test/fixes/; changed.py: VISIBLE CHANGE | none: every fix is in the server}}.

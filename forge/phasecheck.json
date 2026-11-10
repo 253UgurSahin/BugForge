@@ -72,18 +72,20 @@
                "--section", "Charts", "--section", "States", "--section", "Checks",
                "--rows", "number,definition,source,unit,form"],
      "why": "forge-design dashboard, Output: dashboard.md with ## Audience, ## Numbers (its table), ## Layout, ## Charts, ## States, ## Checks"},
-    {"check": ["run", "forge-design/dashcheck.py", "forge-work/dashboard.md"],
-     "why": "forge-design dashboard, Output: dashboard.md, on which dashcheck.py exits 0"}
+    {"check": ["run", "forge-design/dashcheck.py", "forge-work/dashboard.md", "--level", "auto"],
+     "why": "forge-design dashboard, Output: dashboard.md, on which dashcheck.py --level auto exits 0"},
+    {"check": ["tool", "forge/level.py", "check", "dashboard", "--report", "forge-work/dashboard.md"],
+     "why": "forge-design dashboard, Step 1: the level the user chose, as Level: N in dashboard.md"}
   ],
   "motion": [
     {"check": ["file", "forge-work/motion.md"], "why": "forge-design motion, Output: forge-work/motion.md"},
     {"check": ["doc", "forge-work/motion.md", "--section", "Direction", "--section", "Inventory", "--section", "Tokens",
                "--section", "Libraries", "--section", "Checks"],
      "why": "forge-design motion, Output: motion.md with ## Direction, ## Inventory, ## Tokens, ## Libraries, ## Checks"},
-    {"check": ["run", "forge-design/motioncount.py", ".", "--min", "8"],
-     "why": "forge-design motion, Step 7: motioncount.py . --min 8 exits 0: the motion is in the app's own files, not only in a plan"},
+    {"check": ["run", "forge-design/motioncount.py", ".", "--level", "auto"],
+     "why": "forge-design motion, Step 9: motioncount.py . --level auto exits 0: the motion of the chosen level is in the app's own files, not only in a plan"},
     {"check": ["run", "forge-design/motioncheck.py", ".", "--fail-on", "medium"],
-     "why": "forge-design motion, Step 7 and Output: motioncheck.py . --fail-on medium exits 0"}
+     "why": "forge-design motion, Step 9 and Output: motioncheck.py . --fail-on medium exits 0"}
   ],
   "test": [
     {"check": ["file", "forge-work/test-plan.md"],
@@ -99,11 +101,13 @@
      "why": "forge-check test, Step 3: improve mode adds the specs to the app's own Playwright setup (a playwright.config.*), or else to e2e/; Output: every result and the totals; the template's legend: result pass, fail B003 or skipped: why"},
     {"check": ["work", "specs", "e2e/**/*.spec.*", "e2e/**/*.test.*"],
      "modes": ["clone", "idea"],
-     "why": "forge-check test, Step 3 and Output: one spec per flow in e2e/"},
+     "why": "forge-check test, Step 3: from level 2, one spec per flow in e2e/ (inside a forge project testing is never below level 2)"},
     {"check": ["run", "forge-check/walkcheck.py", "forge-work/test/walk.json"], "when": "forge-work/test/walk.json",
      "why": "forge-check test, Output: walk.json, on which walkcheck.py exits 0"},
     {"check": ["run", "forge-check/bugs.py", "forge-work/bugs.md"],
-     "why": "forge-check test, Output: bugs.md, on which bugs.py exits 0"}
+     "why": "forge-check test, Output: bugs.md, on which bugs.py exits 0"},
+    {"check": ["tool", "forge/level.py", "check", "test", "--report", "forge-work/test-plan.md"],
+     "why": "forge-check test, Step 1: the level the user chose, as Level: N in test-plan.md, with the evidence that level asks for (../forge/levels.md)"}
   ],
   "diff": [
     {"check": ["run", "forge-check/parity.py", "forge-work/features.csv"],
@@ -127,7 +131,7 @@
                "--section", "Logo brief", "--section", "Voice", "--section", "Sweep"],
      "why": "forge-design brand, Output: brand.md with the name checks, the palette, the logo brief, the voice and the sweep"},
     {"check": ["run", "forge-design/contrast.py", "forge-work/design/tokens.json"],
-     "why": "forge-design brand, Step 3: the new palette in tokens.json; fix until contrast.py exits 0"},
+     "why": "forge-design brand, Step 3: the palette in tokens.json; fix the tokens until contrast.py exits 0"},
     {"check": ["work", "named", "forge-work/brand.json"],
      "why": "forge-design brand, Step 6: replace the name everywhere: the app name setting, titles, the manifest, the README"},
     {"check": ["run", "forge-design/sweep.py", ".", "--config", "forge-work/brand.json"],
@@ -156,7 +160,9 @@
     {"check": ["scan", "forge-work/security.md", "forge-check/codecheck.py", "."],
      "why": "forge-check secure, Step 3 and The gate: a critical or high codecheck finding is fixed, or passes only as a risk the user accepted under Accepted risks (a false positive: forge:allow on its line, with the user's OK)"},
     {"check": ["run", "forge-check/secretscan.py", "."],
-     "why": "forge-check secure, The gate: secretscan.py must exit 0; its findings are fixed, not accepted"}
+     "why": "forge-check secure, The gate: secretscan.py must exit 0; its findings are fixed, not accepted"},
+    {"check": ["tool", "forge/level.py", "check", "secure", "--report", "forge-work/security.md"],
+     "why": "forge-check secure, Step 10: the level the user chose (never below 3 inside a project), as Level: N in security.md, with the evidence that level asks for"}
   ],
   "pack": [
     {"check": ["file", "Dockerfile"], "why": "forge-build pack, Output: Dockerfile, docker-compose.yml, .env.example, .dockerignore, RUN.md"},
@@ -190,6 +196,6 @@
     {"check": ["doc", "forge-work/improve.md", "--section", "Fixed", "--moved", "To do"],
      "why": "forge-improve, Output: improve.md as shown there; Step 2: move each picked finding from To do to Fixed or Skipped"},
     {"check": ["run", "forge/gitguard.py", "."],
-     "why": "forge-improve, Step 6: gitguard.py must exit 0, still on the work branch"}
+     "why": "forge-improve, Step 7: gitguard.py must exit 0, still on the work branch"}
   ]
 }

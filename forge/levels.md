@@ -61,6 +61,9 @@ lively, levendig (3); show piece, pronkstuk (4); cinema, film, filmisch, 4d, max
 Also understood: fast, vlug, smoke, minimal, minimaal, minimum (1); normal, normaal, gewoon (3);
 deep, diep, uitgebreid (4); max, maximal, maximaal, maximum (5).
 
+The floor: inside a forge project testing never runs below level 2: an app forge builds gets a
+test per flow. Level 1 is for a quick check on its own.
+
 ## secure
 
 | level | name | Dutch | what is checked | the gate asks for |

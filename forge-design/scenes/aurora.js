@@ -46,10 +46,11 @@
  * a little --color-accent also serves.
  *
  * Cost: one draw call, no textures, nothing moves on the processor. It draws at part of the screen
- * resolution (0.5, 0.6, 0.75 for low, medium, high) because a soft picture loses nothing by it;
- * noise layers per pixel: aurora 2 warp layers of 3 to 5 octaves plus 2 or 3 curtains; water 6 to
- * 12 noise lookups and 4 or 8 rings; mist 3 fog layers of 3 to 5 octaves. Under reduced motion it
- * draws one still frame and nothing more.
+ * resolution (0.5, 0.6, 0.75 of it for low, medium, high quality: a soft picture loses nothing by
+ * it). 2D simplex lookups per pixel, low / high quality: aurora 12 / 19 (two warp layers of 3 to 5
+ * octaves, 2 or 3 curtains), water 7 plus 4 or 8 rings, mist 13 / 19 (three fog banks). A phone
+ * starts at medium; the stage steps down when frames are slow. Under reduced motion it draws one
+ * still frame and stops: no cost at all after that.
  */
 import * as THREE from "three";
 import { createStage } from "./stage.js";
@@ -137,23 +138,27 @@ vec4 sky(vec2 p) {
     float fi = float(i);
     float far = fi / float(CURTAINS - 1);              // 0 the nearest curtain .. 1 the farthest
     // Along the curtain: far curtains are stretched, so their folds are smaller, as in perspective.
-    float x = s.x * (1.5 + far * 1.6) + fi * 4.7 + t * (0.035 + 0.02 * fi);
+    // The pointer moves near curtains more than far ones (parallax), so the sky has depth.
+    float x = (s.x - uPointer.x * 0.035 * (1.0 - 0.7 * far)) * (1.5 + far * 1.6) + fi * 4.7 + t * (0.035 + 0.02 * fi);
     vec3 wave = snoiseGrad(vec2(x * 0.8, t * 0.04 + fi * 13.0));
-    float hem = -0.02 + far * 0.19 - 0.14 * uProgress + lean * s.x + 0.085 * wave.x;
+    float hem = -0.02 + far * 0.19 - 0.14 * uProgress + lean * s.x + 0.085 * wave.x - uPointer.y * 0.02 * (1.0 - far);
     float d = s.y - hem;                               // height above the hem
     // Brightest just above a soft hem, then a long fade upwards; far curtains are shorter.
-    float body = smoothstep(-0.05, 0.02, d) * exp(-max(d, 0.0) * (5.0 + far * 4.0));
-    body += 0.7 * exp(-d * d / 0.0004);                // the hem itself, a thin brighter seam
+    float body = smoothstep(-0.03, 0.01, d) * exp(-max(d, 0.0) * (5.0 + far * 4.0)) * 0.75;
+    body += 0.9 * exp(-d * d / 0.0003);                // the hem itself, a thin brighter seam
+    float under = 0.3 * exp(min(d, 0.0) * 14.0) * step(d, 0.0);   // its light scattered a little below
     // Where the curtain turns away from us (a steep hem) we look along it, and it is brighter.
     body *= 1.0 + 0.6 * smoothstep(0.3, 1.5, abs(wave.y));
     // Rays: noise stretched along the height, so the light hangs in vertical streaks.
-    float rays = snoise(vec2(x * 9.0, s.y * 0.6 - t * 0.05));
-    float c = body * (0.55 + 0.45 * rays) * mix(1.0, 0.5, far);
+    // Two sizes of ray: broad bands and fine threads inside them.
+    float rays = 0.65 * snoise(vec2(x * 8.0, s.y * 0.6 - t * 0.05))
+               + 0.35 * snoise(vec2(x * 23.0, s.y * 1.1 - t * 0.08));
+    float c = (body * (0.55 + 0.5 * rays) + under) * mix(1.0, 0.5, far);
     // Colour: near curtains in the accent, turning towards the second accent at their tops and in
     // the farthest curtain. Scrolling turns the whole sky further round, and shifts the weight.
-    float t = far * 0.75 + smoothstep(0.0, 0.3, d) * 0.4 + (uProgress - 0.3) * 0.7;
+    float along = far * 0.75 + smoothstep(0.0, 0.3, d) * 0.4 + (uProgress - 0.3) * 0.7;
     float weight = mix(1.0 - 0.4 * far, 0.6 + 0.6 * far, uProgress);
-    hue += t * c * weight;
+    hue += along * c * weight;
     amount += c * weight;
   }
   // A faint glow under and round the curtains, as their light seen through haze.
@@ -180,11 +185,11 @@ vec2 surfaceSlope(vec2 p) {
     vec2 off = p - r.xy;
     float dist = length(off) + 1e-4;
     float radius = 0.02 + age * 0.16;                  // the ring spreads at a steady pace
-    float x = (dist - radius) / 0.045;                 // across the ring, in ring widths
+    float x = (dist - radius) / 0.06;                  // across the ring, in ring widths
     float fade = r.w * exp(-age * 0.75) * uRingOn;
-    // height: a wave packet, cos(8x) under a bell exp(-x^2); its slope along the radius:
+    // height: a wave packet, cos(6x) under a bell exp(-x^2); its slope along the radius:
     float bell = exp(-x * x);
-    float dh = fade * 0.00006 * bell * (-2.0 * x * cos(8.0 * x) - 8.0 * sin(8.0 * x)) / 0.045;
+    float dh = fade * 0.0001 * bell * (-2.0 * x * cos(6.0 * x) - 6.0 * sin(6.0 * x)) / 0.06;
     slope += dh * off / dist;
   }
   return slope;
@@ -195,10 +200,13 @@ vec4 sky(vec2 p) {
   // how much lands is 1 / (how much that mapping stretches area), the determinant of its
   // Jacobian. Its parts are the slopes of the slope, taken here as small differences.
   float e = 0.004;
+  // The bottom is not flat: where it lies deeper the net is larger and softer, where it rises it
+  // comes into focus. That variation is what makes it read as depth, not as a pattern.
+  float bed = 0.5 + 0.5 * snoise(q * 0.8 + vec2(0.01, 0.0) * uFlow);
   vec2 g = surfaceSlope(q);
   vec2 gx = (surfaceSlope(q + vec2(e, 0.0)) - g) / e;
   vec2 gy = (surfaceSlope(q + vec2(0.0, e)) - g) / e;
-  float depth = mix(1.0, 0.75, uProgress) * (0.85 + 0.3 * uEnergy);
+  float depth = mix(1.0, 0.75, uProgress) * (0.85 + 0.3 * uEnergy) * (0.75 + 0.45 * bed);
   // Blue light bends a little more than red: a second, slightly deeper focus gives a soft
   // fringe in the second accent beside every line.
   vec2 det;
@@ -209,9 +217,8 @@ vec4 sky(vec2 p) {
   vec2 lux = 1.0 / (abs(det) + 0.3);                   // 1 / area, kept finite where it folds
   vec2 lines = smoothstep(0.55, 3.3, lux);
   float fringe = max(lines.y - lines.x, 0.0) * 0.5;
-  // The water itself: a slow change in depth across the bottom; deeper parts carry more colour.
-  float bed = 0.5 + 0.5 * snoise(q * 0.8 + vec2(0.01, 0.0) * uFlow);
-  vec3 tint = ink(0.2 + 0.5 * uProgress), glint = ink(0.6 * uProgress), edge = ink(0.45 + 0.4 * uProgress);
+  lines *= 0.6 + 0.6 * bed;                            // light fades with the depth of water above
+  vec3 tint = ink(0.15 + 0.7 * uProgress), glint = ink(0.25 * uProgress), edge = ink(0.35 + 0.4 * uProgress);
   float base = 0.1 + 0.1 * bed;
   vec3 light = tint * base + glint * lines.x + edge * fringe;
   float amount = base + lines.x + fringe;
@@ -230,8 +237,11 @@ vec4 sky(vec2 p) {
   vec2 frame = frameSize();
   // The light sits away from the calm side, high up; on a phone at the top.
   vec2 lamp = uCalm.w > 0.5 ? vec2(0.0, frame.y * 0.7) : vec2(-uCalm.x * frame.x * 0.45, frame.y * 0.35);
-  float glow = exp(-dot(p - lamp, p - lamp) * 4.0);
-  float swirl = fbm(p * 1.3 + vec2(0.01, 0.0) * t);
+  float far2 = dot(p - lamp, p - lamp);
+  float glow = exp(-far2 * 4.0);                       // the halo the fog makes of it
+  float core = exp(-far2 * 70.0);                      // the light itself, a soft disc
+  vec3 lampInk = mix(vInkMist * 1.25, ink(0.2), 0.2);
+  float swirl = snoise(p * 1.3 + vec2(0.01, 0.0) * t);
   vec2 warp = vec2(swirl, -0.5 * swirl);
   vec3 colour = vec3(0.0);
   float cover = 0.0;
@@ -247,22 +257,23 @@ vec4 sky(vec2 p) {
     float wisps = fbm(q * vec2(1.1, 4.2) + warp * 0.5);
     // Densest just under its top, thinning downwards, so the next bank's top shows against it.
     float below = top - p.y + 0.05 * wisps;
-    float density = smoothstep(-0.03, 0.05, below) * exp(-max(below, 0.0) * mix(3.2, 1.6, near));
+    float density = smoothstep(-0.03, 0.05, below) * exp(-max(below, 0.0) * mix(4.5, 1.8, near));
     density *= (0.7 + 0.3 * wisps) * mix(0.45, 0.85, near);
     // Lit from behind: fog in front of the light glows, far fog glows most (it is nearest the light).
     // Far banks melt into the page (atmospheric perspective): dimmer on dark, paler on light.
-    vec3 ink = vInkMist * mix(0.6 + 0.4 * near, 1.0, 1.0 - uDark) + ink(0.2) * glow * (0.7 - 0.4 * near) * uDark;
-    ink *= 1.0 + 0.35 * exp(-max(below, 0.0) * 14.0) * uDark;   // lit from above: a pale top edge
-    density *= mix(1.0, 0.6 + 0.4 * near, 1.0 - uDark);
-    colour = mix(colour, ink, density);                // "over": the nearer bank covers
+    vec3 fog = vInkMist * mix(0.55 + 0.4 * near, 1.0, 1.0 - uDark) + lampInk * glow * (0.8 - 0.5 * near) * uDark;
+    fog *= 1.0 + 0.8 * exp(-max(below, 0.0) * 25.0) * uDark;   // lit from above: a pale top edge
+    density *= mix(1.0, 0.8 + 0.55 * near, 1.0 - uDark);
+    colour = mix(colour, fog, density);                // "over": the nearer bank covers
     cover += density * (1.0 - cover);
   }
   // On a light page the light shows as thinner fog; on a dark one the glow itself is faint light.
   float thin = 1.0 - 0.35 * glow * (1.0 - uDark);
   colour *= thin;
   cover *= thin;
-  colour += ink(0.2) * glow * 0.25 * uDark;
-  cover += glow * 0.25 * uDark;
+  float behind = (glow * 0.18 + core * 0.5) * (1.0 - cover) * uDark;   // seen only where fog is thin
+  colour += lampInk * behind;
+  cover += behind;
   return vec4(colour / max(cover, 1e-4), cover);
 }
 #endif

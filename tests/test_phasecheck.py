@@ -106,13 +106,13 @@ PLAN = filled("forge-plan/plan.md", Profile="static", PWA="no", Mode="clone")
 CASES = "| case | flow | type | steps | expected | auto | result |\n| --- | --- | --- | --- | --- | --- | --- |\n" \
         "| F01-H1 | book a slot | happy | pick 10:00 | booked | e2e | pass |\n" \
         "| F01-E1 | | edge: slot taken | | message | e2e | fail B001 |\n"
-TEST_PLAN = re.sub(r"(?m)^\| case \|.*\n(?:\|.*\n)*", CASES, filled("forge-check/test-plan.md"))
+TEST_PLAN = re.sub(r"(?m)^\| case \|.*\n(?:\|.*\n)*", CASES, filled("forge-check/test-plan.md")).replace("Level: 3 (Standard)", "Level: 2 (Basic)")
 SPEC = "import { test } from '@playwright/test';\ntest('F01-H1 book a slot', async ({ page }) => {});\n"
 TOKENS = json.dumps(dict(json.loads(template("forge-design", "tokens.json")),
                          font={"sans": "IBM Plex Sans, system-ui, sans-serif", "mono": "ui-monospace, monospace"}))
 BUILD_LOG = "# Build log\n\n| ID | date | status | what | notes |\n| --- | --- | --- | --- | --- |\n" \
             "| S01 | 2026-10-27 | done | booking page | |\n"
-SECURITY = "# Security check\nDate: 2026-10-27\nVerdict: PASS\nCounts: 0 critical, 0 high, 1 medium, 0 low\n\n" \
+SECURITY = "# Security check\nDate: 2026-10-27\nLevel: 3 (Standard)\nVerdict: PASS\nCounts: 0 critical, 0 high, 1 medium, 0 low\n\n" \
            "## What was checked\n- secretscan, codecheck, deps (npm), headers (http://localhost:8080), trackers\n\n" \
            "## Coverage\n| OWASP 2021 | result |\n| --- | --- |\n| A03 Injection | ok: codecheck, flowcheck |\n\n" \
            "## Findings\n### X001 [medium] Login has no rate limit\nwhere: app/login.ts:12\n\n" \
@@ -153,7 +153,7 @@ INSPECT = "# Inspect: slotwise.example\nDate: 2026-10-27   Pages: 1   Mode: own 
           "has no label.\n\n## What was checked\n- Pages: https://slotwise.example/. headers.py, pagecheck.py\n\n" \
           "## Findings\n### I001 [medium] The email field has no label\nwhere: https://slotwise.example/, line 40\n\n" \
           "## Not checked\n- Lighthouse: Chrome is not installed.\n"
-DASHBOARD = "# Dashboard: Slotwise\nDate: 2026-10-27\n\n## Audience\nThe salon owner, each morning.\n\n" \
+DASHBOARD = "Level: 2 (Polished)\n# Dashboard: Slotwise\nDate: 2026-10-27\n\n## Audience\nThe salon owner, each morning.\n\n" \
             "## Numbers\n| number | definition | source | unit | period | compared with | form |\n" \
             "|---|---|---|---|---|---|---|\n| Bookings | confirmed bookings | bookings.status | count | this week | " \
             "last week | number with a sparkline |\n\n## Layout\nStandard density, 12 columns, one column at 390px.\n\n" \
@@ -163,6 +163,13 @@ MOTION = "# Motion: Slotwise\nDate: 2026-10-27\n\n## Direction\nCalm: motion onl
          "## Inventory\n| screen | moment | motion | why |\n|---|---|---|---|\n| S03 | booking saved | toast slides " \
          "in | feedback |\n\n## Tokens\nduration fast 120ms, base 200ms; ease out.\n\n## Libraries\nNone: CSS " \
          "only.\n\n## Checks\nmotioncheck.py exit 0. Reduced motion checked at 390px and 1440px.\n"
+LEVELS = json.dumps({part: {"level": level, "said": "niveau %d" % level, "at": "2026-10-27T09:00:00+00:00"}
+                     for part, level in (("look", 2), ("dashboard", 2), ("test", 2), ("secure", 3))})
+MOTION_CSS = "@keyframes rise { from { opacity: 0; transform: translateY(8px); } }\n" \
+             "@media (prefers-reduced-motion: no-preference) {\n" + "".join(
+                 "  .%s { transition: opacity 200ms; }\n" % name for name in
+                 ("btn", "card", "toast", "dialog", "tab", "nav", "chip", "row", "m-enter", "m-stagger", "m-lift")) + \
+             "  .hero { animation: rise 400ms both; }\n  @view-transition { navigation: auto; }\n}\n"
 IMPROVE = "# Improve: Slotwise\nDate: 2026-10-27   Branch: forge/improve-20261027   Started from: main at 3f2a1c9\n" \
           "Picked: A001. The user said: \"fix A001\"\n\n## To do\n## Fixed\n### A001 [high] Any logged-in user can " \
           "open any invoice\ncommit: 9b1e2f4 fix(A001): check the owner first\n\n## Skipped\n## For you\n" \
@@ -205,15 +212,13 @@ PASSING = {
     "build": lambda root: (write(root, "forge-work/build-log.md", BUILD_LOG), copy_static_pack(root),
                            write(root, "forge-work/features.csv", FEATURES),
                            write(root, "forge-work/security.md", SECURITY)),  # forge-build build Step 7 runs forge-check secure
-    "dashboard": lambda root: write(root, "forge-work/dashboard.md", DASHBOARD),
-    "motion": lambda root: (write(root, "forge-work/motion.md", MOTION),
+    "dashboard": lambda root: (write(root, "forge-work/dashboard.md", DASHBOARD), write(root, "forge-work/levels.json", LEVELS)),
+    "motion": lambda root: (write(root, "forge-work/motion.md", MOTION), write(root, "forge-work/levels.json", LEVELS),
                             write(root, "index.html", "<title>Slotwise</title>\n<main class=\"m-enter\">"
                                   "<ul class=\"m-stagger\"><li class=\"m-lift\">10:00</li></ul></main>\n"),
-                            write(root, "src/style.css", "@media (prefers-reduced-motion: no-preference) {\n" + "".join(
-                                "  .%s { transition: opacity 200ms; }\n" % name
-                                for name in ("btn", "card", "toast", "dialog", "tab", "m-enter", "m-stagger", "m-lift")) + "}\n")),
+                            write(root, "src/style.css", MOTION_CSS)),
     "test": lambda root: (write(root, "forge-work/test-plan.md", TEST_PLAN), write(root, "forge-work/bugs.md", BUGS),
-                          write(root, "e2e/f01-book.spec.ts", SPEC)),
+                          write(root, "e2e/f01-book.spec.ts", SPEC), write(root, "forge-work/levels.json", LEVELS)),
     "diff": lambda root: (write(root, "forge-work/features.csv", FEATURES), write(root, "forge-work/bugs.md", BUGS),
                           write(root, "forge-work/parity.md", PARITY)),  # Step 4 writes parity.md last
     "brand": lambda root: (write(root, "forge-work/brand.json", BRAND_JSON), write(root, "forge-work/brand.md", BRAND),
@@ -223,6 +228,8 @@ PASSING = {
                             write(root, "public/og.png", "not really a PNG\n"),
                             write(root, "forge-work/brand.json", BRAND_JSON)),  # forge-design brand's, for the sweep
     "secure": lambda root: (write(root, "forge-work/security.md", SECURITY),
+                            write(root, "forge-work/levels.json", LEVELS),
+                            write(root, "forge-work/sbom.json", '{"bomFormat": "CycloneDX", "components": []}\n'),
                             write(root, "index.html", "<title>Slotwise</title>\n")),
     "pack": copy_static_pack,
     "audit": lambda root: write(root, "forge-work/audit.md", AUDIT),
@@ -474,7 +481,7 @@ class PhaseTests(Checks):
         bugs = "".join("## B%03d [critical] [open] Bug number %d\n" % (n, n) for n in range(1, 31))
         write(self.root, "forge-work/bugs.md", "# Bugs\n\n" + bugs)
         out = self.assert_fails("test", "more lines: run it to see them")
-        self.assertLess(len(out.splitlines()), 24)
+        self.assertLess(len(out.splitlines()), 26)
 
     def test_diff_needs_every_must_have(self):
         self.finish("diff")
@@ -580,6 +587,7 @@ class PhaseTests(Checks):
                 self.assert_fails("secure", "needs exactly one line `Verdict: PASS`")
         report = template("forge-check", "steps/secure.md").split("```markdown\n")[1].split("```\n")[0]
         report = re.sub(r"\d+ high", "0 high", report.replace("Verdict: FAIL", "Verdict: PASS"))
+        report = re.sub(r"(?m)^Level: .*$", "Level: 3 (Standard)", report)  # the level on record in LEVELS
         write(self.root, "forge-work/security.md", report)
         self.assert_passes("secure")  # forge-check secure's own report format passes
 
@@ -758,7 +766,7 @@ class FindingTests(Checks):
         shutil.rmtree(os.path.join(self.root, "e2e"))
         for mode in ("clone", "idea"):
             self.assert_fails("test", "no end-to-end spec: no file like e2e/**/*.spec.* or e2e/**/*.test.*",
-                              "why: forge-check test, Step 3 and Output: one spec per flow in e2e/", args=("--mode", mode))
+                              "why: forge-check test, Step 3: from level 2, one spec per flow in e2e/", args=("--mode", mode))
         write(self.root, "e2e/node_modules/pkg/x.spec.ts", SPEC)
         self.assert_fails("test", "no end-to-end spec", args=("--mode", "clone"))
         write(self.root, "e2e/flows/f01.test.js", SPEC)

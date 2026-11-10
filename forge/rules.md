@@ -185,7 +185,8 @@ tables are in `../forge/levels.md`; four things have a level: the look
   (the gallery in the README of the pack). Then record the answer. This
   question is asked in auto mode too.
 - `/forge` asks once at the start: one level for everything, or one per
-  part. Inside a forge project the security check never runs below level 3.
+  part. Inside a forge project the security check never runs below level 3,
+  and testing never below level 2.
 - A level is a promise in both directions: never build less than it asks,
   and never more. Level 2 gets no 3D "as a bonus"; level 5 gets no fades
   passed off as a journey. The gate checks it:

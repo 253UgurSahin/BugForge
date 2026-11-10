@@ -241,7 +241,7 @@ def format_human(findings, summary, path):
                   "          why:   %s" % item["why"], "          fix:   %s" % item["fix"], ""]
     counts = ", ".join("%d %s" % (summary[name], name) for name in SEVERITIES if summary[name]) or "no findings"
     if summary["level"]:
-        lines.append("Level: %d (%s)" % (summary["level"], NAMES[summary["level"]][0]))
+        lines.append("Checked at dashboard level %d (%s)" % (summary["level"], NAMES[summary["level"]][0]))
     lines.append("%s: %d number%s, %s." % (path, summary["numbers"], "" if summary["numbers"] == 1 else "s", counts))
     lines.append("FAIL: at least one finding is %s or worse." % summary["fail_on"] if summary["failed"]
                  else "PASS: no finding is %s or worse." % summary["fail_on"])

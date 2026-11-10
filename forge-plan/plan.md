@@ -4,9 +4,12 @@ Profile: {{laravel | django | next | static}}
 PWA: {{yes | no}}
 Mode: {{clone | idea}}
 Date: {{YYYY-MM-DD}}
+Look: {{4 Showpiece}}; dashboard: {{3 Expressive | none: no data screens}}. The concept is chosen in /forge-design design.
 
 <!-- Replace every {{...}}, then delete this comment. Profile and PWA: the label plus exactly one
-     word from its list, at the start of the line. The forge gate reads them. -->
+     word from its list, at the start of the line. The forge gate reads them. Look: what
+     `python3 ../forge/level.py get look` prints, and `get dashboard` for the dashboard (rules.md
+     section 10). The plan names no style: the three concepts come in the design part of /forge-design. -->
 
 ## Why
 
@@ -29,6 +32,7 @@ Versions checked {{YYYY-MM-DD}}.
 | payments | {{Stripe test mode, Payment Links, or none}} | |
 | email | {{SMTP (Mailpit in development), or none}} | |
 | background jobs | | |
+| 3D scenes | {{three from npm (look 4 or 5), wired as profiles.md says; or none (look 1 to 3)}} | |
 
 Compose services: {{app, web, db, mailpit, worker}}
 

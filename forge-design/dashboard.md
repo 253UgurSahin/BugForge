@@ -3,7 +3,7 @@
 For the dashboard part of `/forge-design` (`../forge-design/steps/dashboard.md`). Sizes are px and
 come from the design tokens where a token exists (`--space-*`, `--text-*`, `--color-*`); the numbers
 here are starting points, not a house style. `../forge-design/dashboard.example.html` shows the dense
-layout built from these recipes. What each dashboard level looks like: sections 12 to 14.
+layout built from these recipes. What each dashboard level looks like: sections 12 to 14. Shots of a signed-in dashboard: section 15.
 
 ## 1. The chart chooser
 
@@ -235,7 +235,7 @@ column when they are asked for. Over about 12 by 12 cells: drop the numbers, add
 - Colour alone: red and green deltas with no sign, a status dot with no word.
 - A chart with no empty state: a flat line at zero looks like bad news, not like "no data yet".
 - Hover only: the exact value lives in a tooltip that a phone, a keyboard and a screen reader never see.
-- A dashboard that loads everything on every visit: no cache, no freshness time, a slow first screen.
+- A slow query run again on every visit with no freshness time; or a cache on a fast query, which only adds a stale number and a key that can leak.
 
 ## 12. What each level looks like
 
@@ -290,8 +290,8 @@ A control room on one screen, at 1440 by 900. Every element is data (section 7):
   follows. Keyboard: the arrow keys on the focused main chart move it, Home and End jump, Escape
   lets go. A text line under the strip says the time and the values, updated at most twice a second.
   Charts on another axis do not follow it.
-- **Charts with a 3D look**: CSS 3D (a panel tilted by at most 12 degrees, bars as faces with a
-  side and a top, the tilt of the kit's `depth.js` on panels) or canvas 2D drawn with
+- **Charts with a 3D look**: CSS 3D (a panel tilted by at most 12 degrees with `perspective` on its
+  parent, bars as faces with a side and a top) or canvas 2D drawn with
   depth (an isometric grid of bars). The depth is a view: no strong perspective (a near bar must
   never look bigger than a far bar of the same value), one baseline, every value printed or in the
   table next to it. Write it in the form column with its table: "bars with depth (CSS 3D) + table".
@@ -329,3 +329,47 @@ A control room on one screen, at 1440 by 900. Every element is data (section 7):
   still frame; one `motionToggle` button pauses every scene. One scene per screen; `destroy()` when
   the dashboard is left in an app that does not reload the page.
 
+## 15. Shots of a signed-in dashboard
+
+`../forge-design/shots.example.mjs` only looks: it never clicks or types. A dashboard behind a
+sign-in therefore needs a saved session, or before and after both show the sign-in page and
+changed.py finds no change. Write `forge-work/design/signin.mjs` once, next to `shots.mjs` (so it
+finds the same Playwright), and fit the three form lines to the app's own sign-in form:
+
+```js
+// node forge-work/design/signin.mjs http://localhost:3000 /app/statistieken
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+let pw; try { pw = require('@playwright/test'); } catch { pw = require('playwright'); }
+const [base, path = '/'] = process.argv.slice(2);
+const { DEMO_EMAIL: email, DEMO_PASSWORD: password } = process.env;
+if (!base || !email || !password) { console.error('usage: DEMO_EMAIL=.. DEMO_PASSWORD=.. node signin.mjs BASE [PATH]'); process.exit(2); }
+const browser = await pw.chromium.launch();
+const context = await browser.newContext();
+const page = await context.newPage();
+const errors = [];
+page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+page.on('pageerror', (error) => errors.push(String(error)));
+await page.goto(new URL('/login', base).href);
+await page.getByLabel(/e-?mail/i).fill(email);
+await page.getByLabel(/password|wachtwoord/i).fill(password);
+await page.getByRole('button', { name: /sign in|log in|inloggen/i }).click();
+await page.waitForURL((url) => !url.pathname.startsWith('/login'));
+await context.storageState({ path: 'forge-work/design/alice.json' });
+errors.length = 0; // only the errors of the dashboard itself
+await page.goto(new URL(path, base).href, { waitUntil: 'networkidle' });
+await page.waitForTimeout(1500);
+console.log(errors.length ? errors.join('\n') : 'no console errors on ' + path);
+await browser.close();
+process.exit(errors.length ? 1 : 0);
+```
+
+- The account is a demo or seed user: the app's own demo-account or seed script when it has one,
+  else one you create in the dev database after the user's yes. Never the user's own password, and
+  never a password in a file: give it in the command's environment.
+- That user has enough rows to fill every panel (a week of catches is not enough for a heat map by
+  month). A near-empty dev database shows empty states: honest, but nothing of the level shows.
+  Ask before you add seed rows; the screen labels them seed, and the checkpoint says so.
+- `forge-work/design/alice.json` holds a session: it stays in `forge-work/` (git-ignored, never
+  shipped) and is passed as `--state` to every shot, before and after alike.
+- Run it again after the build: it prints each console error of the dashboard and exits 1 on any.

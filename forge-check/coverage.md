@@ -27,6 +27,23 @@ handler without an owner check); authz.py is level 4`.
 | A10 Server-side request forgery | the server fetches a URL an attacker chose | 3: flowcheck.py (request input used as the URL of an outgoing call). 5: each outgoing call in the threat model |
 | Privacy (AVG/GDPR) | personal data collected, shared or kept without a basis | 2: trackers.py. 3: the AVG/GDPR checklist |
 
+## AVG/GDPR checklist (level 3 and up; not legal advice)
+
+Step 7 of `/forge-check secure` goes down this list. What code cannot show (DPAs, storage, breach
+plan) goes under "Not checked" as a question, never a guess.
+
+- [ ] The privacy policy lists every processor trackers.py found.
+- [ ] No non-essential cookie or tracker loads before the visitor says yes.
+- [ ] Data export and account deletion both exist and work.
+- [ ] The app collects only what it needs.
+- [ ] The retention period for each kind of data is stated.
+- [ ] A data processing agreement (DPA) is in place with each processor.
+- [ ] It is known where the data is stored (EU preferred).
+- [ ] Passwords are hashed with the framework default, never md5, sha1 or home-made.
+- [ ] Breach plan: who tells the regulator within 72 hours (NL: the Autoriteit Persoonsgegevens).
+
+## Always a question
+
 What no script here can show, and so always goes under `## Not checked` as a question for the user:
 who has access to the server and the database, whether backups are tested, whether logs are read,
 and whether the people involved know what to do when something leaks.

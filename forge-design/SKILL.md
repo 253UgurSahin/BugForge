@@ -64,7 +64,9 @@ Which part:
 - **The whole look**: "redesign my app", "make it better looking", "maak het mooier", a level with
   no part, or the look picked in `/forge-improve`. It runs design, then motion, then dashboard
   where the app has data screens (pages of numbers, lists or charts), as one job: the before
-  shots are taken once, no question about taste after the concept pick, one hand-over at the end.
+  shots are taken once, no question about taste after the concept pick, one judge and one
+  hand-over at the end. `../forge-design/steps/design.md` (Build) says which steps of motion and
+  dashboard that skips.
 - `/forge` runs each part as its own phase: design before the build, dashboard and motion after
   it, brand after the tests.
 - Still unclear: ask which part, in one line, with this list.
@@ -84,15 +86,18 @@ How far the look goes, from 1 to 5. Each level includes the ones below it:
 
 - A level in the request is recorded at once, with the user's words:
   `python3 ../forge/level.py set look 4 --said '<their words>'`. Dashboards have a scale of their
-  own (`set dashboard`); record both when the words cover both ("the whole look at level 4").
+  own (`set dashboard`). For the whole look, a level with no part named counts for look and
+  dashboard: run `set look N` and `set dashboard N` with the same words, and tell the user in one
+  line that the dashboard follows the same level.
 - No level on record (`python3 ../forge/level.py get look` exits 1): ask the one question of
   `../forge/levels.md` ("The one question"), also in auto mode. For the whole look on an app with
   data screens, put the dashboard table in the same message, so the user answers once.
 - A level is a promise in both directions: never less than it asks, never more. Each part's report
   has the line `Level: N`, and `python3 ../forge/level.py check look --report <that report>` passes.
-- At level 4 and 5, Three.js and the scene kit (`../forge-design/scenes.md` says which files go
-  where) are installed without asking again: with npm into the app, never from a CDN, loaded only
-  on the screens that use them, with a still picture for weak devices, no WebGL and reduced motion.
+- At level 4 and 5, Three.js and the scene kit (which scene fits: design.md, "The level"; how
+  to mount it: `../forge-design/motion.md` section 9) are installed without asking again: with npm
+  into the app, never from a CDN, loaded only on the screens that use them, with a still picture
+  for weak devices, no WebGL and reduced motion.
   Levels 1 to 3 add no library. GSAP only when a scrubbed timeline really needs it, and its
   licence is the user's call.
 
@@ -105,8 +110,8 @@ each step in full.
    how it runs on the user's machine.
 2. **Level**: on record, or the one question.
 3. **Three concepts**, exactly as `../forge-design/concepts.md` says: three moving previews of the
-   app's own main screen on one board, and one question, "A, B or C, or a mix?". This stop holds
-   in auto mode.
+   app's own main screen on one board (from level 4 served on 127.0.0.1, as design.md says), and
+   one question, "A, B or C, or a mix?". This stop holds in auto mode.
 4. **The brief**, written from the chosen concept.
 5. **The system**: tokens, theme, fonts, icons, component specs, contrast.
 6. **Build**: a new app is built by `/forge-build` from the specs. The user's own app: the theme
@@ -123,15 +128,16 @@ Every part that changes the app does this, step by step (rules.md section 9 has 
 1. Before any change: what serves the user's local URL (dev server, built app or containers),
    from which folder and branch, and whether a service worker sits in front. At the top of the report.
 2. Before shots of every screen you will touch, from that URL (`../forge-design/review.md`).
-3. Progress: the plan and the order at the start, the first finished screen before and after,
-   then one line per screen. Never silent for long.
-4. Make it show: restart or rebuild what serves the URL, bump a stale service worker cache, and
-   load the URL yourself.
+3. Progress: the plan, the order and how long, said first, before the reading and the shots;
+   the first finished screen before and after, then one line per screen. Never silent for long.
+4. Make it show: restart or rebuild what serves the URL (ask before stopping the user's own
+   server); with a service worker, bump its cache and check the URL through it; load it yourself.
 5. After shots, and proof: `python3 ../forge-design/changed.py <before> <after>` says VISIBLE
-   CHANGE; on screens that should move, `--moves` on the frames says so too; a clip of the best
-   moments with `../forge-design/shots.example.mjs --video`. No proof, not done.
+   CHANGE for every screen you touched, not just one; on screens that should move, `--moves` on
+   the frames says so too; a clip with `../forge-design/shots.example.mjs --video`. No proof, not done.
 6. Hand over: the branch, the address, where to click first, the reduced-motion setting, the
-   paths of the images and the clip, and how to go back.
+   paths of the images and the clip, how to drop an old service worker, and how to go back.
+   `../forge-design/review.md` section 5 has each step in full.
 
 ## What holds for every part
 

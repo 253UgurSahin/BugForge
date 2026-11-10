@@ -164,6 +164,7 @@
     "test": {
       "about": "how deep the testing goes. Each level includes the ones below it.",
       "about_nl": "hoe diep het testen gaat. Elk niveau bevat de lagere niveaus.",
+      "floor": 2,
       "levels": [
         {
           "level": 1,

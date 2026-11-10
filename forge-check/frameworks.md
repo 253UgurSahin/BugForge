@@ -1,13 +1,13 @@
 # Checks by reading the code
 
 Step 8 of `/forge-check secure` (`../forge-check/steps/secure.md`) walks this file by reading the code
-and the settings. What runs depends on the secure level on record (`python3 ../forge/level.py get
-secure`):
+and the settings; its Step 6 uses "The running app". What runs depends on the secure level on record
+(`python3 ../forge/level.py get secure`):
 
 | from level | what | where in this file |
 | --- | --- | --- |
 | 3 | the framework checks, for each stack the project uses | Laravel, Django, Next.js, Static site, Stripe |
-| 4 | the container checks | Containers |
+| 4 | the container checks; the path lists and sessions for probe.py and authz.py | Containers, The running app |
 | 5 | the review: a threat model per entry point, the access matrix, abuse and rate-limit cases, the licence review, an attack story per finding | Level 5 |
 
 Each failed check is a finding in the plain format. Default severity in brackets. Say in the report
@@ -30,6 +30,10 @@ which stacks you skipped and why, and leave out what is above the level on recor
 - No secret in any `NEXT_PUBLIC_` variable: those are sent to every browser (high).
 - Auth is checked on the server inside each route handler and server action,
   not only in middleware. Middleware alone has been bypassed before (high).
+- Server actions are protected against forged posts by Next.js's own Origin check, so their
+  forms need no hidden CSRF field. The `allowedOrigins` of `serverActions` in `next.config.*`
+  lists only the app's own hosts (high when it lists another host). A `route.ts` that changes
+  data on a POST with a cookie session has no such check: SameSite cookies or a token (medium).
 
 **Static site or SPA**
 - A strict Content-Security-Policy, without `unsafe-inline` or `unsafe-eval` (headers.py rates it).
@@ -51,6 +55,57 @@ Run `python3 ../forge-build/packcheck.py .` when there is a Dockerfile, then rea
 - `.dockerignore` excludes `.env`, `.git`, `forge-work/` and the other files of secrets in the project (high).
 
 No Dockerfile: "does not apply: the project has no container setup" under "Not checked".
+
+## The running app (level 4)
+
+What Step 6 of the secure steps needs, all in `forge-work/security/`, nothing in the app.
+
+**probe-paths.txt**, from the app's router, one GET path per line: Next.js, every `page.tsx` and
+`route.ts` under `app/` (the folder path is the URL; leave out route groups like `(shop)`; fill
+`[id]` with an id from a page) and every file under `pages/`; Laravel `php artisan route:list
+--method=GET`; Django `urls.py`; the Express routers. Give each query parameter the code reads
+(`searchParams`, `req.query`, `request.GET`) a harmless sample value: `/search?q=test`. Exit 2
+because the run was cut short: raise `--max-requests` (up to 500) or put the paths with input first.
+
+**The two sessions**, user A and user B, the two accounts the user named (secure.md, "Say what
+comes"). Never set up `e2e/` for this. First make sure git ignores what you write:
+`git check-ignore -q forge-work/security/a.json`; when it does not, write `forge-work/.gitignore`
+with the one line `*`, as gate.py does. Playwright: when the app has it (`node_modules/playwright`)
+the script finds it; else install it in this folder only: `cd forge-work/security && npm init -y
+&& npm i -D -E playwright && npx playwright install chromium`. Save this as
+`forge-work/security/signin.mjs`, with the app's own labels and button name:
+
+```js
+// node --env-file=.env forge-work/security/signin.mjs <url> <sign-in path> <email> <VAR> <out> [page ...]
+import { chromium } from 'playwright';
+const [base, path, email, name, out, ...pages] = process.argv.slice(2);
+if (!process.env[name]) { console.error(name + ' is not set in .env'); process.exit(2); }
+const browser = await chromium.launch();
+const page = await browser.newPage({ baseURL: base });
+await page.goto(path);
+await page.getByLabel(/e-?mail/i).fill(email);
+await page.getByLabel(/password|wachtwoord/i).fill(process.env[name]);
+await page.getByRole('button', { name: /sign in|log in|inloggen|aanmelden/i }).click();
+await page.waitForURL((u) => u.pathname !== path, { timeout: 15000 });
+await page.context().storageState({ path: out });
+for (const p of pages) { // prints the links on A's own pages, never their content
+  await page.goto(p);
+  console.log((await page.$$eval('a[href^="/"]', (as) => as.map((a) => a.getAttribute('href')))).join('\n'));
+}
+await browser.close();
+```
+
+Run it once per user (Node 20.6 or newer), shortly before authz.py: an expired session for B
+looks like a pass. Use the `.env` file git ignores: `node --env-file=.env
+forge-work/security/signin.mjs <url> /login <email of A> E2E_PASSWORD forge-work/security/a.json
+/bookings`, and for B with `E2E_PASSWORD_2` and `b.json`. The session files are never printed,
+never committed, and deleted once the report is written (sign in again for a later run). Sign-in
+fails, or needs a code by email: the `no sessions` line of Step 6.
+
+**private-paths.txt**, 3 to 10 paths of A's own records, read while signed in as A: the links the
+script printed for A's list pages (A's bookings, invoices, profile, an API route with A's id).
+Only pages with A's own data; no public page and no page every signed-in user sees the same, or
+authz.py reports it as read by B.
 
 ## Level 5
 
@@ -99,6 +154,24 @@ Only on the user's own running app (scope.py exits 0) and only with a seed accou
 burst may show the limit at work: at most 20 wrong passwords for `alice@example.test`, which should
 end in a 429 or a lock-out. Never a load test, never a real person's account. Clear the counters
 afterwards ("Rate limits" in `../forge-check/walk.md`).
+
+### Secrets in the git history
+
+Step 2 of the secure steps. A secret deleted from the code is still in old commits. Write each
+commit's changes to its own file in a temporary folder outside the project, scan that folder, then
+delete it. In bash (Git Bash on Windows):
+
+```bash
+T=$(mktemp -d)
+for c in $(git rev-list --all --max-count=500); do
+  git show --no-color --no-ext-diff --format=%H%n "$c" > "$T/$c.diff"
+done
+python3 ../forge-check/secretscan.py "$T"; rm -rf "$T"
+```
+
+Each hit names its file, so its commit, and secretscan masks the value. Never open, print, grep or
+paste those files. Under "Not checked": the commits beyond the 500 (`git rev-list --all --count`
+gives the total) and the diffs secretscan skipped as over 1 MB.
 
 ### Licences
 

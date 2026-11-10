@@ -1,9 +1,10 @@
 # The look review
 
 How the design part of `/forge-design` judges the look from screenshots of the app itself, in
-rounds, and how it redesigns an app that exists. It runs after the vertical slice and at the end of
-`/forge-build` for a new app, after each group of screens in a redesign, and once at the end of
-the whole look. It reads your own app only: the app on localhost (`../forge-check/scope.py` exits 0).
+rounds, shows the result, and redesigns an app that exists. The judge runs after the vertical slice
+and at the end of `/forge-build` for a new app, and once at the end of a redesign or of the whole
+look (up to three rounds); between groups of screens only the tests and shotcheck.py run. It reads
+your own app only: the app on localhost (`../forge-check/scope.py` exits 0).
 
 ## 1. Take the shots
 
@@ -22,9 +23,15 @@ node forge-work/design/shots.mjs http://localhost:3000 forge-work/design/shots/m
 
 - Each path gives a still of the whole page at 390px and at 1440px wide, in light and in dark:
   `home-390-light.png` ("/" is called home). `--no-dark` for an app without a dark theme;
-  `--state e2e/.auth/alice.json` for signed-in screens (the file `/forge-check test`'s setup
-  writes); `--wait 1500` for an app that loads its data after the page; `--viewport-only` for the
-  window only, which is faster.
+  `--wait 1500` for an app that loads its data after the page; `--viewport-only` for the window
+  only, which is faster.
+- **Signed-in screens** need `--state FILE`, or every shot is the login page. Use a saved state
+  the project has (`e2e/.auth/*.json` from `/forge-check test`'s setup, or
+  `forge-work/design/alice.json`). None yet: sign in the app's own demo or seed account as
+  `../forge-design/steps/dashboard.md` Step 1 does; no such account: ask the user to sign in once,
+  themselves, in the window that `cd forge-work/design && npx playwright codegen
+  --save-storage=alice.json <URL>` opens, and to close it. Never ask for a password in the chat
+  (rules.md section 5). The file holds a live session: it stays in `forge-work/`, out of git.
 - A plain run asks the app for reduced motion, so each still is the page at rest and the same in
   every round: that is what is scored and compared. Motion does not show in these stills.
 - **Before and after** (rules.md section 9): the same command, paths and flags both times, into
@@ -69,6 +76,13 @@ does the whole app look like the brief's concept, and which item of the generic 
 Be strict. Do not guess what was meant. Do not soften a score.
 ```
 
+**The whole look** (design, motion and dashboards in one job) gets this one judge, with motion in
+the same rounds: add the paths of this round's frames (`--frames`, `<screen>-390-f1.png` to `-f7.png`)
+and the level's line from `python3 ../forge/level.py show look`, and add to the prompt: "Frames
+named -f1 to -f7 are one screen over its first second and three steps of scrolling. Score one more
+line from them, motion: 0 nothing moves or it fights the concept, 1 it moves but could be any app,
+or does less or more than the level, 2 the concept moves, at the level." Totals are then out of 24.
+
 Write its scores in `forge-work/design/review.md` as they are, with `judge: fresh eyes`. You may
 add a line where you disagree; you never change its score. Fix its weakest things first.
 
@@ -112,9 +126,42 @@ per round:
 - Let the app reload or rebuild it, take the next round in a new folder (`round-2`), and compare:
   `python3 ../forge-check/shotcheck.py forge-work/design/shots/round-1 forge-work/design/shots/round-2`
   lists every screen whose layout moved, so a fix that broke another screen shows.
-- Stop when every screen has 18 or more and no line is 0, or after three rounds: then list what is
-  left under `## Left` with why. Never score higher, or argue a score up, to stop sooner.
+- Stop when every screen has 18 or more (20 of 24 in the whole look) and no line is 0, or after
+  three rounds: then list what is left under `## Left` with why. Never score higher, or argue a
+  score up, to stop sooner.
 - One commit per round: `style: look review round 2`, after the tests pass.
+
+## 5. Show: make it show, prove it, hand it over
+
+What the Show step of `../forge-design/steps/design.md` asks, in full (rules.md section 9):
+
+1. **Make it show.** Say which branch the work is on. Work in the folder their server runs from,
+   so a dev server shows it within a second. A built app (`next build` then `next start`, or
+   `output: "standalone"`): the two commands are `npm run build`, then restart `npm start` (or what
+   its package.json names); ask before you stop a server the user started, as it is their process.
+   Containers: rebuild and restart them. A worktree or copy: start the app from your folder on a
+   free port and give that address.
+2. **A service worker** (a `sw.js`, a `navigator.serviceWorker.register` call, next-pwa or
+   serwist): Playwright's fresh profile has none yet, so its shots can show the new look while the
+   user's own browser, where the production build once registered a worker on the same address,
+   still serves the old pages. Bump the worker's cache name or version in this branch. Then load
+   the URL twice in one Playwright context (the second load goes through the registered worker)
+   and check that the new look shows. Load the URL yourself.
+3. **After shots** with the same command, paths and flags as the before shots, into
+   `forge-work/design/shots/after`, then `python3 ../forge-design/changed.py
+   forge-work/design/shots/before forge-work/design/shots/after`. Exit 0 only means that at least
+   one pair changed: read its line per pair. Every screen you touched must say VISIBLE CHANGE; a
+   touched screen marked NO VISIBLE CHANGE is a failure to fix: find which reason of rules.md
+   section 9 it is, fix it, take the shots again. Exit 2 is never a pass.
+4. **Movement.** On screens that should move, frames and a clip into their own folder (`--frames
+   --video`, section 1), and `python3 ../forge-design/changed.py --moves` on each screen's frames
+   must exit 0. All results go under `## Proof` in redesign.md.
+5. **Hand over** in plain words: the branch; the address that shows it now; where to click, in
+   order, to see the best moment first; that a system set to reduced motion shows the calm
+   version, and how to check that setting; the paths of the before and after images and the clip;
+   how to go back (`git switch <their branch>`). With a service worker add: "Still the old look?
+   Open DevTools, Application, Service workers, click Unregister (or press Ctrl+Shift+R), then
+   reload." Merging and deploying stay their step.
 
 ## The generic look
 
@@ -144,8 +191,8 @@ of a redesign in particular.
 
 1. Know what the user looks at (rules.md section 9) and write it under `## How it runs`. Work in
    the folder their server runs from, on a new branch `forge/redesign-<yyyymmdd>`;
-   `python3 ../forge/gitguard.py` must exit 0. The app's own tests run and pass first: that is the
-   proof that nothing breaks later.
+   `python3 ../forge/gitguard.py` must exit 0. Keep `forge-work/` out of git (the design part's
+   "A work branch"). The app's own tests run and pass first: the proof that nothing breaks later.
 2. Before shots of every screen you will touch into `forge-work/design/shots/before`. Measure
    what is there with eyedropper.py and write the colours, sizes, radii and fonts found, with how
    often, under `## Before`: most apps have three greys too many.
@@ -155,10 +202,10 @@ of a redesign in particular.
    CSS file), old values replaced by variables, one commit. Then one component per commit, the
    most used first, then screen by screen. No markup or logic change unless a component needs it
    for accessibility; when it does, a test covers it.
-5. After each group: the app's tests, the walk of `/forge-check test` if it is set up, and a look
-   review round. shotcheck.py against `before` shows what moved: screens you did not touch must
-   not move.
-6. Make it show, after shots, proof and the hand-over, as the Show step says. Nothing is merged or
+5. After each group: the app's tests, the walk of `/forge-check test` if it is set up, and
+   shotcheck.py against `before`: screens you did not touch must not move. The judge (section 2)
+   comes once, at the end.
+6. Make it show, after shots, proof and the hand-over, as section 5 says. Nothing is merged or
    pushed: that is the user's step.
 
 ### The redesign report

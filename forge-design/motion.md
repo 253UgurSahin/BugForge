@@ -3,8 +3,9 @@
 The numbers, the recipes, the patterns per look level and the budgets for `/forge-design motion`
 (its steps: `../forge-design/steps/motion.md`; the levels: `../forge/levels.md`). Sections 1 to 7 hold
 for every level; the CSS of the recipes is ready in `../forge-design/motion.css`. Level 3 adds section 8,
-level 4 section 9, level 5 section 10; section 11 is the budget per level. The scene kit of levels 4 and 5
-is described in `../forge-design/scenes.md`.
+level 4 section 9, level 5 section 10; section 11 is the budget per level, section 12 the proof that
+needs a click, a slow processor or no WebGL. The scene kit of levels 4 and 5 is the folder of
+`../forge-design/scenes/stage.js`; the options and API of each file are the comment at its top.
 
 ## 1. Principles
 
@@ -60,8 +61,10 @@ when data refreshes.
 
 ## 2. The motion tokens
 
-Add these to `forge-work/design/tokens.json`, next to what forge-design design wrote there (`fast`, `base`
-and `ease` stay as they are), then run the theme.py command in `forge-work/design/components.md`.
+With a theme forge designed: add these to `forge-work/design/tokens.json`, next to what forge-design
+design wrote there (`fast`, `base` and `ease` stay as they are), then run the theme.py command in
+`forge-work/design/components.md`. The user's own app with no tokens.json: see "Without forge tokens"
+below, and never theme.py.
 `../forge-design/theme.py` turns every key of `motion` into `--duration-<key>`, except `ease`
 (`--ease-standard`) and keys that start with `ease-` (`--<key>`). Distances are lengths, so they
 live in `size` and become `--size-<key>` in px.
@@ -98,6 +101,33 @@ values; the concept tunes them:
 | shift-sm / shift / shift-lg | 4 / 8 / 16 | 4 / 12 / 24 | 2 / 8 / 16 |
 | character | fades and small rises, no loops, no spring | spring on small controls, staggered lists, count-ups | thin lines that draw themselves, numbers that tick in a mono font, a slow line hero; nothing bounces |
 
+**Without forge tokens** (the user's own app, its own look). Do not make a tokens.json and do not
+run theme.py: with `--tailwind 4` it writes `@theme static { --color-*: initial; --breakpoint-*:
+initial; }`, which removes every Tailwind colour and every `sm:`, `md:` and `lg:` breakpoint the
+app has. Add a plain block at the end of the app's main stylesheet (next: `app/globals.css`), with
+each variable below that the app does not define yet, the values from the character, the colours
+mapped to the app's own variables or values:
+
+```css
+:root {                                   /* forge-design motion: read by motion.css and the scene kit */
+  --duration-fast: 120ms; --duration-base: 200ms; --duration-slow: 320ms; --duration-slower: 480ms;
+  --duration-stagger: 30ms; --duration-pulse: 1600ms; --duration-loop: 24s;
+  --ease-standard: cubic-bezier(.2,.8,.2,1); --ease-exit: cubic-bezier(.4,0,1,1);
+  --ease-move: cubic-bezier(.4,0,.2,1); --ease-spring: cubic-bezier(.34,1.56,.64,1);
+  --size-shift-sm: 4px; --size-shift: 8px; --size-shift-lg: 16px; --size-ring: 2px;
+  --radius-sm: 4px; --shadow-pop: 0 8px 24px rgb(0 0 0 / .12);
+  --color-accent: var(--their-accent);     /* the app's own: a brand variable, or a Tailwind one */
+  --color-surface: var(--their-surface); --color-border: var(--their-border);
+  --color-bg: var(--their-background); --color-text: var(--their-foreground);   /* levels 4 and 5 */
+}
+```
+
+Then check in the browser that each one has a value, for example
+`getComputedStyle(document.documentElement).getPropertyValue("--color-accent")`: a missing or
+misspelt one makes its rule do nothing, without an error. Leave out what the app already has:
+Tailwind 4 has its own `--radius-sm`, and a second one here would change every `rounded-sm`. A
+dark theme of the app's own: map the colours inside its dark rule too.
+
 Reading a token in JavaScript, so scripts hold no numbers either:
 
 ```js
@@ -125,7 +155,7 @@ Use the first layer that can do the job.
 4. **Web Animations API** (`element.animate()`): sequences, and values only known at run time. It
    returns an object with `.finished` (a promise), `.cancel()` and `.playbackRate`.
 5. **CSS 3D** (level 3 and up): `perspective`, `rotateX`/`rotateY` and `translateZ` on cards and
-   panels, through the kit's `depth.js` (section 8).
+   panels (section 8, "Tilt card").
 6. **WebGL** (level 4 and up): a scene of the kit, mounted lazily (section 9).
 7. **A library** other than three: section 5.
 
@@ -141,7 +171,7 @@ The classes are in motion.css. Scripts import `token`, `ms` and `reduce` from to
 One script switches the scroll recipes on and pauses loops nobody can see:
 
 ```js
-// motion.js: load it as a module on every page
+// motion.js: load it as a module on every page (next: <MotionRuntime/> below)
 document.documentElement.dataset.motion ||= "on";   // from here on, .m-reveal starts hidden;
                                                     // ||= keeps "paused" from the kit's motionToggle
 
@@ -162,6 +192,68 @@ const visible = new IntersectionObserver((entries) => {
 });
 document.querySelectorAll(".m-marquee, .m-skeleton").forEach((el) => visible.observe(el));
 ```
+
+Where motion.css and motion.js go:
+
+| stack | motion.css | motion.js |
+| --- | --- | --- |
+| laravel | `resources/css/motion.css`, imported in `app.css` after the other imports | `resources/js/motion.js`, imported from `app.js` |
+| django | `static/css/motion.css`, linked after `tokens.css` | `static/js/motion.js`, `<script type="module">` in the base template |
+| next, Tailwind 4 | `app/motion.css`, in `globals.css` right after `@import "tailwindcss";` as `@import "./motion.css" layer(components);` | `<MotionRuntime/>` below, once in `app/layout.tsx` |
+| next, no Tailwind | `app/motion.css`, imported in `app/layout.tsx` after `globals.css` | the same |
+| static | imported in `src/main.*`; no bundler: a `<link>` on every page | `src/motion.js` from `src/main.*`, or a module script |
+
+Why the layer: Tailwind 4 puts every utility in a cascade layer, and CSS outside any layer beats
+every layer whatever the order. Unlayered, `.m-lift { position: relative }` undoes an `absolute`
+class and an `m-` transition replaces a `transition-*` class. Inside `layer(components)` the
+utilities win; where an element has Tailwind transition classes, add the property there
+(`transition-[color,transform]`) instead of an `m-` class.
+
+**Next (App Router).** The layout stays while the pages under it change on the client, so a script
+that runs once never sees the elements of the next page: they keep `opacity: 0` and the content
+looks gone. A client component observes whatever arrives, on every route:
+
+```jsx
+"use client";
+// app/motion-runtime.jsx: motion.js for Next; <MotionRuntime /> once, inside <body> of app/layout.tsx
+// (a .jsx file is fine in a TypeScript app; as .tsx, write (entry.target as HTMLElement).dataset)
+import { useEffect } from "react";
+
+const PICK = ".m-reveal:not(.is-visible), .m-draw:not(.is-visible), .m-grow:not(.is-visible)";
+
+export default function MotionRuntime() {
+  useEffect(() => {
+    document.documentElement.dataset.motion ||= "on";
+    const seen = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("is-visible");
+        seen.unobserve(entry.target);
+      }
+    }, { threshold: 0.1 });
+    const visible = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target.dataset.userPaused === "true") continue;
+        entry.target.dataset.paused = String(!entry.isIntersecting);
+      }
+    });
+    let frame = 0;
+    const watch = () => {
+      frame = 0;
+      document.querySelectorAll(PICK).forEach((el) => seen.observe(el));   // observing twice is harmless
+      document.querySelectorAll(".m-marquee, .m-skeleton").forEach((el) => visible.observe(el));
+    };
+    watch();
+    const added = new MutationObserver(() => { frame ||= requestAnimationFrame(watch); });
+    added.observe(document.body, { childList: true, subtree: true });   // route changes, streamed parts
+    return () => { added.disconnect(); seen.disconnect(); visible.disconnect(); cancelAnimationFrame(frame); };
+  }, []);
+  return null;
+}
+```
+
+Check it the way a user meets it: open a signed-in screen, click to the next one in the app's own
+menu, and see its content (section 12's click proof), not only after a reload.
 
 **Button press.** `<button class="m-press">`. Reduced: no scale; the colour change of the active
 state stays. Mistake: a delay before the feedback, or `transition: all`, which also animates the
@@ -260,7 +352,9 @@ To carry one element across, give it the same `view-transition-name` on both pag
 to nothing else. After a client-side page change, move focus to the new page's `<h1 tabindex="-1">`.
 Reduced: none. Mistake: the same `view-transition-name` twice on a page (the whole transition is
 skipped), a transition over 300ms on every navigation, and focus left on a link that is gone.
-Frameworks wrap this API (React, Next, Livewire's navigate): read the docs of the installed version.
+Frameworks change pages on the client, where `@view-transition { navigation: auto; }` never runs
+(it is for full page loads only). Next: the `TurnLink` of section 10; Livewire's navigate and
+others: read the docs of the installed version, and prove it with frames across a click (section 12).
 
 **Scroll reveal, IntersectionObserver.** `class="m-reveal"` plus motion.js above. Reduced: a fade
 without the rise. Mistake: hiding content in CSS with no script running (blank page: the recipe
@@ -455,10 +549,10 @@ brief (`forge-work/design/brief.md`), never from a style list and never from a s
 | reduced motion | every animation has a reduce version: a fade or nothing; no information lost | browser with reduced motion on: every screen still shows everything |
 | flashing | nothing flashes more than 3 times in a second (WCAG 2.3.1) | watch loops and error states; no strobing, no fast blinking |
 | moving by itself | over 5 seconds: a way to pause, stop or hide it (WCAG 2.2.2) | marquee, hero, autoplay video |
-| off-screen and hidden tabs | loops stop | motioncheck.py; the Performance panel shows no frames while scrolled away |
+| off-screen and hidden tabs | loops stop | motioncheck.py; a scene's container gets no new frames while scrolled away (stage.js pauses it) |
 | what animates | `transform` and `opacity` (exceptions: accordion rows, a chart's stroke) | motioncheck.py |
-| long tasks | none over 50ms caused by animation | Performance panel, or a `PerformanceObserver` for `longtask` |
-| frame rate | 60 a second on a mid-range phone: DevTools at 390px with 4x CPU slowdown | the Performance panel's frames row |
+| long tasks | none over 50ms caused by animation | `longestTaskMs` of the proof script (section 12) |
+| frame rate | 60 a second on a mid-range phone: 4x CPU slowdown | `fps` of the proof script (section 12), which sets the slowdown |
 | script added | per level: section 11 | the build output's file sizes |
 | focus | never lost: after a modal closes it is back on its button; after a page transition on the new heading | Tab through each transition |
 | layout shift | motion never pushes content around (CLS stays under 0.1) | skeletons have the size of their content |
@@ -466,8 +560,8 @@ brief (`forge-work/design/brief.md`), never from a style list and never from a s
 ## 8. Level 3: Expressive
 
 Everything above, plus scroll storytelling, springs, charts that draw and morph, real depth with
-CSS 3D and one signature moment. No library: CSS, the Web Animations API and the kit's
-`depth.js`. Each pattern ran in Chromium with motion on and with reduced motion.
+CSS 3D and one signature moment. No library: CSS and the Web Animations API. Each pattern ran
+in Chromium with motion on and with reduced motion.
 
 **Sticky scroll scene.** A section three screens tall whose stage stays in place while its steps
 follow the scroll. The script writes the progress (0 to 1) as `--progress` and the current step as
@@ -587,23 +681,53 @@ Reduced: the bars jump to their new height. Mistake: animating `height` (layout 
 the values only in the bars (keep the numbers as labels or a table), and a line chart morphed by
 animating `d`, which only some browsers do: draw the new line with `m-draw` instead.
 
-**Tilt card with depth.js.** Cards that lean toward the pointer, with layers inside them at their
-own depth and a soft glare, and panels stacked in perspective. Copy `../forge-design/scenes/depth.js`
-and `../forge-design/scenes/depth.css` into the app (depth.css after motion.css, depth.js as a
-module on the pages that use it) and mark each card with `data-depth`:
+**Tilt card with depth.js.** Cards that lean toward the pointer, with a layer inside at its own
+depth, in perspective set once on their container. CSS and a small `depth.js` that you write into
+the app from this recipe, outside its `scenes/` folder: the kit has no depth.js of its own yet
+(when one sits next to stage.js, its top comment says how to use it instead).
 
 ```html
-<article class="card" data-depth>
-  <img src="/img/spot.webp" alt="The north bank at dawn">
-  <h3>North bank</h3>
-</article>
+<div class="deck">
+  <article class="card tilt">
+    <img src="/img/spot.webp" alt="The north bank at dawn">
+    <h3 class="tilt__layer">North bank</h3>
+  </article>
+</div>
+```
+```css
+.deck { perspective: 900px; }                          /* once, on the container */
+.tilt { transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transform-style: preserve-3d; }
+.tilt__layer { transform: translateZ(var(--size-shift-lg)); }   /* nearer than the card */
+@media (prefers-reduced-motion: no-preference) {
+  .tilt { transition: transform var(--duration-base) var(--ease-standard); }
+}
+@media (prefers-reduced-motion: reduce) { .tilt, .tilt__layer { transform: none; } }
+```
+```js
+// depth.js of the app: a card leans toward the pointer, at most `most` degrees
+import { reduce } from "./tokens.js";
+
+export function tilt(card, most = 6) {
+  if (reduce.matches || !matchMedia("(hover: hover)").matches) return () => {};
+  const move = (event) => {
+    const box = card.getBoundingClientRect();
+    const x = (event.clientX - box.left) / box.width - 0.5;      // -0.5 .. 0.5
+    const y = (event.clientY - box.top) / box.height - 0.5;
+    card.style.setProperty("--tilt-y", (x * most * 2).toFixed(2) + "deg");
+    card.style.setProperty("--tilt-x", (-y * most * 2).toFixed(2) + "deg");
+  };
+  const rest = () => { card.style.setProperty("--tilt-x", "0deg"); card.style.setProperty("--tilt-y", "0deg"); };
+  card.addEventListener("pointermove", move, { passive: true });
+  card.addEventListener("pointerleave", rest);
+  return () => { card.removeEventListener("pointermove", move); card.removeEventListener("pointerleave", rest); };
+}
 ```
 
-What `data-depth` takes (a tilting card, layers, stacked panels, fold and flip), how the layers
-inside a card are marked and how it starts are in the comment at the top of depth.js: take them from
-there, never from memory. A card stays a normal link or button: the tilt is a transform on top.
-Reduced: the cards lie flat and still; hover gives the shadow of `m-lift`. Mistake: a tilt over
-about 8 degrees (text gets hard to read), tilting a whole form or table, depth on touch screens
+In React, call it in a `useEffect` and return what it returns. Panels stacked in perspective are
+the same container with `rotateX(8deg)` and a `translateZ` per panel. A card stays a normal link or
+button: the tilt is a transform on top. Reduced: the cards lie flat and still; hover gives the
+shadow of `m-lift`. Mistake: a tilt over about 8 degrees (text gets hard to read), tilting a whole
+form or table, `overflow: hidden` on the card (it flattens the layers), depth on touch screens
 where nobody hovers, and a perspective set on each card instead of once on their container.
 
 **The signature moment.** One moment that could only belong to this app, from the concept: a
@@ -614,9 +738,11 @@ written in the inventory as its own row.
 ## 9. Level 4: Showpiece
 
 Everything above, plus a WebGL hero from the scene kit, light and depth that follow the pointer,
-3D inside the interface and depth while scrolling. Which scene fits which concept, and the
-wiring per stack, is in `../forge-design/scenes.md`; the API of each file is the comment at its
-top.
+3D inside the interface and depth while scrolling. Which scene: `form.js` for a shape (an object,
+a tool, a craft), `field.js` for particles (a crowd, a flow, numbers; it takes `setData`),
+`aurora.js` for light (water, a sky, a sea; mode `water`), `contour.js` for lines over a map
+(places, depth, height). The options and API of each are the comment at its top; the mount per
+stack is below (a plain page, React and Next).
 
 - `npm install three` in the app; the level is the user's yes, so do not ask again. Read the
   licence of the installed version (MIT, in `node_modules/three/LICENSE`) and write it in
@@ -624,7 +750,10 @@ top.
 - Copy `stage.js`, `glsl.js`, `lazy.js` and the scene into a `scenes/` folder of the app's scripts:
   the app serves them itself.
 - The hero container gets a poster: a still of the scene. Mount it once with `{ still: true }` at
-  the size of the hero, take a screenshot, save it as WebP next to the app's images.
+  the size of the hero and take a screenshot of the container with Playwright, as PNG or as JPEG
+  at quality 80 (`await page.locator(".hero-scene").screenshot({ path: "public/hero-poster.jpg",
+  type: "jpeg", quality: 80 })`), under 100 KB, next to the app's images. Playwright writes no
+  WebP; install no converter for it.
 
 **Mounting a kit scene in a plain page.** With no bundler, an import map points `three` at a file
 the app serves itself: copy `node_modules/three/build/three.module.js` and `three.core.js` to the
@@ -633,7 +762,7 @@ CSP needs its hash in `script-src`.
 
 ```html
 <script type="importmap">{ "imports": { "three": "/static/vendor/three/three.module.js" } }</script>
-<div class="hero-scene" aria-hidden="true"><img data-scene-poster src="/static/img/hero-poster.webp" alt=""></div>
+<div class="hero-scene" aria-hidden="true"><img data-scene-poster src="/static/img/hero-poster.jpg" alt=""></div>
 <button type="button" id="motion">Pause motion</button>
 <script type="module" src="/static/js/hero.js"></script>
 ```
@@ -678,7 +807,7 @@ export default function Hero({ progress = 0 }) {
   useEffect(() => { scene.current?.setProgress(progress); }, [progress]);
   return (
     <div ref={box} className="hero-scene" aria-hidden="true">
-      <img data-scene-poster src="/hero-poster.webp" alt="" />
+      <img data-scene-poster src="/hero-poster.jpg" alt="" />
     </div>
   );
 }
@@ -695,16 +824,74 @@ remounted on every prop change instead of fed through its methods.
 Everything above, plus a scroll-driven journey, custom shaders, GPU particles, forms that react to
 the pointer and to the app's live data, and screens that change in 3D space.
 
-- **The journey**: the kit's `journey.js` moves the camera through chapters along a tall section
-  and fires an event per chapter, so the page can bring in each chapter's text. Its comment and
-  `../forge-design/scenes.md` say how; the chapters come from the concept, not from the kit's demo.
-- **Custom shaders**: a `THREE.ShaderMaterial` that spreads `stage.uniforms` (time, pointer,
-  progress, the theme's colours) and builds on the noise of `glsl.js`; the fragment shader ends with
-  `#include <colorspace_fragment>`. The comment at the top of `stage.js` shows a whole scene.
+- **The journey**: a tall section whose chapters move the camera, with each chapter's text
+  brought in by the page. The kit has no `journey.js` yet: build it from story.js (section 8) and
+  the scene's camera, as below (`chapters.js`). The chapters come from the direction, not a demo.
+- **Custom shaders**: a `THREE.ShaderMaterial` in the app's own code that spreads `stage.uniforms`
+  (time, pointer, progress, the theme's colours) and builds on the noise of `glsl.js`; the fragment
+  shader ends with `#include <colorspace_fragment>`. The comment at the top of `stage.js` shows a
+  whole scene. A kit scene used as it is does not count as the app's own shader.
 - **GPU particles**: `field.js`, its formations set by `setProgress`, its amplitude by `setData`.
 
-**Feeding setData from fetched data.** The app's own endpoint, the same origin, never made-up
-numbers. Values go in as numbers from 0 to 1 (what each scene does with them: its comment).
+**The journey.** Chapters along the scroll of a sticky section (the `.story` markup and CSS of
+section 8, one `[data-step]` per chapter). Each chapter has a camera position and a progress for
+the scene; between two chapters both ease. For `form.js` and `field.js`, which leave the camera to
+the page; `aurora.js` and `contour.js` are flat shaders, so their journey is `setProgress` only.
+
+```js
+// chapters.js of the app (outside its scenes/ folder): the camera through chapters, from the scroll
+import { story } from "./story.js";
+
+export async function journey(section, hero, chapters, onChapter = () => {}) {
+  const scene = await hero.ready;                  // lazyScene's promise of the scene; null: no WebGL
+  if (!scene) return () => {};
+  const { camera } = scene.stage;
+  let current = -1;
+  return story(section, (progress) => {
+    const i = Math.max(chapters.findLastIndex((c) => c.at <= progress), 0);
+    const a = chapters[i], b = chapters[Math.min(i + 1, chapters.length - 1)];
+    const t = b === a ? 0 : Math.min((progress - a.at) / (b.at - a.at), 1);
+    const e = t * t * (3 - 2 * t);                 // soft at both ends
+    camera.position.set(...a.camera.map((v, k) => v + (b.camera[k] - v) * e));
+    camera.lookAt(0, 0, 0);
+    scene.setProgress(a.progress + (b.progress - a.progress) * e);
+    if (i !== current) onChapter((current = i));  // the page shows that chapter's text
+  });
+}
+```
+```js
+journey(document.querySelector("[data-story]"), hero, [
+  { at: 0, camera: [0, 0, 6], progress: 0 },       // far: the whole lake
+  { at: 0.4, camera: [2, 1, 3], progress: 0.5 },   // closer: where the fish were
+  { at: 0.8, camera: [0, -1, 2], progress: 1 },    // under the surface: your best spot
+]);
+```
+
+Reduced: story.js never runs its loop, so the scene shows its still frame and every chapter's text
+stands in the section, which is as tall as its content. Mistake: a camera that cuts between
+chapters (ease it), chapters so short that one flick of the wheel skips two, and text that people
+must read moving with the camera.
+
+**The data hook.** `setData` gets the app's own numbers, never made-up ones, as numbers from 0 to
+1 (what each scene does with them: its comment). Where:
+
+- On a signed-in screen that already loads them (an overview, a statistics page): the hero or a
+  scene of that screen. In Next the page (a server component) already has the rows; pass them as
+  a prop to the client scene component and call `setData` in a `useEffect` on that prop.
+- Not on a public page: the landing page's hero is seen by everyone, so it gets no one's private
+  numbers. A new API route, or private data on a public page, changes what the app does and who
+  sees what: ask the user first, and build neither without a yes.
+- Live refresh only from an endpoint the app already has and that screen already uses, same
+  origin: `feed()` below.
+
+```jsx
+// in the client component of a signed-in screen: rows came from the page's own data loading;
+// share() is in feed.js below
+useEffect(() => { scene.current?.setData(share(rows.map((row) => row.count))); }, [rows]);
+```
+
+**Feeding setData from fetched data.** From an endpoint the screen already uses, the same
+origin, every so often while someone looks:
 
 ```js
 // feed.js: pull the app's own data every so often and hand it to whatever shows it
@@ -734,8 +921,8 @@ export const share = (numbers) => {                       // to 0..1, the larges
 ```js
 import { feed, share } from "./feed.js";
 
-feed("/api/catches/week", (rows) => {
-  hero.setData(share(rows.map((row) => row.count)));
+feed(endpointTheScreenAlreadyUses, (rows) => {          // the same URL the screen loads, not a new one
+  scene.setData(share(rows.map((row) => row.count)));
   setCatches(rows.reduce((sum, row) => sum + row.count, 0));   // the count below
 });
 ```
@@ -788,8 +975,9 @@ document.querySelector("#catches-label"))`. Reduced: the new number at once. Mis
 from 0 on every refresh, an `aria-live` region on the moving digits (it reads out every step), and
 digits that jiggle (give the value `font-variant-numeric: tabular-nums`).
 
-**Screens that change in 3D space.** The page change of section 4, turned in perspective. Both
-pages load this CSS; within one page, `swap()` of section 4 plays it.
+**Screens that change in 3D space.** The page change of section 4, turned in perspective. The
+browser plays these rules on a full page load between two pages (`@view-transition`) and inside
+`document.startViewTransition()`; within one page, `swap()` of section 4 plays it.
 
 ```css
 @media (prefers-reduced-motion: no-preference) {
@@ -805,14 +993,130 @@ changes, and move its camera (`setProgress`, or the journey's next chapter) on e
 Reduced: the plain change of page. Mistake: a turn over 15 degrees or longer than 500ms on every
 navigation (people feel it in their stomach), and a scene remounted on every page change.
 
+**Next and other client-side routers.** Next changes pages on the client, so neither of those
+runs and nothing turns, although the CSS is there. Wrap its navigation in a view transition that
+waits until the new route has rendered:
+
+```jsx
+"use client";
+// app/turn-link.jsx: <TurnLink href="/catches">Catches</TurnLink> in the app's main menu,
+// and <RouteTurn /> once in app/layout.tsx, next to <MotionRuntime />
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
+
+let rendered = null;                               // resolves when the new route is on screen
+
+export function RouteTurn() {
+  const path = usePathname();
+  useEffect(() => { rendered?.(); rendered = null; }, [path]);
+  return null;
+}
+
+export function TurnLink({ href, onClick, ...rest }) {
+  const router = useRouter();
+  const path = usePathname();
+  const go = (event) => {
+    onClick?.(event);
+    const plain = event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+    if (!plain || event.defaultPrevented || href === path || !document.startViewTransition
+        || matchMedia("(prefers-reduced-motion: reduce)").matches) return;   // Next's own change
+    event.preventDefault();
+    document.startViewTransition(() => new Promise((done) => {
+      rendered = done;
+      setTimeout(done, 1500);                      // never hold the page if the route does not change
+      router.push(href);
+    }));
+  };
+  return <Link href={href} onClick={go} {...rest} />;
+}
+```
+
+Newer Next versions may have a view transition option of their own (`experimental.viewTransition`):
+use it instead only when the docs of the installed version name it. Either way the proof is frames
+taken across a click (section 12), never a reload: a reload is a full page load and plays the CSS
+whether the client change works or not.
+
 ## 11. The budget per level
 
-Measured on the built app: gzip sizes from the build output, frames in the Performance panel.
+Measured on the built app: gzip sizes from the build output, frames and long tasks with the
+proof script of section 12 (4x CPU slowdown for a mid-range phone).
+
+Build in a copy, never in the folder where the user's dev server runs: `next dev` and `next build`
+both write `.next`, and a build there can break the running server. A copy of the work branch
+outside the project does it: `git worktree add <a temp folder> <the work branch>`, then in that
+folder `npm ci` and the build (`npm run build`); read the sizes from its output (`du` plus `gzip
+-c | wc -c` on the files the page loads), then `git worktree remove <that folder>`. The same holds
+for any stack whose dev server and build share an output folder.
 
 | level | motion code in the first load | loaded later | frames | also |
 | --- | --- | --- | --- | --- |
 | 1 Subtle | motion.css, about 4 KB; scripts none or under 2 KB | nothing | 60 a second | no layout shift |
 | 2 Polished | under 15 KB for all motion code | nothing | 60 a second on a mid-range phone (390px, 4x CPU slowdown) | CLS under 0.1, no long task over 50ms |
-| 3 Expressive | under 25 KB, depth.js included | nothing | the same, also while a sticky scene scrolls | no library |
+| 3 Expressive | under 25 KB, the tilt and story scripts included | nothing | the same, also while a sticky scene scrolls | no library |
 | 4 Showpiece | the same as level 3: nothing of three | the hero (three after tree-shaking, the kit and one scene) under 200 KB, only on the screens that show it, after the page is idle; a poster under 100 KB | 60 on a mid-range laptop; 30 or more on a mid-range phone at low quality | the largest paint is the heading or the poster, never later than before |
 | 5 Cinematic | the same as level 3 | the scenes, the journey and the shaders together under 300 KB; one WebGL context per page | the same as level 4, also during the journey | GPU particles at the count the stage's quality picks |
+
+## 12. The proof that needs a click, a slow processor or no WebGL
+
+shots.mjs only loads pages; it never clicks. Three things need more: content that arrives by a
+client-side page change (Next, section 4), a page change in 3D (section 10), and the budget on a
+slow processor or with WebGL off (section 11). Write this script to `forge-work/design/clicks.mjs`
+(it finds Playwright where shots.mjs does) and run it on the user's own app only:
+
+```js
+// clicks.mjs BASE FROM LINK OUT [--state FILE] [--no-webgl]
+//   node forge-work/design/clicks.mjs <URL> /overview "Catches" forge-work/motion-shots/clicks --state forge-work/design/auth.json
+import { chromium } from "@playwright/test";
+import { mkdirSync } from "node:fs";
+
+const [base, from, link, out, ...flags] = process.argv.slice(2);
+const state = flags.includes("--state") ? flags[flags.indexOf("--state") + 1] : undefined;
+const noWebgl = flags.includes("--no-webgl");
+const browser = await chromium.launch({ args: noWebgl ? ["--disable-webgl"] : [] });
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState: state,
+                                           reducedMotion: "no-preference" });
+const page = await context.newPage();
+page.on("console", (message) => { if (message.type() === "error") console.log("console error:", message.text()); });
+await page.goto(new URL(from, base).href, { waitUntil: "networkidle" });
+mkdirSync(out, { recursive: true });
+
+const cdp = await context.newCDPSession(page);                  // a mid-range phone: 4x slower
+await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+const speed = await page.evaluate(() => new Promise((done) => {
+  let frames = 0, longest = 0;
+  new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) longest = Math.max(longest, entry.duration);
+  }).observe({ type: "longtask" });
+  const start = performance.now();
+  const tick = (now) => (++frames, now - start < 3000 ? requestAnimationFrame(tick)
+    : done({ fps: Math.round(frames / 3), longestTaskMs: Math.round(longest) }));
+  requestAnimationFrame(tick);
+}));
+await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+const fallback = await page.locator('[data-scene="fallback"]').count();
+console.log(JSON.stringify({ ...speed, webgl: !noWebgl, sceneFallbacks: fallback }));
+
+await page.getByRole("link", { name: link }).first().click();   // the page change a user makes
+for (let i = 1; i <= 8; i++) {
+  await page.screenshot({ path: `${out}/click-f${i}.png` });
+  await page.waitForTimeout(60);
+}
+await page.waitForLoadState("networkidle");
+await page.waitForTimeout(1500);                                // entrances and reveals are over
+await page.screenshot({ path: `${out}/click-after.png` });
+console.log("after the click:", page.url());
+await browser.close();
+```
+
+- **Content after a client-side change**: look at `click-after.png`: the new screen's content is
+  there, nothing left blank where a reveal waits. Do it for each signed-in route, from a link of
+  the screen before it.
+- **A page change in 3D**: `python3 ../forge-design/changed.py --moves
+  forge-work/motion-shots/clicks/click-f*.png` says it moves, and the frames show the turn, not a
+  cut.
+- **Budget**: `fps` and `longestTaskMs` against the table of section 11 (frames with the 4x
+  slowdown, no long task over 50ms). From level 4 run it once more with `--no-webgl`:
+  `sceneFallbacks` is at least 1 on a page with a scene, and the poster shows in the pictures.
+
+Write the numbers and the paths under `## Checks` of `forge-work/motion.md`.

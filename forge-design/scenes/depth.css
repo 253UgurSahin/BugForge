@@ -1,0 +1,143 @@
+/*
+ * depth.css: the look of depth.js (scene kit, look level 3 and up). Load it after the app's own styles.
+ *
+ * depth.js moves things; this file gives them their light: shadows that grow with height, the glare
+ * on a tilt card, the shade on a turning page and on panels further back. Every colour is mixed from
+ * the page's tokens (--color-text, --color-bg, --color-border), so it follows the theme. depth.js
+ * marks each element data-depth-tone="dark" or "light": a shadow on a dark page is a deeper dark, on
+ * a light page a soft ink.
+ *
+ * Tune per element or for the page:
+ *   --depth-perspective   1500px for stacks (tilt cards and folds take the perspective option).
+ *   --depth-origin        50% 0%: where the eye sits over a stack; 0% is its top edge.
+ *   --depth-ink           the shadow colour (see the tones below).
+ *   --depth-ink-strength  1: shadows stronger or weaker.
+ * The shadow is set as --depth-shadow and used as box-shadow. A card with a shadow of its own loses
+ * it here; to keep both: box-shadow: var(--depth-shadow), 0 0 0 1px var(--color-border);
+ *
+ * The numbers depth.js writes: --depth-lift (0 lying down .. 1 fully raised), --depth-sx and
+ * --depth-sy (-1..1, which way the card leans), --depth-gx and --depth-gy (-1..1, where the glare
+ * is), --depth-ga and --depth-gm (the angle and strength of the shade across a card), --depth-dim (0..1, how far back a panel is), --depth-shade (0..1, how far a page is turned).
+ */
+
+:where([data-depth]) {
+  --depth-lift: 0;
+  --depth-sx: 0;
+  --depth-sy: 0;
+  --depth-ink: var(--color-text);
+  --depth-ink-strength: 1;
+  --depth-edge: 0;
+}
+:where([data-depth][data-depth-tone="dark"]) {
+  /* On a dark page a shadow must be darker than the page itself: the background, near black. */
+  --depth-ink: oklch(from var(--color-bg) calc(l * 0.3) c h);
+  --depth-ink-strength: 3.2;
+  --depth-edge: 1; /* and a fine light edge on top, which the raised card catches */
+}
+
+/* Three shadows, as light makes them: a tight contact shadow that fades as the card leaves the
+   page, a key shadow that grows and moves away from the raised side, and a wide, faint ambient one.
+   The higher the card, the further, softer and wider each one falls. */
+:where([data-depth="tilt"], [data-depth="stack"] > *, [data-depth="fold"]) {
+  --depth-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--color-text) calc((4% + var(--depth-lift) * 7%) * var(--depth-edge)), transparent),
+    0 1px 2px color-mix(in oklab, var(--depth-ink) calc((10% - var(--depth-lift) * 6%) * var(--depth-ink-strength)), transparent),
+    calc(var(--depth-sx) * 8px) calc(3px + var(--depth-lift) * 10px + var(--depth-sy) * 4px) calc(8px + var(--depth-lift) * 20px) calc(-3px - var(--depth-lift) * 3px)
+      color-mix(in oklab, var(--depth-ink) calc((9% + var(--depth-lift) * 3%) * var(--depth-ink-strength)), transparent),
+    calc(var(--depth-sx) * 18px) calc(10px + var(--depth-lift) * 30px + var(--depth-sy) * 10px) calc(28px + var(--depth-lift) * 48px) calc(-12px - var(--depth-lift) * 6px)
+      color-mix(in oklab, var(--depth-ink) calc((6% + var(--depth-lift) * 7%) * var(--depth-ink-strength)), transparent);
+  box-shadow: var(--depth-shadow);
+}
+
+/* ---- Tilt cards. The layers inside share the card's 3D space; overflow, opacity or a filter on the
+   card itself would flatten them. */
+[data-depth="tilt"] {
+  position: relative;
+  transform-style: preserve-3d;
+}
+.depth-glare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: var(--depth-lift);
+}
+/* Light where the pointer is: a soft spot larger than the card, moved by transform only, so the
+   browser composites it and never repaints it. */
+.depth-glare::before {
+  content: "";
+  position: absolute;
+  left: -40%;
+  top: -40%;
+  width: 180%;
+  height: 180%;
+  transform: translate(calc(var(--depth-gx, 0) * 28%), calc(var(--depth-gy, 0) * 28%));
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-text) 9%, transparent), transparent) center / 60% 60% no-repeat;
+}
+/* the side turned away from the pointer catches a little less light */
+.depth-glare::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: var(--depth-gm, 0);
+  background: linear-gradient(var(--depth-ga, 0deg), transparent 30%, color-mix(in oklab, var(--depth-ink) calc(4% * var(--depth-ink-strength)), transparent));
+}
+[data-depth-tone="light"] > .depth-glare::before {
+  /* A light card cannot get lighter, and a pale spot over dark text only lowers its contrast:
+     on a light page the shade alone shows the turn. */
+  display: none;
+}
+
+/* ---- Stacks: every panel in the same grid cell, the eye above the stack's top edge. */
+[data-depth="stack"] {
+  display: grid;
+  perspective: var(--depth-perspective, 1500px);
+  perspective-origin: var(--depth-origin, 50% 0%);
+  isolation: isolate;
+}
+[data-depth="stack"] > * {
+  grid-area: 1 / 1;
+  position: relative;
+}
+/* Panels further back sink into the page's colour, as far things do in air. */
+[data-depth="stack"] > *::after,
+[data-depth="fold"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--color-bg);
+  opacity: var(--depth-dim, 0);
+}
+[data-depth="fold"] {
+  position: relative;
+}
+[data-depth="fold"]::after {
+  background: var(--depth-ink);
+  opacity: calc(var(--depth-shade, 0) * var(--depth-ink-strength) * 0.24);
+}
+
+/* Only while something moves: a layer of its own for each moving part. */
+[data-depth-moving],
+[data-depth-moving] [data-depth-layer] {
+  will-change: transform;
+}
+
+/* ---- Flat and still: reduced motion, or the page's motion switch. depth.js lays everything flat;
+   a card still answers hover, with its raised shadow and no movement. */
+@media (prefers-reduced-motion: reduce) {
+  .depth-glare {
+    display: none;
+  }
+  [data-depth="tilt"]:hover {
+    --depth-lift: 0.6;
+  }
+}
+html[data-motion="paused"] .depth-glare {
+  display: none;
+}
+html[data-motion="paused"] [data-depth="tilt"]:hover {
+  --depth-lift: 0.6;
+}

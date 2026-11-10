@@ -143,4 +143,5 @@ it over. The steps are Step 2 and Step 7 of `../forge-check/steps/test.md`. A fi
 ## Next
 
 Each steps file ends with its own checkpoint: show it, at most 5 plain lines, and wait for the
-user's go. Findings to fix in an app that exists: `/forge-improve`.
+user's go. Bugs that test finds are fixed in its own fix loop. Findings of audit and inspect to
+fix: `/forge-improve`.

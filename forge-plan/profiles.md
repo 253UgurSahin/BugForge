@@ -1,10 +1,11 @@
 # Stack profiles
 
-The one reference for the four stack profiles and the PWA toggle, used by forge-plan, -build, -test
-and -pack. Everything runs in the user's own compose stack: no managed hosting or database.
+The one reference for the four stack profiles and the PWA toggle, used by `/forge-plan`, `/forge-build`
+(build and pack), `/forge-check` and `/forge-design`. Everything runs in the user's own compose stack.
 
-**Versions checked 27 October 2026** (stable or LTS, and forge-build pack's image tags). Recheck after
-three months: `npm view next version`, `pip index versions django`, `composer show -a laravel/framework`.
+**Versions checked 27 October 2026** (stable or LTS, and the image tags of `/forge-build pack`), three
+0.187 on 10 November 2026. Recheck after three months: `npm view next version`, `npm view three
+version`, `pip index versions django`, `composer show -a laravel/framework`.
 
 ## How to pick a profile
 
@@ -34,6 +35,10 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
 - One app, no microservices. Secrets only in `.env` (git-ignored); `.env.example` lists every name
   with a fake value. TLS and the public domain belong to the user's own reverse proxy.
 - End-to-end tests: Playwright (`@playwright/test` 1.64) against the running compose stack.
+- **3D scenes**, look level 4 and 5 only (1 to 3 add no library): `three` 0.187 from npm, never a CDN,
+  and the kit's files copied into the app (`../forge-design/scenes/lazy.js`, `stage.js`, `glsl.js`, the
+  scene). Three loads on the client only, on the screens with a scene, when it is near (`lazyScene`), with
+  a poster for weak devices, no WebGL and reduced motion (`../forge-design/motion.md` section 9).
 
 ## Shared by the server profiles (laravel, django, next)
 
@@ -102,6 +107,9 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   Blade's `{{ }}`, query bindings, `Hash::make`, encrypted HttpOnly session cookies, Fortify's login
   rate limit, validation on every input. Production: `APP_ENV=production`, `APP_DEBUG=false`,
   `SESSION_SECURE_COOKIE=true`, `trustProxies` in `bootstrap/app.php` for the user's reverse proxy.
+- **3D scene**: `npm install three` in the app root, next to Vite's `package.json`; the kit's files go
+  in `resources/js/scenes/`. `resources/js/hero.js` calls `lazyScene(el, () => import("./scenes/form.js"))`,
+  and `app.js` loads hero.js with `import()` only on a page with the container: Vite splits three off.
 
 **Classic mistakes**
 1. Mass assignment: `$guarded = []` with `create($request->all())`. Use `$fillable`, `validated()`.
@@ -126,19 +134,17 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   `tests/`; `templates/`, `static/`, `public/` (served at the root through `WHITENOISE_ROOT`), `e2e/`.
 - **Compose**: `app` (gunicorn; WhiteNoise serves static files, so no nginx), `db` (postgres),
   `mailpit` (dev). Optional, same image: `worker` (`python manage.py db_worker`, see jobs).
-- **Auth**: `django.contrib.auth` (login, logout, password reset views built in). Social login, email
-  verification flows or MFA: django-allauth 65.
-- **Database**: Django migrations, PostgreSQL by default through `psycopg[binary]` 3; MariaDB through
-  `mysqlclient` 2.3 (needs the MariaDB client headers in the image). A decided `on_delete` on every
-  `ForeignKey`, `Meta.indexes` for what you filter and sort on, `USE_TZ = True` (the default). The
-  rules above: PostgreSQL, `ExclusionConstraint` (with `BtreeGistExtension()` in the migration) and
-  `UniqueConstraint(condition=...)`; MariaDB ignores `condition`, so the shared SQL in `RunSQL` and a
-  plain `UniqueConstraint` on `user` and a nullable `active`.
+- **Auth**: `django.contrib.auth` (login, logout, password reset built in); social login, email
+  verification or MFA: django-allauth 65.
+- **Database**: Django migrations; PostgreSQL through `psycopg[binary]` 3, MariaDB through `mysqlclient` 2.3
+  (needs the client headers in the image). A decided `on_delete` on every `ForeignKey`, `Meta.indexes`
+  for what you filter and sort on, `USE_TZ = True` (the default). The rules above, PostgreSQL:
+  `ExclusionConstraint` (`BtreeGistExtension()` in the migration) and `UniqueConstraint(condition=...)`;
+  MariaDB ignores `condition`: the shared SQL in `RunSQL`, a `UniqueConstraint` on `user` and a nullable `active`.
 - **Jobs**: the built-in `django.tasks` (6.0+) ships only development backends: add `django-tasks-db`
   0.13 (jobs in the same database) and run `python manage.py db_worker`. No Redis, no Celery.
 - **Tests**: pytest 9 with pytest-django 4.14 on the production database engine; Playwright end to end.
-- **Stripe**: `stripe` (stripe-python) 16. `.env` names: `STRIPE_PUBLISHABLE_KEY`,
-  `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`.
+- **Stripe**: stripe-python 16. `.env`: `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`.
 - **Email**: SMTP from `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, set in
   Django 6.1's new `MAILERS` setting (`smtp.EmailBackend` with `OPTIONS`); old `EMAIL_*` settings warn.
 - **Keep on**: `SecurityMiddleware`, `CsrfViewMiddleware`, `XFrameOptionsMiddleware`, template
@@ -146,6 +152,10 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   middleware (`ContentSecurityPolicyMiddleware` with `SECURE_CSP`, 6.0+). Production: `DEBUG = False`,
   `SECRET_KEY` and `ALLOWED_HOSTS` from the environment, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`,
   `CSRF_TRUSTED_ORIGINS`, `SECURE_PROXY_SSL_HEADER`, and `manage.py check --deploy` without warnings.
+- **3D scene**: no bundler. `npm install three` at the root; an npm script copies `three.module.js`,
+  `three.core.js` and the LICENSE to `static/vendor/three/` (committed: the image needs no Node); the kit
+  goes in `static/js/scenes/`. An inline import map points `three` there (its hash in `SECURE_CSP`); a
+  module script loads `static/js/hero.js`, whose `lazyScene` loads the scene when it is near.
 
 **Classic mistakes**
 1. `DEBUG = True`, a hard-coded `SECRET_KEY` or `ALLOWED_HOSTS = ["*"]` in production. Fixing it in
@@ -165,9 +175,8 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
 ## next: Node/TypeScript + Postgres (Next.js, self-hosted)
 
 - **Versions**: Next.js 16.4.3 with React 19 and the App Router, Node 24 LTS `node:24-alpine`
-  (maintenance LTS until 30 April 2028, the tag forge-build pack's templates use), PostgreSQL 18
-  `postgres:18-alpine`, Drizzle ORM 0.45 with drizzle-kit 0.31 and the `pg` driver 8, Better Auth
-  1.7, zod 4 for input validation.
+  (maintenance LTS until 30 April 2028, the tag the pack templates use), PostgreSQL 18
+  `postgres:18-alpine`, Drizzle ORM 0.45 (drizzle-kit 0.31, `pg` 8), Better Auth 1.7, zod 4.
 - **Start**: `npx create-next-app@latest app` (TypeScript, App Router, Tailwind CSS 4), then
   `npm i -D @types/node@24 vitest@5` (the image's Node; the scaffold's `@types/node` 20 blocks
   Vitest 5). `next.config.ts`: `output: "standalone"`, `poweredByHeader: false`, and with logins delete
@@ -185,10 +194,9 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   the browser to `/api/auth/*` through `createAuthClient` (`better-auth/react`); on the server use
   only `auth.api.getSession({ headers: await headers() })`. Account deletion: set
   `user: { deleteUser: { enabled: true } }`; app tables reference `user.id` with `onDelete: "cascade"`.
-  Behind a reverse proxy, set Better Auth's `advanced.ipAddress` proxy settings, or every visitor
-  shares one rate-limit bucket.
+  Behind a reverse proxy, set Better Auth's `advanced.ipAddress`, or all visitors share one rate limit.
 - **Database**: Drizzle schema in TypeScript; `npx drizzle-kit generate` writes SQL to `drizzle/`,
-  which `migrate()` in `instrumentation.ts` runs when the server starts (forge-build pack has it). The
+  which `migrate()` in `instrumentation.ts` runs when the server starts (`/forge-build pack` adds it). The
   PostgreSQL rules above go in a custom migration (`npx drizzle-kit generate --custom`). Times:
   `timestamp({ withTimezone: true })`; money: `integer` cents. Better Auth's tables: comment out
   `import "server-only"` in the modules lib/auth.ts imports (its CLI refuses it), run its CLI at the
@@ -208,6 +216,9 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   origins in `experimental.serverActions.allowedOrigins` only if the proxy changes the host); only
   `NEXT_PUBLIC_` variables reach the browser; `import "server-only"` in every module with database or
   secrets; Better Auth's HttpOnly cookies, `trustedOrigins` and rate limit; CSP in `next.config.ts`.
+- **3D scene**: `npm install three` in the app; the kit's files go in `lib/scenes/`. A client component
+  (`"use client"`) runs `lazyScene(ref.current, () => import("@/lib/scenes/form.js"))` in `useEffect`,
+  `destroy()` on unmount. Load it with `dynamic(..., { ssr: false })` from a client component: no SSR.
 
 **Classic mistakes**
 1. A secret in a `NEXT_PUBLIC_` variable: it is copied into the JavaScript every visitor gets.
@@ -238,14 +249,16 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
 - **Stripe**: a secret key never lives in a browser bundle, so Stripe Payment Links (made in the
   Dashboard, test mode), fulfilled by hand. Reacting to a payment needs a webhook: a server profile.
 - **Keep on**: the CSP, `X-Content-Type-Options`, `Referrer-Policy` and `frame-ancestors` headers in
-  forge-build pack's nginx.conf; the framework's escaping; no source maps in production unless asked for.
+  the pack templates' nginx.conf; the framework's escaping; no source maps in production unless asked for.
+- **3D scene**: `npm install three` in the app; the kit's files go in `src/scenes/`. Through Vite:
+  `src/main.ts` calls `lazyScene(el, () => import("./scenes/form.js"))` on a page with the container,
+  and Vite splits three off into `/assets/`. A plain page outside Vite: an import map, as for django.
 
 **Classic mistakes**
 1. API keys in `VITE_` variables: every `VITE_` variable ends up in the JavaScript anyone can read.
 2. Access checks only in the browser (hidden buttons, route guards). The API checks every request.
 3. Tokens in `localStorage`, where any injected script can read them. Use an HttpOnly cookie.
-4. No SPA fallback (a refresh on `/settings` gives 404) or a long cache on `index.html` (people stay
-   on an old version).
+4. No SPA fallback (a refresh on `/settings` gives 404), or a long cache on `index.html` (old versions stay).
 5. `innerHTML`, `v-html`, `{@html}` or `dangerouslySetInnerHTML` with user or API content.
 
 ## PWA toggle (any profile)
@@ -263,8 +276,7 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   `/offline.css` from the root, with system fonts and the theme's colours (change them with it).
 - **Where**: these files go in `public/` (django: served at the root with `WHITENOISE_ROOT`; next:
   or the manifest as `app/manifest.ts`). Hashed assets are under `/build/assets/` (laravel),
-  `/static/` (django, with WhiteNoise's `CompressedManifestStaticFilesStorage`), `/_next/static/`
-  (next) and `/assets/` (static).
+  `/static/` (django, WhiteNoise's `CompressedManifestStaticFilesStorage`), `/_next/static/` (next), `/assets/` (static).
 - **Caching**: pages (HTML) network first, the offline page when the network fails. Hashed static
   assets cache first. Never cached: API responses, pages a logged-in user saw, POSTs and other
   non-GET requests, other domains (Stripe): those go straight to the network. Pages for logged-in
@@ -273,8 +285,7 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
 - **Working offline**, static only and when plan.md says so: its built pages hold no personal data
   and are the same for every visitor, so the worker may store them too. It precaches the pages and
   their hashed assets on install and answers them cache first; updates work as below. Only a
-  generated worker knows the hashed names (vite-plugin-pwa, below), not the minimal worker below.
-  API responses and other domains still go to the network.
+  generated worker (vite-plugin-pwa, below) knows the hashed names. API responses still go to the network.
 - **Leaving the app to pay**: after Stripe Checkout or the bank app, the customer often lands in the
   normal browser, and on iOS that shares no cookies or storage with the installed app. So the return
   page works without the app's session: it finds the order by a random token in the URL and shows
@@ -284,7 +295,6 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   `VERSION` in sw.js with every release; the old cache is deleted on activate.
 
 A minimal worker that follows these rules is `../forge-plan/sw.example.js`: copy it to
-`public/sw.js` and set its `ASSETS` to the profile's hashed assets path.
-
-Plugins can generate a worker instead: vite-plugin-pwa 2.0 (static, and Laravel's Vite build) and
-Serwist 9.5 (Next.js). Check what they generate against the caching rules above.
+`public/sw.js` and set its `ASSETS` to the profile's hashed assets path. Plugins can generate one
+instead: vite-plugin-pwa 2.0 (static, and Laravel's Vite build) and Serwist 9.5 (Next.js). Check
+what they generate against the caching rules above.

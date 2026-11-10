@@ -108,7 +108,7 @@ class TableTests(Project):
             self.assertEqual([row["level"] for row in rows], [1, 2, 3, 4, 5])
             self.assertEqual([(row["name"], row["nl"]) for row in rows], pairs)
         self.assertEqual({name: domain.get("floor") for name, domain in TABLE.items()},
-                         {"look": None, "dashboard": None, "test": None, "secure": 3})
+                         {"look": None, "dashboard": None, "test": 2, "secure": 3})
 
     def test_every_level_says_what_it_is_in_one_plain_line(self):
         for name, domain in TABLE.items():
@@ -432,11 +432,11 @@ class FloorTests(Project):
         data = json.loads(out)
         self.assertEqual(code, 0)
         self.assertEqual({name: entry["level"] for name, entry in data["recorded"].items()},
-                         {"look": 1, "dashboard": 1, "test": 1, "secure": 3})
+                         {"look": 1, "dashboard": 1, "test": 2, "secure": 3})
         self.assertEqual(data["recorded"]["secure"]["name"], "Standard")
-        self.assertEqual(len(data["notes"]), 1)
-        self.assertIn("secure was asked at level 1 and is on record at 3", data["notes"][0])
-        self.assertEqual(self.level("get", "test"), (0, "1 Quick\n", ""))
+        self.assertEqual(len(data["notes"]), 2)
+        self.assertIn("secure was asked at level 1 and is on record at 3", " ".join(data["notes"]))
+        self.assertEqual(self.level("get", "test"), (0, "2 Basic\n", ""))
 
     def test_a_level_from_before_the_forge_project_started(self):
         """A check on its own at a low level, and then /forge in the same folder: gate.py init comes after the
@@ -464,7 +464,7 @@ class FloorTests(Project):
         self.assertEqual(self.gate("init", "--mode", "improve", "--about", "mijn app")[0], 0)
         ignore, state = read(os.path.join(self.work, ".gitignore")), read(os.path.join(self.work, "state.json"))
         code, out, _ = self.level("set", "all", "snel", "--said", "alles snel")
-        self.assertEqual((code, self.record()["secure"]["level"], self.record()["test"]["level"]), (0, 3, 1))
+        self.assertEqual((code, self.record()["secure"]["level"], self.record()["test"]["level"]), (0, 3, 2))
         self.assertIn("Note: secure was asked at level 1", out)
         self.assertEqual(sorted(os.listdir(self.work)), [".gitignore", "levels.json", "state.json"])
         self.assertEqual((read(os.path.join(self.work, ".gitignore")), read(os.path.join(self.work, "state.json"))),
