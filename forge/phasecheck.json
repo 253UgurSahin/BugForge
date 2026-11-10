@@ -79,8 +79,8 @@
     {"check": ["doc", "forge-work/motion.md", "--section", "Direction", "--section", "Inventory", "--section", "Tokens",
                "--section", "Libraries", "--section", "Checks"],
      "why": "forge-motion, Output: motion.md with ## Direction, ## Inventory, ## Tokens, ## Libraries, ## Checks"},
-    {"check": ["run", "forge-motion/motioncheck.py", "."],
-     "why": "forge-motion, Output: the app's code, on which motioncheck.py exits 0"}
+    {"check": ["run", "forge-motion/motioncheck.py", ".", "--fail-on", "medium"],
+     "why": "forge-motion, Step 7 and Output: motioncheck.py . --fail-on medium exits 0"}
   ],
   "test": [
     {"check": ["file", "forge-work/test-plan.md"],

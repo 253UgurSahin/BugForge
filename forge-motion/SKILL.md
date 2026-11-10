@@ -4,7 +4,7 @@ description: >-
   Adds animation and motion graphics to the app forge built, or to the user's
   own app: smooth transitions, micro-interactions, scroll reveals, page
   transitions, animated numbers and charts, and a generative hero visual such
-  as a slowly turning 3D wireframe on a dark technical screen. Picks a motion
+  as a slowly turning 3D wireframe on a dark screen. Picks a motion
   direction with the user, lists per screen which moments move and why, puts
   every duration, easing and distance in the design tokens, and builds with
   CSS and the Web Animations API first. GSAP, Three.js or Lottie only where
