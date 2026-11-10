@@ -53,7 +53,8 @@ In improve mode, `/forge-compare` (competitors), `/forge-design` (a redesign), `
 `/forge-motion` and `/forge-pack` (containers) are there when you ask for them.
 
 Each phase is one skill: recon is `/forge-recon`, pack is `/forge-pack`. You can also call any
-skill on its own.
+skill on its own: "redesign my app", "add a dashboard", "add animations", "test my app" or "is this
+safe" each start the skill that does it, on your own repo too.
 
 ### The gate
 
@@ -129,7 +130,14 @@ a test where one can be written), and `forge-work/improve.md` with what was fixe
 and why, and how to check each fix by hand. Nothing is merged or pushed: that is your step.
 
 Plans, reports and screenshots live in `forge-work/` in your project. It never ships: BugForge keeps
-it out of git and out of every image.
+it out of git and out of every image. The reports you will read most:
+
+| file in `forge-work/` | from | what it holds |
+| --- | --- | --- |
+| `design/brief.md`, `design/review.md` | `/forge-design` | the concept and signature of the look; the scores per screen and round |
+| `dashboard.md`, `motion.md` | `/forge-dashboard`, `/forge-motion` | each number with its source; which moments move and why |
+| `test-plan.md`, `bugs.md`, `test/` | `/forge-test` | every case and its result; the bugs; the walk's findings and the screenshots per round |
+| `security.md`, `sbom.json` | `/forge-secure` | the verdict, the findings and the OWASP coverage table; the list of every locked package |
 
 ## The skills
 
@@ -211,6 +219,7 @@ input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-re
 | `copycheck.py [PATH...] [--words N] [--json]` | runs of 6 or more words the clone shares with the original's kept text; 1 = a run found |
 | `chart.py DATA.json --type line\|area\|bar\|spark\|donut [--tokens TOKENS.json] [--title T] [--out FILE] [--json]` | one accessible inline SVG chart from data, no dependencies; 0 or 2 |
 | `dashcheck.py DASHBOARD.md [--json] [--fail-on L]` | the numbers table of forge-work/dashboard.md: a definition, a source and a unit for each, no invented data, no misleading chart form |
+| `shots.example.mjs BASE_URL OUT_DIR [--no-dark] [--state FILE] [PATH...]` | Node with Playwright, not Python: screenshots of your own app at 390px and 1440px, light and dark, for the look review |
 | `motioncheck.py PATH [--json] [--fail-on L]` | motion in the app's code: no reduced-motion rule, layout properties animated, endless loops, an animation library from a CDN |
 | `parity.py FEATURES.csv [--visual JSON...] [--json \| --markdown] [--fail-under N]` | feature parity score; 1 = a must-have is missing |
 | `imgdiff.py ORIGINAL.png CLONE.png [--out DIFF.png] [--json]` | layout score of two screenshots, colour ignored; 0 or 2 |
@@ -321,7 +330,8 @@ CI (`.github/workflows/test.yml`) runs on every push and pull request:
 
 - the full test suite on Linux, macOS and Windows, each with Python 3.9 and 3.13, then the repo's
   own secret scan. `tests/test_plan.py` runs the sample service worker (`forge-plan/sw.example.js`)
-  in a fake browser with Node; without Node those tests are skipped;
+  in a fake browser with Node, and `tests/test_motion.py` checks the hero example's syntax with it;
+  without Node those tests are skipped;
 - per stack profile: the container templates installed in a scratch folder, checked with
   `docker compose config -q` and `packcheck.py --fail-on low`.
 
