@@ -69,8 +69,9 @@
   "dashboard": [
     {"check": ["file", "forge-work/dashboard.md"], "why": "forge-dashboard, Output: forge-work/dashboard.md"},
     {"check": ["doc", "forge-work/dashboard.md", "--section", "Audience", "--section", "Numbers", "--section", "Layout",
-               "--section", "Charts", "--section", "States", "--section", "Checks"],
-     "why": "forge-dashboard, Output: dashboard.md with ## Audience, ## Numbers, ## Layout, ## Charts, ## States, ## Checks"},
+               "--section", "Charts", "--section", "States", "--section", "Checks",
+               "--rows", "number,definition,source,unit,form"],
+     "why": "forge-dashboard, Output: dashboard.md with ## Audience, ## Numbers (its table), ## Layout, ## Charts, ## States, ## Checks"},
     {"check": ["run", "forge-dashboard/dashcheck.py", "forge-work/dashboard.md"],
      "why": "forge-dashboard, Output: dashboard.md, on which dashcheck.py exits 0"}
   ],

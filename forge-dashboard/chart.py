@@ -6,8 +6,7 @@ Every chart has role="img", a <title> and a <desc> with a plain-text summary (fi
 per series). Every label is escaped and written as ASCII: data is untrusted, a label with <script> stays text.
 
 Usage:
-    python3 chart.py DATA.json --type line|area|bar|spark|donut [--tokens TOKENS.json] [--width W] [--height H]
-                     [--title T] [--out FILE] [--json]
+    python3 chart.py DATA.json --type line|area|bar|spark|donut [--tokens T.json] [--width W] [--height H] [--title T] [--out FILE] [--json]
 DATA.json: {"title": "Revenue per month", "unit": "EUR",
             "series": [{"name": "Revenue", "points": [["2026-01", 1200], ["2026-02", 1100]]}]}
 Each point is [label, number]; at most 6 series. A value matrix (heat map) is an HTML table: dashboard.md.
@@ -261,8 +260,7 @@ def main(argv=None):
     parser.add_argument("--out", metavar="FILE", help="write the SVG here instead of to stdout")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     args = parser.parse_args(argv)
-    kind, size = args.type, SIZES.get(args.type, (640, 280))
-    width, height = size[0] if args.width is None else args.width, size[1] if args.height is None else args.height
+    kind, (width, height) = args.type, [given or usual for given, usual in zip((args.width, args.height), SIZES.get(args.type, (640, 280)))]
     try:
         need((16 if kind == "spark" else 100) <= min(width, height) and max(width, height) <= 4000,
              "--width and --height: from 100 to 4000 px (a spark: from 16 px)")

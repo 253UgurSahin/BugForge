@@ -38,8 +38,8 @@ Also for this skill:
 - **Honest numbers.** Every number on the screen traces back to a table and a query. Never a number
   that cannot be traced, never invented data shown as real. Seed data is fine in development: the
   source says `seed` and the screen labels it. No data yet is an empty state, not a made-up chart.
-- **Your own design.** The layout, labels and panels are designed here from the user's numbers and
-  the design tokens. Never rebuild another product's dashboard screen, and no stock template look.
+- **Your own design**, made here from the user's numbers and the design tokens. Never rebuild
+  another product's dashboard screen, and no stock template look.
 - **Nothing from outside.** No CDN, no web font, no hosted chart or analytics script. A chart library
   only when Step 5 allows it, installed from the package registry and bundled with the app.
 
@@ -81,9 +81,8 @@ content or its looks: your screen is built from this app's numbers and tokens.
 ## Step 3: the form per number
 
 Use the chart chooser in the reference and write `## Charts`: per number the form and why. In short:
-one number beats a chart; a line for time; bars for comparison, from a zero baseline; a table for
-looking things up; no pie or donut over 5 parts; no 3D, no gauge, no dual axis; a sparkline only
-next to its number. Run dashcheck.py again after changes to the form column.
+one number beats a chart; a line for time; bars for comparison, from zero; a table for looking things
+up; no pie or donut over 5 parts; no 3D, gauge or dual axis. Run dashcheck.py again after changes.
 
 ## Step 4: colours
 
@@ -147,9 +146,8 @@ no overlap) and **time zones** (day edges in the business's zone, daylight savin
 ## Step 8: check and commit
 
 1. `python3 ../forge-dashboard/dashcheck.py forge-work/dashboard.md` exits 0.
-2. `python3 ../forge-design/contrast.py forge-work/design/tokens.json` exits 0, chart roles included.
-   A chart made with `--tokens`: `chart.py ... --json` lists its `colours` and `background`; any
-   colour it derived goes into tokens.json as a `chart-N` role and through contrast.py too.
+2. `python3 ../forge-design/contrast.py forge-work/design/tokens.json` exits 0, chart roles included. A
+   colour chart.py derived (`--tokens ... --json` lists `colours`) becomes a `chart-N` role first.
 3. The access test with the second user passes, with the rest of the suite.
 4. Rebuild the stack and take screenshots at 390px and 1440px, light and dark, into
    `forge-work/dashboard/`: `npx playwright screenshot --viewport-size=390,844 <url> <file>`. Look

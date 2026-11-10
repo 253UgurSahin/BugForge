@@ -13,7 +13,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import ROOT, load  # noqa: E402
+from _load import ROOT, load, symlink  # noqa: E402
 
 chart = load("forge-dashboard", "chart")
 SCRIPT = os.path.join(ROOT, "forge-dashboard", "chart.py")
@@ -355,7 +355,7 @@ class Refusals(ChartCase):
 
     def test_sizes_out_of_range(self):
         data = {"series": [series("A", [1, 2], ["a", "b"])]}
-        for size in (("--width", "0"), ("--width", "99999"), ("--height", "-5"), ("--height", "50")):
+        for size in (("--width", "5"), ("--width", "99999"), ("--height", "-5"), ("--height", "50")):
             self.assertIn("--width and --height", self.refuse(data, "line", *size))
         self.draw(data, "spark", "--width", "60", "--height", "16")
 
@@ -393,10 +393,7 @@ class Output(ChartCase):
         victim, link = os.path.join(self.folder, "victim.txt"), os.path.join(self.folder, "chart.svg")
         with open(victim, "w") as handle:
             handle.write("keep me")
-        try:
-            os.symlink(victim, link)
-        except (OSError, NotImplementedError, AttributeError):
-            self.skipTest("this system cannot make symlinks")
+        symlink(self, victim, link)
         code, out, err = run(self.write(self.DATA), "--type", "bar", "--out", link)
         self.assertEqual((code, out), (2, ""))
         self.assertIn("symlink", err)
