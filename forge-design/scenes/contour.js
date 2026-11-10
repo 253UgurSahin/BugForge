@@ -3,16 +3,17 @@
  *
  * The isolines of a slowly moving height field, drawn the way a cartographer draws a depth chart:
  * thin lines of the same width everywhere on screen, every fifth line stronger (the index line),
- * the faintest tint between levels, lines lit from the upper left so the land reads in relief,
- * small marks on the tops and in the hollows like soundings, and registration crosses of a map grid.
- * The land drifts and reshapes slowly; the pointer lifts a soft hill that the lines flow around.
- * Dark page: fine light lines, index lines in the accent. Light page: ink on paper, the second
- * accent only in the marks.
+ * a layer tint that steps up one shade per index band so the high ground reads in relief, lines
+ * lit from the upper left (brighter and a little wider on the slopes that face the light), small
+ * marks on the tops and in the hollows like soundings, and registration crosses of a map grid.
+ * The land drifts and reshapes slowly, and the water level creeps, so the lines are always on the
+ * move; the pointer lifts a knoll that the lines part and crowd around. Dark page: fine light
+ * lines, index lines in the accent. Light page: ink on paper, the second accent only in the marks.
  *
  *   import { mount } from "./scenes/contour.js";
  *   const chart = mount(document.querySelector(".hero-scene"), { calm: "left" });
  *   addEventListener("scroll", () => chart.setProgress(chart.stage.progressOf(heroSection)));
- *   chart.setData([0.2, 0.8, 0.5, 0.9]);   // ridges across the chart
+ *   chart.setData([0.2, 0.8, 0.5, 0.9]);   // a range of hills across the chart
  *   chart.destroy();                        // when the page or component goes away
  *
  * Options (all optional; the stage's own options, see stage.js, pass straight through):
@@ -20,36 +21,43 @@
  *   lineWidth      1: CSS pixels of a contour line. Index lines are 1.7 times as wide.
  *   indexEvery     5: every so many lines is an index line. 0 makes them all the same.
  *   indexStrength  1: how much index lines stand out (0 like the others, 1.5 bolder).
- *   tint           1: the colour between levels (0 none, 2 twice as strong).
- *   relief         1: lines brighter on slopes that face the light, dimmer on the others (0 flat).
- *   marks          true: a dot on each top, a cross in each hollow.
+ *   tint           1: the layer tint between index lines (0 none, 2 twice as strong).
+ *   relief         1: lines lit from the upper left (0 flat).
+ *   marks          true: a dot on each top, a small x in each hollow.
  *   grid           true: small crosses where the lines of a map grid meet.
- *   lift           1: the height of the hill under the pointer (0 none).
- *   speed          1: how fast the land drifts and reshapes. 0 stands still.
+ *   lift           1: the knoll under the pointer (0 none).
+ *   speed          1: how fast the land drifts and the water level creeps. 0 stands still.
+ *   tide           1: how fast the level creeps on its own (0: only the drift moves the lines).
  *   scale          1: the size of the landforms. 2 is twice as large.
- *   calm           "left" (default): the side where the text sits. There the land flattens into
- *                  a plain with few lines, and they fade. Also "right", "top", "bottom", "center",
- *                  "none". On a tall, narrow screen "left" and "right" calm the middle band.
- *   calmAmount     0.85: how calm that side is (0 not at all, 1 empty).
+ *   calm           "left" (default): where the text sits. There the chart thins out, level by
+ *                  level: the in-between lines go first, then the index lines, then everything,
+ *                  in a soft fade with no edge of its own. Also "right", "top", "bottom",
+ *                  "center", "none". On a tall, narrow screen "left", "right" and "center" calm
+ *                  a band across the middle, where a phone puts the copy.
+ *   calmBox        [x0, y0, x1, y1]: the text block itself, as parts of the container (0..1, from
+ *                  the top left), when the presets do not fit the page. The calm covers it and
+ *                  fades out round it.
+ *   calmAmount     1: how calm that side is (0 not at all, 1 empty behind the text).
  *
  * setProgress(p), 0..1: travel over the map. The chart slides to new ground and zooms in by about
- *   1.6 times, so scrolling feels like moving over a map. Feed it a section's progress:
- *   chart.setProgress(chart.stage.progressOf(section)).
- * setData(values): numbers 0..1, any length. Each value raises one ridge, a range that runs from
- *   top to bottom and is highest in the middle, side by side on the open side of the chart, the
- *   first value on the left (a longer list than 12 is averaged down to 12 ridges). They rise and
- *   settle over a second; an empty list lowers them again.
+ *   1.6 times, so scrolling feels like moving over a map. The calm stays where the text is.
+ *   Feed it a section's progress: chart.setProgress(chart.stage.progressOf(section)).
+ * setData(values): numbers 0..1, any length. They raise a range of hills on the open side of the
+ *   chart, running from top to bottom, the first value on the left (a list longer than 16 is
+ *   averaged down to 16). The range follows the noise of the land, so it reads as terrain, not as
+ *   a test pattern. It rises and settles over a second; an empty list lowers it again.
  * setPointer(x, y), pause(), resume(), destroy(), stage: as stage.js describes.
  *
  * Poster: give the container a child `<img data-scene-poster src="chart.png" alt="">`, shown until
  * the first frame and again when there is no WebGL; or a background image plus the rule
  * `.hero-scene[data-scene="live"] { background-image: none; }`. To make the picture, mount with
  * { still: true } at the size you need and take a screenshot. Under reduced motion the scene draws
- * that same still, with no pointer hill.
+ * that same still, with no pointer knoll.
  *
  * Cost: one rectangle, one draw call, no textures, no work on the processor beyond a few numbers a
  * frame. Per pixel: 2D simplex noise with its exact slope, 2 lookups for the warp plus 3, 4 or 5
- * layers (low, medium, high), and a few screen-space derivatives. Lines must be sharp, so it draws
+ * layers (low, medium, high), and a few screen-space derivatives; the pixels right next to a top
+ * or a hollow read the land once more to place its mark exactly. Lines must be sharp, so it draws
  * at full resolution (the stage caps the pixel ratio); on a weak device the stage steps down to
  * fewer layers and a pixel ratio of 1. Fill rate is what it costs: give it the hero, not a page.
  */
@@ -57,8 +65,13 @@ import * as THREE from "three";
 import { createStage } from "./stage.js";
 import { stageUniforms, simplex2D, line, grain } from "./glsl.js";
 
-const CALM = { left: [-1, 0], right: [1, 0], top: [0, 1], bottom: [0, -1], center: [0, 0], none: [0, 0] };
-const RIDGES = 12;     // at most this many data ridges; a longer list is averaged down
+// The text block per preset, as [x0, y0, x1, y1] parts of the container from the top left.
+const CALM = {
+  left: [0, 0.27, 0.37, 0.73], right: [0.63, 0.27, 1, 0.73], top: [0, 0, 1, 0.3], bottom: [0, 0.7, 1, 1],
+  center: [0.3, 0.32, 0.7, 0.68],
+};
+const NARROW = [0, 0.34, 1, 0.66];   // a phone: the copy spans the width, in a band across the middle
+const RIDGES = 16;     // at most this many data values; a longer list is averaged down
 const MAP = 1.5;       // map units across one scene unit at scale 1: about two hills per screen height
 
 // The rectangle covers the screen whatever the camera does.
@@ -77,8 +90,10 @@ ${grain}
 uniform vec4 uView;     // where the map is: offset x, y (map units), map units per scene unit, flow
 uniform vec4 uStyle;    // contour interval, line width (CSS px), index strength, tint
 uniform vec4 uLook;     // marks on, relief, index every, grid on
-uniform vec4 uCalm;     // direction x, y; amount; 1 when the screen is tall and narrow
-uniform vec3 uHill;     // the pointer hill: centre (scene units), height
+uniform vec4 uCalmBox;  // the text block: x0, y0, x1, y1 (0..1 from the top left)
+uniform vec2 uCalm;     // how calm (0..1), the width of the fade round the block (scene units)
+uniform vec4 uHill;     // the pointer knoll: centre (scene units), presence 0..1, height
+uniform float uTide;    // the water level, in heights: added to the land, so the lines creep
 uniform float uRidge[${RIDGES}];
 uniform float uRidgeCount;
 uniform vec2 uRidgeSpan;
@@ -86,7 +101,8 @@ uniform float uRidgeHeight;
 varying vec2 vUv;
 
 const float WARP = 0.38;         // how far the broad noise pushes the map (map units)
-const float HILL = 0.13;         // width of the pointer hill (scene units)
+const float KNOLL = 0.1;         // width of the knoll under the pointer (scene units)
+const float LENS = 0.2;          // width of the ground the knoll pushes aside (scene units)
 const mat2 rotate45 = mat2(0.70710678, 0.70710678, -0.70710678, 0.70710678);
 
 // Scene units: 1 is the geometric mean of width and height, the middle of the screen is 0.
@@ -97,15 +113,14 @@ vec2 frameSize() { return 0.5 * uResolution / unitPixels(); }
 // read at A q (A doubles and turns 37 degrees each time, so the grids never line up), and by the
 // chain rule its slope with respect to q is A-transposed times the slope the noise reports. Each
 // layer slides its own way, slowly, finer ones faster: their sum keeps changing shape, which costs
-// far less than noise in three dimensions with time as the third. Slowly indeed: a contour moves
-// by the change in height over the slope, so a tenth of a level is already a visible step.
+// far less than noise in three dimensions with time as the third.
 vec3 layers(vec2 q, float flow) {
   vec3 sum = vec3(0.0);
   float weight = 0.5;
   mat2 A = mat2(1.0);
   for (int i = 0; i < OCTAVES; i++) {
     float turn = float(i) * 2.4;
-    vec3 n = snoiseGrad(A * q + vec2(cos(turn), sin(turn)) * flow * 0.004 * float(i + 1));
+    vec3 n = snoiseGrad(A * q + vec2(cos(turn), sin(turn)) * flow * 0.006 * float(i + 1));
     sum += weight * vec3(n.x, transpose(A) * n.yz);
     A = mat2(1.6, 1.2, -1.2, 1.6) * A;
     weight *= 0.42;
@@ -113,56 +128,94 @@ vec3 layers(vec2 q, float flow) {
   return sum;
 }
 
-// The data as ridges: one crest per value, spread evenly over the span uRidgeSpan of the width
-// (u 0..1 across the container), each a bell curve across u, as high as its value. Crests are one
-// step apart and a bell is 0.3 steps wide, so only the three nearest count. Returns (height, d/du).
-vec2 ridges(float u) {
+// The data as a range of hills: the values, spread evenly over the span uRidgeSpan of the width
+// (u 0..1 across the container), joined into one smooth profile (each value weighs in with a bell
+// curve half a step wide, and the weights are shared out), fading to nothing past either end.
+// Returns (height 0..1, d/du).
+vec2 profile(float u) {
   float n = uRidgeCount;
-  float x = (u - uRidgeSpan.x) / (uRidgeSpan.y - uRidgeSpan.x) * n - 0.5;
+  float span = uRidgeSpan.y - uRidgeSpan.x;
+  float x = (u - uRidgeSpan.x) / span * n - 0.5;      // value i sits at x = i
   float nearest = floor(x + 0.5);
-  vec2 sum = vec2(0.0);
-  for (int j = -1; j <= 1; j++) {
-    float i = nearest + float(j);
-    if (i < 0.0 || i > n - 1.0) continue;
+  float w = 0.0, f = 0.0, dw = 0.0, df = 0.0;
+  for (int j = -2; j <= 2; j++) {
+    float i = clamp(nearest + float(j), 0.0, n - 1.0);
+    if (abs(i - nearest - float(j)) > 0.5) continue;
     float d = x - i;
-    float bell = uRidge[int(i)] * exp(-d * d / 0.09);
-    sum += vec2(bell, bell * -2.0 * d / 0.09 * n / (uRidgeSpan.y - uRidgeSpan.x));
+    float b = exp(-2.0 * d * d);
+    float v = uRidge[int(i)];
+    w += b; f += b * v; dw += -4.0 * d * b; df += -4.0 * d * b * v;
   }
-  return sum;
+  if (w < 1e-5) return vec2(0.0);
+  float value = f / w, slope = (df - value * dw) / w;
+  float t0 = clamp(x + 1.2, 0.0, 1.0), t1 = clamp(n + 0.2 - x, 0.0, 1.0);
+  float e0 = t0 * t0 * (3.0 - 2.0 * t0), e1 = t1 * t1 * (3.0 - 2.0 * t1);
+  float de = 6.0 * t0 * (1.0 - t0) * e1 - 6.0 * t1 * (1.0 - t1) * e0;
+  return vec2(value * e0 * e1, (slope * e0 * e1 + value * de) * n / span);
 }
 
-// The height at p (scene units) and its slope there: vec3(height, d/dx, d/dy).
-vec3 terrain(vec2 p) {
+// The land at q (scene units), with no pointer: vec3(height, d/dx, d/dy).
+vec3 land(vec2 q) {
   float k = uView.z, flow = uView.w;
-  vec2 m = p * k + uView.xy;                              // map coordinates
+  vec2 m = q * k + uView.xy;                              // map coordinates
   // Two broad, slow noises push the map before the layers are read. That draws the land out into
   // long, winding forms, as water and weather shape it, instead of round blobs. The push changes
-  // the coordinates by a matrix J (how q moves when m moves): the slope goes back through it.
-  vec3 wx = snoiseGrad(m * 0.32 + vec2(0.6, -0.4) * flow * 0.005);
-  vec3 wy = snoiseGrad(m * 0.32 + vec2(17.3, -9.1) + vec2(-0.3, 0.7) * flow * 0.005);
-  vec2 q = m + WARP * vec2(wx.x, wy.x);
+  // the coordinates by a matrix J (how the read point moves when m moves): the slope goes back
+  // through it.
+  vec3 wx = snoiseGrad(m * 0.32 + vec2(0.6, -0.4) * flow * 0.007);
+  vec3 wy = snoiseGrad(m * 0.32 + vec2(17.3, -9.1) + vec2(-0.3, 0.7) * flow * 0.007);
+  vec2 r = m + WARP * vec2(wx.x, wy.x);
   mat2 J = mat2(1.0) + WARP * 0.32 * mat2(wx.y, wy.y, wx.z, wy.z);
-  vec3 f = layers(q, flow);
+  vec3 f = layers(r, flow);
   // The broad noise that pushes y also lifts and sinks the land as a whole: highlands with dense
-  // slopes and wide open basins, instead of the same busy ground everywhere. Free: it is read anyway.
+  // slopes and wide open basins, instead of the same busy ground everywhere.
   float h = f.x + 0.42 * wy.x;
   vec2 slope = (transpose(J) * f.yz + 0.42 * 0.32 * wy.yz) * k;
-  // Ridges from the data, running from top to bottom, highest in the middle band (a bell curve in
-  // y), wobbled by the warp so they do not run ruler-straight: a folded range, read left to right.
-  vec2 frame = frameSize();
-  float u = p.x / (2.0 * frame.x) + 0.5 + 0.03 * wx.x;
-  vec2 ridge = ridges(u);
-  float band = exp(-3.0 * p.y * p.y / (frame.y * frame.y));
-  // Where the data stands, the land underneath is pressed down a little so the ranges read clearly.
-  float press = 1.0 - 0.5 * min(uRidgeHeight / 0.45, 1.0) * band;
-  h = h * press + uRidgeHeight * ridge.x * band;
-  slope = slope * press + uRidgeHeight * vec2(ridge.y * band / (2.0 * frame.x), ridge.x * band * -6.0 * p.y / (frame.y * frame.y));
-  // The pointer hill: a bell curve. Its slope is the bell times -2 r / width^2.
-  vec2 r = p - uHill.xy;
-  float bell = uHill.z * exp(-dot(r, r) / (HILL * HILL));
-  h += bell;
-  slope += bell * -2.0 * r / (HILL * HILL);
+  if (uRidgeHeight > 0.001) {
+    // The data range runs from top to bottom, highest in the middle band, and follows the land:
+    // its line wanders with the warp, and the land's own folds stay on its flanks.
+    vec2 frame = frameSize();
+    float wander = 0.07 * wx.x + 0.035 * wy.x;
+    float u = q.x / (2.0 * frame.x) + 0.5 + wander;
+    vec2 dudq = vec2(1.0 / (2.0 * frame.x), 0.0) + (0.07 * wx.yz + 0.035 * wy.yz) * 0.32 * k;
+    vec2 ridge = profile(u);
+    float yy = q.y / frame.y;
+    float band = exp(-1.6 * yy * yy);
+    vec2 dband = vec2(0.0, band * -3.2 * yy / frame.y);
+    float lift = uRidgeHeight * (0.8 + 0.25 * f.x);      // the land's texture rides on the range
+    float rise = lift * ridge.x * band;
+    vec2 drise = uRidgeHeight * (0.25 * f.yz * k * ridge.x * band)
+               + lift * (ridge.y * dudq * band + ridge.x * dband);
+    float press = 1.0 - 0.45 * min(uRidgeHeight / 0.5, 1.0) * band;  // the ground under it sinks a little
+    vec2 dpress = -0.45 * min(uRidgeHeight / 0.5, 1.0) * dband;
+    slope = slope * press + h * dpress + drise;
+    h = h * press + rise;
+  }
   return vec3(h, slope);
+}
+
+// The land at p (scene units) as the pointer shapes it. Round the pointer the ground is pushed
+// outwards (the point read moves towards the pointer, p' = c + r (1 - s), s a bell), so the lines
+// part there and crowd round the rim; then a knoll rises in the gap. vec3(height, d/dx, d/dy).
+vec3 terrain(vec2 p) {
+  vec2 r = p - uHill.xy;
+  float rr = dot(r, r);
+  float s = 0.62 * uHill.z * exp(-rr / (LENS * LENS));
+  vec3 t = land(uHill.xy + r * (1.0 - s));
+  // How p' moves with p: (1 - s) I + (2 s / LENS^2) r r^T, the same both ways round.
+  mat2 J = mat2(1.0 - s) + (2.0 * s / (LENS * LENS)) * mat2(r.x * r.x, r.x * r.y, r.x * r.y, r.y * r.y);
+  vec2 slope = J * t.yz;
+  float bell = uHill.z * uHill.w * exp(-rr / (KNOLL * KNOLL));
+  return vec3(t.x + bell, slope - bell * 2.0 * r / (KNOLL * KNOLL));
+}
+
+// How calm the chart is at a pixel: 1 on the text block, falling off smoothly round it. Measured
+// in scene units, so the fade is as wide on a phone as on a wall screen, relative to its size.
+float calmAt(vec2 pixel) {
+  vec2 uv = vec2(pixel.x / uResolution.x, 1.0 - pixel.y / uResolution.y);
+  vec2 outside = max(max(uCalmBox.xy - uv, uv - uCalmBox.zw), 0.0) * uResolution / unitPixels();
+  float d = clamp(length(outside) / uCalm.y, 0.0, 1.0);
+  return uCalm.x * (1.0 - d * d * (3.0 - 2.0 * d));
 }
 
 // Lay a colour with coverage a over what is there (premultiplied).
@@ -173,23 +226,29 @@ void main() {
   vec2 p = (gl_FragCoord.xy - 0.5 * uResolution) / unit;
   vec3 t = terrain(p);
   float interval = uStyle.x;
+  float h = t.x + uTide;
+  vec2 slope = t.yz;
 
-  // Calm: towards the text the land sinks into a plain halfway between two levels, so the lines
-  // spread apart and stop, rather than being cut off; what is left there also fades.
-  vec2 centred = vUv - 0.5;
-  float side = dot(centred, uCalm.xy) * 2.0;
-  if (uCalm.w > 0.5 || dot(uCalm.xy, uCalm.xy) < 0.5) side = 1.0 - 2.6 * length(centred * vec2(0.5, 1.5));
-  float calmSide = smoothstep(-0.3, 0.45, side);
-  float calm = uCalm.z * calmSide;
-  float flatten = min(0.97, calm * 1.14);
-  float h = mix(t.x, 0.5 * interval, flatten);
-  vec2 slope = t.yz * (1.0 - flatten);
+  // The calm: the pointer clears a little of it, so the plain answers the hand too.
+  vec2 toHill = p - uHill.xy;
+  // Most of all round the edge of the text block, hardly at all behind the words themselves.
+  float calm = calmAt(gl_FragCoord.xy);
+  calm = max(calm - uHill.z * exp(-dot(toHill, toHill) / 0.06) * min(0.75, 3.0 * (1.04 - calm)), 0.0);
 
   // Pixels from one contour to the next here: the interval over the slope per pixel.
   vec2 perPixel = slope / unit;
   float gap = interval / max(length(perPixel), 1e-7);
-  float width = uStyle.y * uPixelRatio;
   float every = max(uLook.z, 1.0);
+
+  // Light from the upper left. "lit" is 1 on a slope that faces it, -1 on one that turns away.
+  // On a dark page lit lines are brighter and a little wider; on paper the shaded side gets the
+  // heavier ink (illuminated contours, after Kitiro Tanaka).
+  float steep = length(slope);
+  float lit = steep > 1e-5 ? dot(-slope / steep, normalize(vec2(-0.8, 0.6))) : 0.0;
+  float shade = uLook.y * lit * (uDark * 2.0 - 1.0);
+  float width = uStyle.y * uPixelRatio * (1.0 + 0.22 * shade);
+  float glow = 1.0 + 0.5 * shade;
+
   // The lines themselves: glsl.js's isoLines turns the distance to the next level into pixels
   // with the screen-space derivative, so every line is equally wide however steep the land is.
   float minor = isoLines(h, interval, width);
@@ -200,90 +259,131 @@ void main() {
   index *= smoothstep(0.8 * width + 1.0, 2.0 * width + 2.0, gap * every);
   minor *= 1.0 - index;
 
-  // Light from the upper left. "lit" is 1 on a slope that faces it, -1 on one that turns away.
-  // Lines brighten on lit slopes and dim on the shaded ones (illuminated contours, after Kitiro
-  // Tanaka). Nothing else is shaded: a wash on the slopes reads as dust, not as relief.
-  float steep = length(slope);
-  float lit = steep > 1e-5 ? dot(-slope / steep, normalize(vec2(-0.8, 0.6))) : 0.0;
-  float glow = 1.0 + uLook.y * 0.45 * lit * (uDark * 2.0 - 1.0);
-
-  // Tint between levels, in steps from one index line to the next as on a printed chart: each step
-  // one shade, stronger towards the high ground.
-  float step_ = interval * every;
-  float band = (floor(h / step_) + 0.5) * step_;
-  float high = smoothstep(-0.6, 0.6, band);
-
   // Marks. Near a top or a hollow the land is nearly a bowl, so one Newton step, -H^-1 g (H the
-  // curvature and g the slope, both per pixel), points from this pixel to the exact top: its length
-  // is the distance in pixels. H is how the exact slope changes from one pixel to the next. A
-  // saddle (curvature of mixed sign, det H < 0) gets no mark. Nor does a top with no contour close
-  // round it: the bowl, as gently curved as its weakest direction, must reach the next level
-  // within about 30 pixels, so marks sit only inside the innermost rings, as on a real chart.
-  float mark = 0.0, top = 0.0;
+  // curvature and g the slope, both per pixel), points from this pixel to the top. H is how the
+  // exact slope changes from one pixel to the next. Close to the top the land is read once more
+  // at that point and the step is taken again: every pixel of a mark then agrees on where the
+  // top is, how high it is and how calm the chart is there, so a mark is drawn whole or not at
+  // all. A saddle (det H < 0) gets no mark. A top gets one only when the innermost ring round it
+  // is small (within about 30 pixels), as on a real chart; when that ring would be a speck under
+  // 9 pixels, it reads as a stray "0", so the ring is left out and the mark stands alone.
+  float mark = 0.0, speck = 0.0;
   mat2 H = mat2(dFdx(perPixel), dFdy(perPixel));
   H = 0.5 * (H + transpose(H));
-  float det = determinant(H);
-  if (uLook.x > 0.5 && det > 0.0) {
+  if (uLook.x > 0.5 && determinant(H) > 0.0) {
     vec2 to = -inverse(H) * perPixel;
-    top = H[0][0] < 0.0 ? 1.0 : 0.0;
-    float half_ = 0.5 * (H[0][0] + H[1][1]);
-    float weakest = abs(half_) - sqrt(max(half_ * half_ - det, 0.0));   // the smaller |eigenvalue|
-    float level = (h + 0.5 * dot(perPixel, to)) / interval;   // the height of the top itself
-    float toLevel = (top > 0.5 ? level - floor(level) : ceil(level) - level) * interval;
-    float reach = sqrt(2.0 * toLevel / max(weakest, 1e-12)) / uPixelRatio;
-    float strong = (1.0 - smoothstep(24.0, 32.0, reach)) * smoothstep(0.5, 1.5, abs(level)) * (1.0 - calm);
-    float r = length(to) / uPixelRatio;
-    float spot = 1.0 - smoothstep(1.5, 2.4, r);                    // a top: a solid dot
-    vec2 a = abs(rotate45 * to) / uPixelRatio;                         // a hollow: a small x
-    float ex = (1.0 - smoothstep(0.3, 0.95, min(a.x, a.y))) * (1.0 - smoothstep(2.6, 3.4, max(a.x, a.y)));
-    mark = strong * mix(ex, spot, top);
+    if (length(to) < 12.0 * uPixelRatio) {
+      // At the first guess, read the land and its curvature exactly (the slope four pixels on),
+      // and step again: every pixel round the top now finds the same point.
+      vec2 at = gl_FragCoord.xy + to;
+      // (One loop, not three calls: the shader stays small and compiles fast on weak devices.)
+      vec3 c[3];
+      for (int i = 0; i < 3; i++) {
+        vec2 offset = vec2(i == 1 ? 4.0 : 0.0, i == 2 ? 4.0 : 0.0);
+        c[i] = terrain((at + offset - 0.5 * uResolution) / unit);
+      }
+      vec3 c0 = c[0], cx = c[1], cy = c[2];
+      vec2 g = c0.yz / unit;
+      mat2 C = mat2(cx.yz - c0.yz, cy.yz - c0.yz) / (4.0 * unit);
+      C = 0.5 * (C + transpose(C));
+      float det = determinant(C);
+      // On nearly flat ground the two readings of the curvature disagree, and a mark there would
+      // come out as stray dots: such a top gets none.
+      float agree = (C[0][0] + C[1][1]) / (H[0][0] + H[1][1]);
+      if (det > 0.0 && agree > 0.6 && agree < 1.6) {
+        vec2 more = -inverse(C) * g;
+        to += more;
+        float top = C[0][0] < 0.0 ? 1.0 : 0.0;
+        float half_ = 0.5 * (C[0][0] + C[1][1]);
+        float weakest = abs(half_) - sqrt(max(half_ * half_ - det, 0.0));   // the smaller |eigenvalue|
+        float level = (c0.x + uTide + 0.5 * dot(g, more)) / interval;        // the height of the top itself
+        float toLevel = (top > 0.5 ? level - floor(level) : ceil(level) - level) * interval;
+        float reach = sqrt(2.0 * toLevel / max(weakest, 1e-12)) / uPixelRatio;   // CSS px to the innermost ring
+        float calmThere = calmAt(gl_FragCoord.xy + to);
+        float innermost = top > 0.5 ? floor(level) : ceil(level);
+        // This pixel's line is the innermost ring when it is the level next to the top.
+        speck = step(reach, 9.0) * step(abs(floor(h / interval + 0.5) - innermost), 0.5);
+        float r = length(to) / uPixelRatio;
+        float spot = 1.0 - smoothstep(1.4, 2.3, r);                         // a top: a solid dot
+        vec2 a = abs(rotate45 * to) / uPixelRatio;                          // a hollow: a small x
+        float ex = (1.0 - smoothstep(0.35, 0.95, min(a.x, a.y))) * (1.0 - smoothstep(2.6, 3.4, max(a.x, a.y)));
+        mark = step(reach, 30.0) * step(length(more), 4.0 * uPixelRatio) * step(0.6, abs(level)) * (1.0 - smoothstep(0.0, 0.3, calmThere)) * mix(ex, spot, top);
+      }
+    }
   }
+  minor *= 1.0 - speck;
+  index *= 1.0 - speck;
 
   // Registration crosses where the lines of a map grid meet, half a map unit apart; they move with
-  // the map, so travel shows even over flat ground.
-  vec2 cell = (fract((p * uView.z + uView.xy) / 0.5 + 0.5) - 0.5) * 0.5 / uView.z * unit / uPixelRatio;
-  vec2 ac = abs(cell);
+  // the map, so travel shows even over flat ground. Each fades by the calm at its own centre.
+  vec2 cell = (fract((p * uView.z + uView.xy) / 0.5 + 0.5) - 0.5) * 0.5 / uView.z * unit;
+  vec2 ac = abs(cell) / uPixelRatio;
   float grid = uLook.w * (1.0 - smoothstep(0.3, 0.9, min(ac.x, ac.y))) * (1.0 - smoothstep(3.0, 4.0, max(ac.x, ac.y)));
+  grid *= 1.0 - smoothstep(0.0, 0.5, calmAt(gl_FragCoord.xy - cell));
+
+  // Layer tint: one shade per index band, a step at every index line as on a printed chart, a
+  // few percent stronger with each band up. It goes first in the calm, so a step in the tint
+  // never shows without its line.
+  float step_ = interval * every;
+  // Low ground and water get none, so the tint never lies over the whole chart as a sheet.
+  float bandMid = (floor(h / step_) + 0.5) * step_ - uTide;
+  float high = clamp((bandMid + 0.3) / 0.9, 0.0, 1.0);
+  float tintCalm = (1.0 - calm) * (1.0 - calm) * smoothstep(0.0, 0.3, vUv.y) * smoothstep(0.0, 0.3, 1.0 - vUv.y);
+
+  // The calm thins the chart level by level: the in-between lines go first, the index lines last.
+  float keepMinor = 1.0 - smoothstep(0.05, 0.55, calm);
+  float keepIndex = 1.0 - smoothstep(0.3, 0.92, calm);
 
   // Colours, all from the page: dark page light on dark with the accent on the index lines; light
   // page ink on paper, the second accent only in the marks.
   float dark = uDark;
-  vec3 ink = uText;
   vec3 indexInk = mix(uText, uAccent, dark);
   vec3 markInk = mix(uAccent2, uText, dark);
   vec4 acc = vec4(0.0);
-  over(acc, uAccent, uStyle.w * mix(0.0, 0.075, high) * mix(0.7, 1.0, dark) * (1.0 - calm));
-  over(acc, uMuted, grid * mix(0.32, 0.3, dark));
-  over(acc, ink, minor * mix(0.26, 0.28, dark) * glow);
-  over(acc, indexInk, index * mix(0.52, 0.68, dark) * mix(0.55, 1.0, min(uStyle.z, 1.0)) * glow);
-  over(acc, markInk, mark * 0.85);
-  // Fade with the calm side and softly at the top and bottom edges, where the hero meets the page.
-  float edge = smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.9, 1.0, vUv.y));
-  acc *= (1.0 - calm * 0.75) * edge;
+  over(acc, uAccent, uStyle.w * high * mix(0.085, 0.12, dark) * tintCalm);
+  over(acc, uMuted, grid * mix(0.36, 0.32, dark));
+  over(acc, uText, minor * mix(0.3, 0.3, dark) * glow * keepMinor);
+  over(acc, indexInk, index * mix(0.62, 0.72, dark) * mix(0.55, 1.0, min(uStyle.z, 1.0)) * glow * keepIndex);
+  over(acc, markInk, mark * 0.9);
+  // Fade softly at the top and bottom edges, where the hero meets the page.
+  float edge = smoothstep(0.0, 0.14, vUv.y) * smoothstep(0.0, 0.14, 1.0 - vUv.y);
+  acc *= edge * edge * (3.0 - 2.0 * edge);
 
   gl_FragColor = vec4(acc.rgb / max(acc.a, 1e-5), acc.a);
   #include <colorspace_fragment>
   gl_FragColor.rgb *= gl_FragColor.a;    // premultiplied out, as the material says
-  gl_FragColor += vec4(dither(gl_FragCoord.xy), 0.0) * gl_FragColor.a;
+  gl_FragColor += vec4(dither(gl_FragCoord.xy), dither(gl_FragCoord.yx).x) * min(gl_FragColor.a * 8.0, 1.0);
 }`;
 
 const num = (value, fallback, low, high) => (Number.isFinite(Number(value)) && value !== null && value !== ""
   ? Math.min(high, Math.max(low, Number(value))) : fallback);
 const ease = (x) => x * x * (3 - 2 * x);
 
+function calmBox(o, aspect) {
+  if (o.calm === "none") return null;
+  if (Array.isArray(o.calmBox) && o.calmBox.length === 4) {
+    const [x0, y0, x1, y1] = o.calmBox.map((v) => num(v, 0, 0, 1));
+    return [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)];
+  }
+  const name = CALM[o.calm] ? o.calm : "left";
+  if (aspect < 0.85 && (name === "left" || name === "right" || name === "center")) return NARROW;
+  return CALM[name];
+}
+
 export function mount(container, options = {}) {
   const o = {
     levels: 16, lineWidth: 1, indexEvery: 5, indexStrength: 1, tint: 1, relief: 1, marks: true, grid: true,
-    lift: 1, speed: 1, scale: 1, calm: "left", calmAmount: 0.85, ...options,
+    lift: 1, speed: 1, tide: 1, scale: 1, calm: "left", calmAmount: 1, ...options,
   };
   const stage = createStage(container, { antialias: false, stillTime: 9, ...options });
   if (stage.failed) return stage.handle();
 
   const interval = 1.5 / num(o.levels, 16, 4, 60);   // the land spans about -0.75..0.75
   const speed = num(o.speed, 1, 0, 10);
-  const lift = num(o.lift, 1, 0, 3) * 0.55;
+  const tide = num(o.tide, 1, 0, 5) * interval * 0.08;   // heights a second: a level in about 12 s
+  const lift = num(o.lift, 1, 0, 3);
   const ridges = new Float32Array(RIDGES), ridgeTarget = new Float32Array(RIDGES);
-  let ridgeHeight = 0, ridgeHeightTarget = 0, flow = 0, hill = 0;
+  let ridgeHeight = 0, ridgeHeightTarget = 0, flow = 0, presence = 0;
 
   const material = new THREE.ShaderMaterial({
     uniforms: {
@@ -293,8 +393,10 @@ export function mount(container, options = {}) {
         num(o.indexStrength, 1, 0, 2), num(o.tint, 1, 0, 3)) },
       uLook: { value: new THREE.Vector4(o.marks === false ? 0 : 1, num(o.relief, 1, 0, 2),
         Math.round(num(o.indexEvery, 5, 0, 20)), o.grid === false ? 0 : 1) },
-      uCalm: { value: new THREE.Vector4() },
-      uHill: { value: new THREE.Vector3() },
+      uCalmBox: { value: new THREE.Vector4(0, 0, 0, 0) },
+      uCalm: { value: new THREE.Vector2(0, 0.2) },
+      uHill: { value: new THREE.Vector4() },
+      uTide: { value: 0 },
       uRidge: { value: ridges },
       uRidgeHeight: { value: 0 },
       uRidgeCount: { value: 1 },
@@ -315,11 +417,13 @@ export function mount(container, options = {}) {
   });
 
   stage.onResize((size) => {
-    const [x, y] = CALM[o.calm] || CALM.left;
-    const sideways = x !== 0 && size.aspect < 0.85;   // a phone: the text spans the width
-    material.uniforms.uCalm.value.set(x, y, o.calm === "none" ? 0 : num(o.calmAmount, 0.85, 0, 1), sideways ? 1 : 0);
-    // The ridges stand on the open side, not under the text.
-    material.uniforms.uRidgeSpan.value.set(x < 0 && !sideways ? 0.45 : 0.04, x > 0 && !sideways ? 0.55 : 0.96);
+    const box = calmBox(o, size.aspect);
+    const u = material.uniforms;
+    u.uCalmBox.value.set(...(box || [0, 0, 0, 0]));
+    u.uCalm.value.set(box ? num(o.calmAmount, 1, 0, 1) : 0, size.aspect < 0.85 ? 0.24 : 0.2);
+    // The data range stands on the open side, not under the text.
+    const open = box && box[2] - box[0] < 0.7 ? (box[0] < 0.5 - (box[2] - 0.5) ? [box[2] + 0.06, 0.97] : [0.03, box[0] - 0.06]) : [0.04, 0.96];
+    u.uRidgeSpan.value.set(open[0], Math.max(open[1], open[0] + 0.2));
   });
 
   stage.onFrame((time, delta) => {
@@ -328,6 +432,7 @@ export function mount(container, options = {}) {
     const damp = (from, to, rate) => (still ? to : THREE.MathUtils.damp(from, to, rate, delta));
     // Flow is time at the chosen speed, added up so a change of speed never makes the land jump.
     flow = still ? time * speed : flow + delta * speed;
+    u.uTide.value = flow * tide;   // flow already runs at the chosen speed
     // Travel: the progress slides the map along a gentle diagonal and zooms in (fewer map units
     // per scene unit); the flow adds a slow drift of its own.
     const p = ease(stage.progressEased);
@@ -336,10 +441,11 @@ export function mount(container, options = {}) {
     const fit = Math.pow(Math.min(1, Math.max(0.45, unit / 1100)), 0.75);
     const k = (MAP / num(o.scale, 1, 0.2, 5)) * (1 - 0.38 * p) * fit;
     u.uView.value.set(3.1 + p * 2.6 + flow * 0.012, -1.7 + p * 1.1 + flow * 0.004, k, flow);
-    // The pointer hill grows while the pointer is over the scene and sinks when it leaves.
-    hill = damp(hill, stage.pointer.inside && !still ? lift : 0, 2.2);
-    u.uHill.value.set((stage.pointer.x * stage.size.width) / (2 * unit), (stage.pointer.y * stage.size.height) / (2 * unit), hill);
-    // The ridges rise and settle towards the data.
+    // The knoll grows while the pointer is over the scene and sinks when it leaves.
+    presence = damp(presence, stage.pointer.inside && !still && lift > 0 ? 1 : 0, 2.2);
+    u.uHill.value.set((stage.pointer.x * stage.size.width) / (2 * unit), (stage.pointer.y * stage.size.height) / (2 * unit),
+      presence, lift * 0.4);
+    // The range rises and settles towards the data.
     ridgeHeight = damp(ridgeHeight, ridgeHeightTarget, 2.5);
     for (let i = 0; i < RIDGES; i++) ridges[i] = damp(ridges[i], ridgeTarget[i], 2.5);
     u.uRidgeHeight.value = ridgeHeight;
@@ -348,8 +454,8 @@ export function mount(container, options = {}) {
   return stage.handle({
     setData(values) {
       const list = Array.from(values || [], Number).filter(Number.isFinite).map((v) => Math.min(1, Math.max(0, v)));
-      ridgeHeightTarget = list.length ? 0.45 : 0;
-      // One ridge per value; a longer list is averaged down to 12, each ridge the mean of its share.
+      ridgeHeightTarget = list.length ? 0.5 : 0;
+      // One value per slot; a longer list is averaged down to 16, each slot the mean of its share.
       const count = Math.min(list.length, RIDGES);
       if (count) material.uniforms.uRidgeCount.value = count;
       for (let i = 0; i < count; i++) {

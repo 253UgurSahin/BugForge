@@ -15,6 +15,9 @@
  * The shadow is set as --depth-shadow and used as box-shadow. A card with a shadow of its own loses
  * it here; to keep both: box-shadow: var(--depth-shadow), 0 0 0 1px var(--color-border);
  *
+ * Marks depth.js sets: data-depth-tone, data-depth-moving (while it moves), data-depth-flat
+ * (reduced motion or paused), data-depth-asleep (off screen or paused: CSS animations inside wait).
+ *
  * The numbers depth.js writes: --depth-lift (0 lying down .. 1 fully raised), --depth-sx and
  * --depth-sy (-1..1, which way the card leans), --depth-gx and --depth-gy (-1..1, where the glare
  * is), --depth-ga and --depth-gm (the angle and strength of the shade across a card), --depth-dim (0..1, how far back a panel is), --depth-shade (0..1, how far a page is turned).
@@ -38,7 +41,7 @@
 /* Three shadows, as light makes them: a tight contact shadow that fades as the card leaves the
    page, a key shadow that grows and moves away from the raised side, and a wide, faint ambient one.
    The higher the card, the further, softer and wider each one falls. */
-:where([data-depth="tilt"], [data-depth="stack"] > *, [data-depth="fold"]) {
+:where([data-depth="tilt"], [data-depth=""], [data-depth="stack"] > *, [data-depth="fold"]) {
   --depth-shadow:
     inset 0 1px 0 color-mix(in oklab, var(--color-text) calc((4% + var(--depth-lift) * 7%) * var(--depth-edge)), transparent),
     0 1px 2px color-mix(in oklab, var(--depth-ink) calc((10% - var(--depth-lift) * 6%) * var(--depth-ink-strength)), transparent),
@@ -51,7 +54,8 @@
 
 /* ---- Tilt cards. The layers inside share the card's 3D space; overflow, opacity or a filter on the
    card itself would flatten them. */
-[data-depth="tilt"] {
+[data-depth="tilt"],
+[data-depth=""] {
   position: relative;
   transform-style: preserve-3d;
 }
@@ -73,7 +77,12 @@
   width: 180%;
   height: 180%;
   transform: translate(calc(var(--depth-gx, 0) * 28%), calc(var(--depth-gy, 0) * 28%));
-  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-text) 9%, transparent), transparent) center / 60% 60% no-repeat;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-text) 11%, transparent), transparent) center / 64% 64% no-repeat;
+}
+/* On a dark page a raised surface is a touch lighter, as it is nearer the light: a faint wash that
+   comes with the lift (the glare element's opacity). */
+[data-depth-tone="dark"] > .depth-glare {
+  background: color-mix(in oklab, var(--color-text) 2.5%, transparent);
 }
 /* the side turned away from the pointer catches a little less light */
 .depth-glare::after {
@@ -90,6 +99,12 @@
 }
 
 /* ---- Stacks: every panel in the same grid cell, the eye above the stack's top edge. */
+/* A panel with one behind it also darkens that one just above its own top edge: the contact
+   shadow that tells the eye the panels stand apart, in a still picture too. */
+:where([data-depth="stack"] > :not(:last-child)) {
+  box-shadow: var(--depth-shadow),
+    0 -10px 26px -12px color-mix(in oklab, var(--depth-ink) calc(16% * var(--depth-ink-strength)), transparent);
+}
 [data-depth="stack"] {
   display: grid;
   perspective: var(--depth-perspective, 1500px);
@@ -111,6 +126,10 @@
   background: var(--color-bg);
   opacity: var(--depth-dim, 0);
 }
+/* A light page has nowhere lighter to sink to: far panels take a faint grey of ink instead. */
+[data-depth="stack"][data-depth-tone="light"] > *::after {
+  background: color-mix(in oklab, var(--color-bg), var(--color-text) 9%);
+}
 [data-depth="fold"] {
   position: relative;
 }
@@ -125,19 +144,31 @@
   will-change: transform;
 }
 
+/* ---- The page's own CSS animations inside a depth element (a line that travels, a dot that
+   breathes) stop while depth.js marks it asleep: off screen, paused, or flat and still.
+   !important because a page's animation shorthand would otherwise set them running again. */
+[data-depth-asleep],
+[data-depth-asleep] *,
+[data-depth-asleep] *::before,
+[data-depth-asleep] *::after {
+  animation-play-state: paused !important;
+}
+
 /* ---- Flat and still: reduced motion, or the page's motion switch. depth.js lays everything flat;
    a card still answers hover, with its raised shadow and no movement. */
 @media (prefers-reduced-motion: reduce) {
   .depth-glare {
     display: none;
   }
-  [data-depth="tilt"]:hover {
+  [data-depth="tilt"]:hover,
+  [data-depth=""]:hover {
     --depth-lift: 0.6;
   }
 }
 html[data-motion="paused"] .depth-glare {
   display: none;
 }
-html[data-motion="paused"] [data-depth="tilt"]:hover {
+html[data-motion="paused"] [data-depth="tilt"]:hover,
+html[data-motion="paused"] [data-depth=""]:hover {
   --depth-lift: 0.6;
 }

@@ -1,11 +1,16 @@
 /**
  * datascape.js: the app's own numbers as a sculpture (scene kit, look level 5, dashboard level 5).
  *
- * Two modes. "bars": a grid of slim columns on a soft floor, their heights the data, seen from a
- * low three-quarter view. The tops catch an accent light along their rims, low values stay quiet,
- * the tallest are picked out in the second accent, the far rows melt into the page (depth fog) and
- * a faint reflection grounds them. "ridges": the same grid as a stack of ridgelines (a joy plot in
- * 3D): one ribbon per row, with a faint fill beneath that hides the rows behind it.
+ * Two modes. "bars": a grid of slim columns on a dark (or paper) floor, their heights the data,
+ * seen from a low three-quarter view. The values that matter stand up as tinted columns with lit
+ * caps; values near zero sink into the floor as thin dim tiles; the tallest are picked out in the
+ * second accent; the far rows melt into the page (depth fog); a faint reflection and an even dot
+ * lattice that fades into the fog ground it. "ridges": the same grid as a stack of ridgelines (a joy
+ * plot in 3D): one ribbon per row, with a faint fill beneath that hides the rows behind it.
+ *
+ * It lives: a soft band of accent light travels slowly to and fro along the rows, lighting the caps
+ * and the top of every column it crosses, and the heights breathe a few percent in a slow wave.
+ * The pointer leans the key light and the camera, and puts a pool of light on the field below it.
  *
  *   import { mount } from "./scenes/datascape.js";
  *   const scape = mount(document.querySelector(".hero-scene"), {
@@ -22,9 +27,11 @@
  *   height     1: how tall the tallest value stands (1.4 taller, 0.7 lower).
  *   side       "right" (default), "left" or "center": where the sculpture sits, away from the
  *              headline. On a tall, narrow screen it sits in the lower third.
- *   intensity  1: the strength of the rim light, the glow and the sweep (0 flat, 2 strong).
+ *   intensity  1: the strength of the light, the glow and the bands (0 flat, 2 strong).
  *   onHover    null: gets { index, row, column, value } when the eased pointer rests on a bar or a
- *              ridge (found by a raycast), and null when it leaves.
+ *              ridge (found by a raycast), and null when it leaves. The bar (or ridge) under the
+ *              pointer grows by about a tenth and glows along its whole length in the accent; its
+ *              four neighbours rise a little, so the light falls off around it.
  *   data       the first values, as for setData. Without them it shows sample data (an app's use
  *              by hour of the day, one row a month), so it is never empty.
  *
@@ -34,19 +41,24 @@
  *   when below 0) to the highest. Each cell springs to its new height after a short delay that runs
  *   as a wave from the left; a missing number leaves its cell empty; an empty list brings the
  *   sample back. onHover reports the numbers as given.
- * setProgress(p), 0..1: the camera orbits about 30 degrees round the sculpture while a band of
- *   light sweeps across it from left to right. Feed it a section's progress, or a filter change.
+ * setProgress(p), 0..1: three states. At 0 a low three-quarter view, the field calm and mostly dim.
+ *   Towards 0.5 a front of accent light walks from the far rows to the near ones: the rows it has
+ *   passed are lit, the rows ahead stay dark. Towards 1 the camera rises and closes in on the
+ *   tallest values (second accent) while the rest of the field falls back into the fog. Without
+ *   setProgress the field rests in the first state, lit only by the travelling band.
  * setPointer(x, y), pause(), resume(), destroy(), stage: as stage.js describes.
  *
  * Poster: a child `<img data-scene-poster src="datascape.png" alt="">` shows until the first frame
  * and whenever there is no WebGL. Make the picture by mounting with { still: true } and taking a
- * screenshot; reduced motion draws that same still (every value at its height, no hover, no sway).
- * Keep a plain table of the numbers on the page too: a sculpture is not an accessible chart.
+ * screenshot; reduced motion draws that same still (every value at its height, the band resting
+ * at one place, no hover, no breathing). Keep a plain table of the numbers on the page too: a
+ * sculpture is not an accessible chart.
  *
  * Cost: three draw calls (floor, reflection, bars) or two (floor, ridges), no textures. Bars are one
  * instanced box; ridges have 4, 6 or 10 points per column and at least 100, 160 or 240 a row (low,
- * medium, high quality; low also drops the reflection). The processor runs a spring per cell, a raycast while the pointer is over the
- * scene, and rewrites the buffers only while something moves.
+ * medium, high quality; low also drops the reflection). The bands and the breathing are uniforms,
+ * so they cost the processor nothing; it runs a spring per cell, a raycast while the pointer is over
+ * the scene, and rewrites the buffers only while a spring moves.
  */
 import * as THREE from "three";
 import { createStage } from "./stage.js";
@@ -55,19 +67,33 @@ import { stageUniforms, line, fog, grain } from "./glsl.js";
 const WIDTH = 6, TAIL = 1.5;   // the width in world units (all sizes follow); columns a ridge runs on past its data
 const SPRING = 70, DAMPING = 10;   // the springs settle in about half a second, with a small overshoot (ratio 0.6)
 const MAX_ROWS = 64, MAX_COLUMNS = 128;
+const BAND_PERIOD = 13;   // seconds the travelling band takes there and back
 
 const shared = `${stageUniforms}
-uniform vec4 uSize, uMotion, uFloor;   // see the uniforms in mount()
-uniform vec2 uFog;`;
+uniform vec4 uSize, uMotion, uFocus, uFloor, uSpot;   // see the uniforms in mount()
+uniform vec3 uLight;
+uniform vec2 uFog;
+// How tall a column stands at (x, z): the heights breathe a few percent in a slow wave.
+float breath(vec2 xz) { return 1.0 + uFocus.w * sin(uTime * 0.7 - xz.x * 0.8 - xz.y * 0.6); }`;
 const pieces = `${shared}${line}${fog}${grain}
-// Two soft bands of light across the width: one where setProgress puts it (uMotion.x), one that
-// drifts by now and then on its own (uMotion.z, uMotion.w as strong). u runs 0..1 over the width.
-float sweepAt(float x) {
-  float u = x / ${WIDTH.toFixed(1)} + 0.5;
-  return (exp(-pow((u - uMotion.x) / uMotion.y, 2.0)) + uMotion.w * exp(-pow((u - uMotion.z) / uMotion.y, 2.0))) * uSize.w;
+// The light on a place of the sculpture: a little everywhere, more on high values and on the peaks;
+// the columns the progress front has passed (uMotion.w, over the width: 0 the left end, 1 the
+// right one) and the front itself; the band that travels to and fro over the rows (uMotion.x, over
+// the depth: 0 the far row, 1 the near one); the pool under the pointer. 0 is dark, 1 fully lit,
+// more is hot.
+float beamsAt(vec3 w) {      // the progress front and the travelling band alone
+  float u = w.x / (2.0 * uFloor.x) + 0.5, v = w.z / (2.0 * uFloor.y) + 0.5;
+  return 1.4 * exp(-pow((u - uMotion.w) / 0.06, 2.0)) + 1.4 * uMotion.z * exp(-pow((v - uMotion.x) / uMotion.y, 2.0));
 }
-// The accent a value is lit with: quiet (towards the muted text colour) when low, full when high.
-vec3 litBy(float value, float peak) { return mix(uMuted, mix(uAccent, uAccent2, peak), 0.3 + 0.7 * smoothstep(0.0, 0.6, value)); }`;
+float lightAt(vec3 w, float height, float peak) {
+  float u = w.x / (2.0 * uFloor.x) + 0.5, passed = smoothstep(uMotion.w + 0.05, uMotion.w - 0.05, u);
+  vec2 s = w.xz - uSpot.xy;
+  float spot = uSpot.z * exp(-dot(s, s) / 0.3);
+  float ahead = (1.0 - passed) * smoothstep(0.05, 0.3, uProgress);   // what the front has not reached goes darker
+  return ((0.1 + 0.35 * height) * (1.0 - 0.85 * ahead) + 0.4 * peak * (1.0 - 0.5 * ahead) + 0.6 * passed + beamsAt(w) + 0.4 * spot) * uSize.w;
+}
+// Near 1 (setProgress towards 1) everything but the peaks falls back into the fog.
+float focusFade(vec3 w) { return uFocus.z * smoothstep(0.35, 1.3, distance(w.xz, uFocus.xy)); }`;
 const finish = `
   #include <colorspace_fragment>
   gl_FragColor.rgb += dither(gl_FragCoord.xy) * gl_FragColor.a;`;
@@ -76,70 +102,89 @@ const finish = `
 const barVertex = `${shared}
 attribute vec2 aCell;   // x and z of the bar's middle
 attribute vec4 aState;  // height 0..1, hover 0..1, peak 0..1, 1 when the cell has a value
-varying vec3 vLocal, vNormal;   // vLocal: x and z across the bar (-0.5..0.5), y up from the floor
+varying vec3 vLocal, vNormal, vWorld;   // vLocal: x and z across the bar (-0.5..0.5), y up from the floor
 varying vec4 vState;
-varying float vTop, vDepth, vX;
+varying float vTop, vDepth;
 void main() {
-  float h = (max(aState.x, 0.015) + aState.y * 0.07) * uSize.z * aState.w;   // hover makes it grow
+  float h = max(aState.x, 0.008) * uSize.z * breath(aCell);
+  h = (h + aState.y * (0.1 * h + 0.05 * uSize.z)) * aState.w;   // hover lifts it by about a tenth
   vec3 p = vec3(aCell.x + position.x * uSize.x * aState.w, position.y * h, aCell.y + position.z * uSize.y * aState.w);
+  vWorld = p;
 #ifdef MIRROR
   p.y = -p.y;           // the reflection: the same bar upside down under the floor
 #endif
   vLocal = vec3(position.x, position.y * h, position.z);
-  vNormal = normal; vState = aState; vTop = h; vX = aCell.x;
+  vNormal = normal; vState = aState; vTop = h;
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   vDepth = -mv.z;
   gl_Position = projectionMatrix * mv;
 }`;
 
-// The light comes from the front left and above. uDark switches between light on a dark page and
-// ink and paper on a light one; every colour is a mix of the stage tokens.
+// The key light comes from the front left (uLight, leaning with the pointer). uDark switches
+// between light on a dark page and tinted paper on a light one; every colour mixes stage tokens.
 const barFragment = `${pieces}
-varying vec3 vLocal, vNormal;
+varying vec3 vLocal, vNormal, vWorld;
 varying vec4 vState;
-varying float vTop, vDepth, vX;
+varying float vTop, vDepth;
+// Colours are mixed in display space (as a designer mixes them) and turned back into linear light
+// at the end, so a 10 percent tint looks like 10 percent, also in the dark.
+vec3 shown(vec3 c) { return pow(max(c, 0.0), vec3(1.0 / 2.2)); }
 void main() {
   vec3 n = normalize(vNormal);
-  float height = vState.x, hover = vState.y, sweep = sweepAt(vX), rim;
-  float w = 1.6 * uPixelRatio;                 // the rim, in buffer pixels (the inner half shows)
-  vec3 lit = litBy(height, vState.z), color;
+  vec3 bg = shown(uBg), surface = shown(uSurface), border = shown(uBorder), muted = shown(uMuted), text = shown(uText);
+  float height = vState.x, hover = vState.y, peak = vState.z, rim;
+  float lit = lightAt(vWorld, height, peak), glowing = clamp(lit, 0.0, 1.0), hot = clamp(lit - 1.0, 0.0, 1.0);
+  float stand = smoothstep(0.03, 0.24, height);     // near-zero values sink into the floor
+  float w = 1.4 * uPixelRatio;                      // the rim, in buffer pixels (the inner half shows)
+  vec3 tone = shown(mix(uAccent, uAccent2, peak)), color;
+  float fromTop = vTop - vLocal.y, rise = clamp(vLocal.y / max(vTop, 0.0001), 0.0, 1.0);
   if (n.y > 0.5) {
-    // The top: from a faint tint to the full accent as the value rises; a thin rim of light round it.
+    // The cap: filled with the accent, brighter where the light is; white-hot in the band.
     rim = max(lineAlpha(0.5 - abs(vLocal.x), w), lineAlpha(0.5 - abs(vLocal.z), w));
-    color = mix(mix(uSurface, lit, mix(0.12, 0.2, uDark)), lit, pow(height, 1.5));
-    color = mix(color, uText, hover * 0.45 + sweep * 0.25);
-  } else {
-    // A side: turned to the key light or away from it, darker towards the floor, and lit by the top
-    // for a short way down (further on the tallest).
-    float facing = clamp(dot(n, normalize(vec3(-0.55, 0.0, 0.85))) * 0.5 + 0.5, 0.0, 1.0);
-    float fromTop = vTop - vLocal.y, rise = smoothstep(0.0, uSize.z, vLocal.y);
-    rim = max(lineAlpha(fromTop, w), 0.22 * lineAlpha(0.5 - abs(abs(n.x) > 0.5 ? vLocal.z : vLocal.x), w));
-    vec3 night = mix(mix(uBg, uSurface, 0.6), mix(uSurface, uBorder, 0.35 + 0.65 * facing), 0.3 + 0.7 * rise);
-    vec3 shade = mix(uBorder, uMuted, 0.3);
-    vec3 paper = mix(mix(shade, uBorder, 0.4), mix(shade, uSurface, facing * facing), 0.45 + 0.55 * rise);
+    vec3 night = mix(border, tone, 0.18 + 0.82 * glowing);
+    vec3 paper = mix(surface, tone, 0.36 + 0.6 * glowing);
     color = mix(paper, night, uDark);
-    float glow = exp(-fromTop / (0.045 + 0.07 * vState.z)) * (0.04 + 0.45 * height + 0.5 * hover + 0.3 * sweep);
-    color = mix(color, lit, clamp(glow * uSize.w, 0.0, 1.0) * mix(0.5, 1.0, uDark));
+    color = mix(color, mix(tone, text, uDark * 0.7), clamp(hot * mix(0.9, 0.6, uDark) + hover * 0.5, 0.0, 1.0));
+  } else {
+    // A side: turned to the key light or away from it, darker towards the floor, tinted with the
+    // accent towards its cap, and lit by the cap over its top fifth (all the way down when hovered).
+    float facing = clamp(dot(n, normalize(uLight)) * 0.5 + 0.5, 0.0, 1.0);
+    float top = exp(-fromTop / (0.2 * vTop + 0.015));
+    rim = max(lineAlpha(fromTop, w), 0.22 * lineAlpha(0.5 - abs(abs(n.x) > 0.5 ? vLocal.z : vLocal.x), w));
+    vec3 night = mix(mix(surface, border, 0.1 + 0.75 * facing), tone, 0.03 + 0.05 * facing);
+    night = mix(mix(bg, surface, 0.5), night, 0.35 + 0.65 * rise);
+    vec3 face = mix(surface, tone, (0.12 + 0.14 * rise) * (1.0 + 0.7 * peak));
+    vec3 paper = mix(mix(face, mix(muted, tone, 0.35), 0.45), face, facing);
+    paper = mix(paper, border, (1.0 - rise) * 0.25);
+    color = mix(paper, night, uDark);
+    float glow = (top * (0.12 + 0.7 * glowing) + 0.22 * glowing * glowing * rise) * mix(0.85, 1.0, uDark) + hover * (0.35 + 0.35 * rise) + hot * top * 0.5;
+    color = mix(color, mix(tone, text, hover * 0.3 * uDark), clamp(glow, 0.0, 1.0));
   }
-  vec3 rimColor = mix(lit, uText, mix(0.2, 0.35, uDark) + 0.4 * hover);
-  color = mix(color, rimColor, rim * clamp(0.85 * uSize.w, 0.0, 1.0) * (0.3 + 0.7 * sqrt(height) + hover));
-  float haze = fogLinear(vDepth, uFog.x, uFog.y);
-  gl_FragColor = vec4(mix(color, uBg, haze * 0.92), 1.0);
+  vec3 rimColor = mix(tone, text, uDark * 0.3 + 0.4 * hover + 0.3 * hot);
+  color = mix(color, rimColor, rim * (0.3 + 0.7 * glowing) * mix(0.6, 1.0, uDark));
+  color = mix(mix(mix(bg, border, 0.3), surface, 0.4 * uDark), color, 0.05 + 0.95 * stand);
+  float haze = max(fogLinear(vDepth, uFog.x, uFog.y), focusFade(vWorld));
+  gl_FragColor = vec4(pow(mix(color, bg, haze * 0.94), vec3(2.2)), 1.0);
 #ifdef MIRROR
-  gl_FragColor.a = (1.0 - smoothstep(0.0, 0.3 * uSize.z, vLocal.y)) * mix(0.08, 0.14, uDark) * (1.0 - haze);
+  gl_FragColor.a = (1.0 - smoothstep(0.0, 0.3 * uSize.z, vLocal.y)) * mix(0.07, 0.14, uDark) * (1.0 - haze) * stand;
 #endif
   ${finish}
 }`;
 
 // The floor and the ridges: plain meshes in world space.
-const plainVertex = `
+const plainVertex = `${shared}
 attribute vec4 aRidge;  // ridges: the line's height here (world units), the value 0..1, peak 0..1, hover 0..1
 varying vec4 vRidge;
 varying vec3 vWorld;
 varying float vDepth;
 void main() {
   vRidge = aRidge;
-  vec4 world = modelMatrix * vec4(position, 1.0), mv = viewMatrix * world;
+  vec4 world = modelMatrix * vec4(position, 1.0);
+#ifdef RIDGE
+  float b = breath(world.xz);
+  world.y *= b; vRidge.x *= b;
+#endif
+  vec4 mv = viewMatrix * world;
   vWorld = world.xyz;
   vDepth = -mv.z;
   gl_Position = projectionMatrix * mv;
@@ -154,20 +199,23 @@ varying vec3 vWorld;
 varying float vDepth;
 void main() {
   float field = vWorld.y - vRidge.x;         // 0 on the line, below 0 in the fill
-  float hover = vRidge.w, sweep = sweepAt(vWorld.x);
-  float lineA = lineAlpha(field, (1.4 + 1.2 * hover) * uPixelRatio);
-  vec3 lineColor = mix(litBy(vRidge.y, vRidge.z), uText, 0.4 * hover + 0.3 * sweep);
-  float glow = exp(field / (0.05 + 0.08 * uSize.z)) * (0.12 + 0.25 * hover + 0.1 * sweep) * uSize.w;
-  vec3 fill = mix(uBg, uAccent, 0.035 + 0.05 * clamp(vWorld.y / uSize.z, 0.0, 1.0));
-  fill = mix(fill, mix(uAccent, uAccent2, vRidge.z), glow * mix(0.6, 1.0, uDark));
+  float hover = vRidge.w, peak = vRidge.z, lit = lightAt(vWorld, vRidge.y, peak);
+  float glowing = clamp(lit, 0.0, 1.0), hot = clamp(lit - 1.0, 0.0, 1.0);
+  vec3 tone = mix(uAccent, uAccent2, peak);
+  float lineA = lineAlpha(field, (mix(1.7, 1.3, uDark) + 0.9 * glowing + 1.2 * hover) * uPixelRatio);
+  vec3 lineColor = mix(mix(uMuted, tone, mix(0.6, 0.35, uDark) + mix(0.4, 0.65, uDark) * glowing), uText, (0.4 * hover + 0.35 * hot) * mix(0.4, 1.0, uDark));
+  float glow = exp(field / (0.05 + 0.1 * uSize.z)) * (0.06 + 0.3 * glowing + 0.4 * hover);
+  vec3 fill = mix(uBg, tone, mix(0.12, 0.035, uDark) + mix(0.2, 0.05, uDark) * clamp(vWorld.y / uSize.z, 0.0, 1.0));
+  fill = mix(fill, tone, clamp(glow, 0.0, 1.0) * mix(0.8, 1.0, uDark));
   float fillA = step(field, 0.0) * mix(0.82, 0.97, clamp(vWorld.y / max(vRidge.x, 0.001), 0.0, 1.0));
-  float haze = fogLinear(vDepth, uFog.x, uFog.y);
-  gl_FragColor = vec4(mix(mix(fill, lineColor, lineA), uBg, haze * 0.92), max(fillA, lineA));
+  float haze = max(fogLinear(vDepth, uFog.x, uFog.y), focusFade(vWorld));
+  gl_FragColor = vec4(mix(mix(fill, lineColor, lineA), uBg, haze * 0.94), max(fillA, lineA));
   ${finish}
 }`;
 
-// The floor: a small cross where four cells meet, under the bars only, and a soft pool of light (on
-// a dark page) or shade (on a light one) that sets the sculpture down.
+// The floor: an even lattice of faint dots where four cells meet, running on past the bars and
+// fading into the fog, lit where a band passes; a soft pool of light (dark page) or shade (light
+// page) under the sculpture, and a pool of accent under the pointer.
 const floorFragment = `${pieces}
 varying vec3 vWorld;
 varying float vDepth;
@@ -175,13 +223,19 @@ void main() {
   vec2 q = vWorld.xz;
   float away = length(max(abs(q) - uFloor.xy, 0.0));      // 0 under the sculpture, then world units
   vec2 g = (q + uFloor.xy) / max(uFloor.zw, 0.0001);      // in cells: the corners at whole numbers
-  vec2 near = abs(g - floor(g + 0.5)), arm = near * uFloor.zw;   // to the nearest corner: cells, world
-  float cross = max(lineAlpha(near.y, uPixelRatio) * (1.0 - smoothstep(0.025, 0.04, arm.x)),
-                    lineAlpha(near.x, uPixelRatio) * (1.0 - smoothstep(0.025, 0.04, arm.y)));
-  cross *= (1.0 - smoothstep(0.0, 0.6 * uFloor.z, away)) * step(0.0001, uFloor.z) * 0.58;
+  float pixel = max(length(fwidth(q)), 0.00001);          // world units across one buffer pixel
+  float dist = length((g - floor(g + 0.5)) * uFloor.zw) / pixel;
+  float dots = (1.0 - smoothstep(0.55, 1.35, dist / uPixelRatio)) * smoothstep(5.0, 11.0, uFloor.z / pixel);
+  dots *= (1.0 - smoothstep(0.0, 1.7, away)) * step(0.0001, uFloor.z) * mix(0.5, 0.42, uDark);
+  float light = clamp(lightAt(vec3(q.x, 0.0, q.y), 0.0, 0.0) - 0.06 * uSize.w, 0.0, 1.5);
   float pool = (1.0 - smoothstep(-0.6, 1.4, away - 0.15 * min(uFloor.x, uFloor.y))) * mix(0.035, 0.07, uDark);
-  vec3 color = (mix(uBorder, uMuted, 0.4) * cross + mix(uText, uAccent, uDark) * pool) / max(cross + pool, 0.0001);
-  gl_FragColor = vec4(color, (cross + pool) * (1.0 - fogLinear(vDepth, uFog.x, uFog.y)));
+  vec2 s = q - uSpot.xy;
+  float spot = uSpot.z * exp(-dot(s, s) / 0.45) * mix(0.08, 0.16, uDark) * uSize.w;
+  vec3 dotColor = mix(mix(uBorder, uMuted, 0.55), uAccent, clamp(light, 0.0, 1.0) * 0.8);
+  float sheen = beamsAt(vec3(q.x, 0.0, q.y)) * (1.0 - smoothstep(0.0, 1.2, away)) * mix(0.04, 0.11, uDark) * uSize.w;
+  vec3 color = (dotColor * dots + mix(uText, uAccent, uDark) * pool + uAccent * (spot + sheen)) / max(dots + pool + spot + sheen, 0.0001);
+  float fade = 1.0 - max(fogLinear(vDepth, uFog.x, uFog.y), focusFade(vec3(q.x, 0.0, q.y)));
+  gl_FragColor = vec4(color, (dots * (0.6 + 0.4 * clamp(light, 0.0, 1.0)) + pool + spot + sheen) * fade);
   ${finish}
 }`;
 
@@ -192,11 +246,11 @@ function sampleData(rows, columns) {
   const bump = (x, at, width) => Math.exp(-(((x - at) / width) ** 2));
   const values = [];
   for (let r = 0; r < rows; r++) {
-    const season = 0.55 + 0.45 * Math.sin((Math.PI * (r + 0.5)) / rows);   // a fuller summer
+    const season = 0.5 + 0.5 * Math.sin((Math.PI * (r + 0.5)) / rows);   // a fuller summer
     const shift = (random() - 0.5) * 2, amount = 0.8 + 0.4 * random();   // each month its own
     for (let c = 0; c < columns; c++) {
-      const hour = ((c + 0.5) * 24) / columns;   // a morning, an afternoon and an evening peak
-      const day = 0.05 + 0.75 * bump(hour, 9.5 + shift, 2.2) + bump(hour, 15 + shift, 2.6) + 0.4 * bump(hour, 20.5, 1.6);
+      const hour = ((c + 0.5) * 24) / columns;   // a morning, an afternoon and an evening peak; quiet nights
+      const day = 0.012 + 0.7 * bump(hour, 9.5 + shift, 2) + bump(hour, 15 + shift, 2.4) + 0.4 * bump(hour, 20.5, 1.5);
       values.push(day * season * amount * (0.85 + 0.3 * random()));
     }
   }
@@ -236,8 +290,11 @@ export function mount(container, options = {}) {
   const uniforms = {
     ...stage.uniforms,
     uSize: { value: new THREE.Vector4() },     // bar width x, bar width z, tallest height, intensity
-    uMotion: { value: new THREE.Vector4() },   // sweep position 0..1 across the width, sweep width
-    uFloor: { value: new THREE.Vector4() },    // half width, half depth, cell size x (0: no crosses), z
+    uMotion: { value: new THREE.Vector4() },   // travelling band: place 0..1 over the depth, width, strength; progress front 0..1 over the width
+    uFocus: { value: new THREE.Vector4() },    // x and z of the peaks, how far the rest has fallen back, breathing amount
+    uFloor: { value: new THREE.Vector4() },    // half width, half depth, cell size x (0: no dots), z
+    uSpot: { value: new THREE.Vector4() },     // x and z of the pool under the pointer, its strength
+    uLight: { value: new THREE.Vector3(-0.55, 0, 0.85) },   // the key light's direction
     uFog: { value: new THREE.Vector2() },      // fog from, fog full (distance from the camera)
   };
   const material = (vertexShader, fragmentShader, extra) => new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader, ...extra });
@@ -248,11 +305,12 @@ export function mount(container, options = {}) {
 
   // The data: per cell the value as given, and a spring from the height on screen to the goal.
   let grid = { rows: 0, columns: 0, values: [] }, shown, speed, goal, wait, hover, peak, peakGoal, present;
-  const span = { pitchX: 0.25, pitchZ: 0.25, depth: 3, tall: 2 };
+  const span = { pitchX: 0.25, pitchZ: 0.25, depth: 3, tall: 2 }, focus = new THREE.Vector3();
   let moving = true, hovered = -1, sub = 6, every = 6, samples = 0;
   const rowZ = (r) => (r + 0.5 - grid.rows / 2) * span.pitchZ;
   const barX = (c) => (c + 0.5 - grid.columns / 2) * span.pitchX;
   const ridgeX = (s) => -WIDTH / 2 + (s + TAIL) * span.pitchX;
+  const cellX = (c) => (ridges ? ridgeX(c) : barX(c));
 
   function reshape(next) {
     const old = { grid, shown, speed, hover, peak };
@@ -275,7 +333,7 @@ export function mount(container, options = {}) {
     const bar = Math.min(span.pitchX * (1 - o.gap), 0.1 * span.tall);
     uniforms.uSize.value.set(bar, Math.min(span.pitchZ * (1 - o.gap), bar), span.tall, o.intensity);
     uniforms.uFloor.value.set(WIDTH / 2, span.depth / 2, ridges ? 0 : span.pitchX, span.pitchZ);
-    floor.scale.set(WIDTH + 4, 1, span.depth + 4);
+    floor.scale.set(WIDTH + 5, 1, span.depth + 5);
     build();
   }
 
@@ -286,12 +344,15 @@ export function mount(container, options = {}) {
     const order = grid.values.map((v, i) => [v, i]).filter(([v]) => Number.isFinite(v)).sort((a, b) => b[0] - a[0]);
     const high = order[0][0], low = Math.min(0, order[order.length - 1][0]);
     const peaks = new Set(order.slice(0, Math.max(1, Math.round(order.length * 0.035))).map(([, i]) => i));
+    focus.set(0, 0, 0);
     grid.values.forEach((v, i) => {
       present[i] = Number.isFinite(v) ? 1 : 0;
       goal[i] = present[i] ? (v - low) / (high - low || 1) : 0;
       peakGoal[i] = peaks.has(i) && high > low ? 1 : 0;
       wait[i] = 0.45 * ((i % grid.columns) / grid.columns) + 0.2 * (Math.floor(i / grid.columns) / grid.rows);
+      if (peaks.has(i)) focus.add({ x: cellX(i % grid.columns), y: goal[i], z: rowZ(Math.floor(i / grid.columns)) });
     });
+    focus.divideScalar(peaks.size);   // where the camera goes at the end: the middle of the peaks
     moving = true;
     stage.invalidate();
   }
@@ -321,7 +382,7 @@ export function mount(container, options = {}) {
       geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(grid.rows * samples * 6), 3).setUsage(THREE.DynamicDrawUsage));
       geometry.setAttribute("aRidge", new THREE.BufferAttribute(new Float32Array(grid.rows * samples * 8), 4).setUsage(THREE.DynamicDrawUsage));
       geometry.setIndex(index);
-      mesh = ribbon = new THREE.Mesh(geometry, material(plainVertex, ridgeFragment, { ...see, side: THREE.DoubleSide }));
+      mesh = ribbon = new THREE.Mesh(geometry, material(plainVertex, ridgeFragment, { ...see, side: THREE.DoubleSide, defines: { RIDGE: 1 } }));
     }
     for (const each of [mesh, ridges ? null : mirror]) if (each) { each.frustumCulled = false; each.renderOrder = 1; scene.add(each); }
     moving = true;
@@ -369,7 +430,6 @@ export function mount(container, options = {}) {
   const raycaster = new THREE.Raycaster(), box = new THREE.Box3(), hit = new THREE.Vector3(), at = new THREE.Vector2();
   function pick() {
     if (!stage.pointer.inside || stage.still) return -1;
-    raycaster.setFromCamera(at.set(stage.pointer.x, stage.pointer.y), camera);
     const ray = raycaster.ray;
     let best = -1, nearest = Infinity;
     for (let i = 0; !ridges && i < shown.length; i++) {
@@ -388,6 +448,14 @@ export function mount(container, options = {}) {
       }
     }
     return best;
+  }
+  // 1 for the hovered cell, 0.4 for its four neighbours, 0 elsewhere.
+  function hoverGoalOf(i) {
+    if (hovered < 0) return 0;
+    if (i === hovered) return 1;
+    const dr = Math.abs(Math.floor(i / grid.columns) - Math.floor(hovered / grid.columns));
+    const dc = Math.abs((i % grid.columns) - (hovered % grid.columns));
+    return dr + dc === 1 ? 0.4 : 0;
   }
 
   // The camera: a low three-quarter view with the near end to the right, fitted to the free part of
@@ -408,22 +476,36 @@ export function mount(container, options = {}) {
     if (ribbon) build();
   });
 
-  const target = new THREE.Vector3();
-  function place(time) {
+  const target = new THREE.Vector3(), close = new THREE.Vector3(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  let spot = 0;
+  function place(time, delta) {
     const still = stage.still, p = stage.progressEased, pointer = still ? { x: 0, y: 0 } : stage.pointer;
-    const az = 0.8 + (p - 0.5) * 0.5 + (still ? 0 : Math.sin(time * 0.09) * 0.05) + pointer.x * 0.05;   // round the sculpture
-    const el = 0.3 + (0.5 - p) * 0.08 + pointer.y * 0.03;                                               // above the floor
-    const radius = 0.5 * Math.hypot(WIDTH, Math.max(span.depth, 3.6), span.tall * 0.7), distance = radius * fit * 0.86;
-    target.set(0, span.tall * 0.22, 0);
+    const rise = smooth(Math.min(1, Math.max(0, (p - 0.45) / 0.55)));   // the last part: up and in, onto the peaks
+    const az = 0.8 + (p - 0.5) * 0.55 + (still ? 0 : Math.sin(time * 0.09) * 0.04) + pointer.x * 0.2;   // round the sculpture
+    const el = 0.27 + 0.06 * p + (ridges ? 0.14 : 0.3) * rise + pointer.y * 0.09;                                           // above the floor
+    const radius = 0.5 * Math.hypot(WIDTH, Math.max(span.depth, 3.6), span.tall * 0.7), distance = radius * fit * 0.86 * (1 - (ridges ? 0.12 : 0.22) * rise);
+    target.set(0, span.tall * 0.22, 0).lerp(close.set(focus.x, span.tall * (0.25 + 0.3 * focus.y), focus.z), rise);
     camera.position.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).multiplyScalar(distance).add(target);
     camera.lookAt(target);
-    uniforms.uFog.value.set(distance - radius * 0.45, distance + radius * 0.75);
-    // The drifting band crosses in four seconds once every sixteen, and rests in a still frame.
-    uniforms.uMotion.value.set(-0.25 + p * 1.5, 0.1, ((time % 16) / 4) * 1.5 - 0.25, still ? 0 : 0.35);
+    camera.updateMatrixWorld();
+    uniforms.uFog.value.set(distance - radius * 0.45, distance + radius * (0.75 - 0.25 * rise));
+    // The band goes there and back over the rows, slowest at the ends; a still frame rests it at one
+    // place. The progress front walks over the width from just before the left end to past the right one.
+    const band = still ? 0.62 : 0.5 - 0.48 * Math.cos((time * 2 * Math.PI) / BAND_PERIOD);
+    uniforms.uMotion.value.set(band, 0.13, 0.95 * (1 - 0.5 * smooth(Math.min(1, p / 0.4))), -0.15 + 1.3 * p);
+    uniforms.uFocus.value.set(focus.x, focus.z, 0.92 * smooth(Math.min(1, Math.max(0, (p - 0.55) / 0.45))), still ? 0 : 0.045);
+    // The key light leans with the pointer; the pool of light sits where the pointer meets the field.
+    uniforms.uLight.value.set(-0.55 + pointer.x * 0.75, 0, 0.85 - pointer.y * 0.35);
+    raycaster.setFromCamera(at.set(pointer.x, pointer.y), camera);
+    plane.constant = -span.tall * 0.2;
+    const ground = raycaster.ray.intersectPlane(plane, hit);
+    spot += ((stage.pointer.inside && !still && ground ? 1 : 0) - spot) * (1 - Math.exp(-delta * 4));
+    if (ground) uniforms.uSpot.value.set(THREE.MathUtils.clamp(hit.x, -WIDTH / 2 - 0.3, WIDTH / 2 + 0.3), THREE.MathUtils.clamp(hit.z, -span.depth / 2 - 0.3, span.depth / 2 + 0.3), 0, 0);
+    uniforms.uSpot.value.z = spot;
   }
 
   stage.onFrame((time, delta) => {
-    place(time);
+    place(time, delta);
     const now = pick();
     if (now !== hovered) {
       hovered = now;
@@ -437,7 +519,7 @@ export function mount(container, options = {}) {
     let busy = false;
     const steps = Math.ceil(delta * 120), dt = steps ? delta / steps : 0, k = 1 - Math.exp(-delta * 9);
     for (let i = 0; i < shown.length; i++) {
-      const hoverGoal = i === hovered ? 1 : 0;
+      const hoverGoal = hoverGoalOf(i);
       if (stage.still) { shown[i] = goal[i]; speed[i] = hover[i] = 0; peak[i] = peakGoal[i]; continue; }
       hover[i] += (hoverGoal - hover[i]) * k;
       peak[i] += (peakGoal[i] - peak[i]) * k * 0.4;
