@@ -83,13 +83,15 @@ are reference only and never ship.
   - the scope question of rule 3;
   - a choice only the user can make and that is costly to undo: the app's
     name, the stack profile when the plan leaves two open, prices;
+  - taste and depth: the level when none was given (rule 10) and the pick
+    from the three design concepts;
   - a fix that turns out bigger than it looked, or a failure that three
     tries did not fix;
   - anything these rules forbid.
 - Choices that are cheap to change you make yourself in auto mode, and
   write down with the reason in the phase's report: the optional phases
-  (run each one unless the user said which to leave out), the vertical
-  slice, the design and motion direction.
+  (run each one unless the user said which to leave out) and the vertical
+  slice.
 - **Fixing on your own**, in every mode, inside a phase: a failed test, exit
   check, scan or build is yours to fix without asking. Read the failure,
   fix the cause, run it again: up to three tries per failure. Never by
@@ -115,11 +117,67 @@ are reference only and never ship.
 - Never invent facts, numbers, reviews or quotes. If you do not know, say
   so. If a source could not be reached, say which.
 
+## 9. Show the result
+
+A change the user cannot see has not happened. This holds for every skill
+that changes an app, and most of all for design and motion.
+
+- **Know what the user looks at.** Before you change anything, find out
+  what serves their local URL: a dev server that reloads by itself, a built
+  app that needs a rebuild (`next build` then `next start`, a compiled
+  bundle), or containers; from which folder and which git branch; and
+  whether a service worker or another cache sits in front of it. Write that
+  at the top of the report. When you cannot tell, ask one question: "How do
+  you open the app, and at which address?"
+- **Before.** Take screenshots of every screen you will touch, from that
+  URL, before the first change.
+- **Say what is happening.** At the start: what you will do, in which
+  order, and roughly how long. When the first screen is done: show it,
+  before and after. Then one line per finished screen. Never work in
+  silence for long, and never say "done" with nothing to look at.
+- **Make it show.** The work is on a branch: say which, and make the
+  running app serve that branch. Restart or rebuild what serves the URL.
+  A service worker: bump its cache name or unregister it in development,
+  and say so. Then load the very URL the user uses.
+- **After, and proof.** Take the same screenshots again, and frames over
+  time on screens that should move. `python3 ../forge-design/changed.py
+  <before> <after>` must say VISIBLE CHANGE, and `--moves` on the frames
+  that something moves. "No visible change" is never a finished run: find
+  out why (the wrong branch, no rebuild, a cache, an effect too small to
+  see) and fix that first.
+- **Hand it over.** Tell the user in plain words: the branch the work is
+  on, that their local address shows it now (or the one command that makes
+  it show), where to click to see the best moment first, the paths of the
+  before and after images and of the recorded clip, and how to go back
+  (`git switch <their branch>`). Merging and deploying stay their step.
+
+## 10. Levels
+
+How far a skill goes is the user's call, on one scale from 1 to 5. The
+tables are in `../forge/levels.md`; four things have a level: the look
+(design, motion, 3D), dashboards, testing and security.
+
+- A level the user gives in their request ("niveau 4", "showpiece",
+  "level 5", "a quick test") is recorded at once:
+  `python3 ../forge/level.py set look 4 --said '<their words>'`.
+- No level given: ask one question, with the one line per level that
+  `python3 ../forge/level.py show look` prints and where the examples are
+  (the gallery in the README of the pack). Then record the answer. This
+  question is asked in auto mode too.
+- `/forge` asks once at the start: one level for everything, or one per
+  part. Inside a forge project the security check never runs below level 3.
+- A level is a promise in both directions: never build less than it asks,
+  and never more. Level 2 gets no 3D "as a bonus"; level 5 gets no fades
+  passed off as a journey. The gate checks it:
+  `python3 ../forge/level.py check <part>`.
+- The user may change a level at any time; record the new one the same way.
+
 ## Where things live
 
 ```
 forge-work/            in the user's project: all forge planning files
 forge-work/scope.json  {"own_domains": ["example.com"]}  (rule 3)
+forge-work/levels.json the level the user chose per part (rule 10); only level.py writes it
 ```
 
 `forge-work/` holds plans and reports. It may quote the original app, so it

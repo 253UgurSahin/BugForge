@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Three concepts</title>
+<!--
+  The concept board of forge-design (../forge-design/concepts.md). Copy this file to
+  forge-work/design/concepts/index.html, replace the JSON block below with this app's three concepts,
+  and build each preview as forge-work/design/concepts/a/index.html, b/index.html and c/index.html.
+  It opens straight from the folder (double click): no server, no request to any other host.
+  Keys: 1, 2, 3 open a concept large; Escape closes it; D and P switch desktop and phone; R replays.
+-->
+<script type="application/json" id="board">
+{
+  "app": "Tidewatch",
+  "level": 4,
+  "levelName": "Showpiece",
+  "labels": {
+    "title": "Three directions for",
+    "intro": "Each one comes from what this app is about. Look at them move, then say which one you want: A, B or C, or a mix (for example: A with the colours of C).",
+    "first": "You notice first",
+    "open": "Open full size",
+    "desktop": "Desktop",
+    "phone": "Phone",
+    "replay": "Replay",
+    "light": "Light",
+    "dark": "Dark",
+    "level": "Level"
+  },
+  "concepts": [
+    { "id": "a", "name": "Chart table", "idea": "A paper sea chart under a lamp: soundings, contour lines and a pencil course.",
+      "first": "Depth contours that drift like a tide behind the headline.", "colors": ["#f4efe4", "#1c2b33", "#0f6b7a", "#c9772b", "#8b949a"],
+      "display": "Fraunces", "text": "Inter", "src": "a/index.html" },
+    { "id": "b", "name": "Bridge at night", "idea": "The instruments of a ship's bridge in the dark: thin lit lines, exact numbers.",
+      "first": "A slow form of light that turns with your cursor.", "colors": ["#070b0e", "#e9f0ee", "#3fd0bb", "#ff9d4d", "#22303a"],
+      "display": "Space Grotesk", "text": "IBM Plex Sans", "src": "b/index.html" },
+    { "id": "c", "name": "Harbour morning", "idea": "Flat calm water at first light: wide, quiet, a single warm line on the horizon.",
+      "first": "Water that ripples where you touch it.", "colors": ["#eef3f4", "#16252b", "#2f7f93", "#e58f5a", "#a9bcc2"],
+      "display": "Instrument Serif", "text": "Inter", "src": "c/index.html" }
+  ]
+}
+</script>
+<style>
+  :root {
+    --bg: #f2f3f1; --panel: #ffffff; --line: #d7dbd8; --text: #141917; --muted: #5a645f; --mark: #141917; --on-mark: #ffffff;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d100f; --panel: #151a18; --line: #2a322f; --text: #e9eeeb; --muted: #9aa6a0; --mark: #e9eeeb; --on-mark: #0d100f; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; padding: 24px clamp(16px, 3vw, 40px) 16px; }
+  h1 { font-size: clamp(20px, 2.4vw, 30px); line-height: 1.15; margin: 0; letter-spacing: -.01em; }
+  h1 small { display: block; font-size: 13px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .intro { margin: 6px 0 0; color: var(--muted); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tools button, .open {
+    font: 500 13px/1 system-ui, sans-serif; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 999px; padding: 9px 14px; cursor: pointer; text-decoration: none;
+  }
+  .tools button[aria-pressed="true"] { background: var(--mark); color: var(--on-mark); border-color: var(--mark); }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(12px, 1.6vw, 24px); padding: 8px clamp(16px, 3vw, 40px) 40px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  article { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+  .stage { position: relative; background: var(--bg); border-bottom: 1px solid var(--line); overflow: hidden; cursor: zoom-in; }
+  .stage iframe { border: 0; display: block; transform-origin: 0 0; background: #fff; pointer-events: none; }
+  .big .stage iframe { pointer-events: auto; }
+  .stage.phone { display: grid; justify-content: center; }
+  .meta { padding: 16px 18px 18px; display: grid; gap: 10px; align-content: start; }
+  .name { display: flex; align-items: baseline; gap: 10px; }
+  .letter { font: 700 13px/1 system-ui, sans-serif; width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--mark); color: var(--on-mark); flex: none; }
+  h2 { font-size: 19px; margin: 0; }
+  .idea { margin: 0; }
+  .first { margin: 0; color: var(--muted); }
+  .first b { color: var(--text); font-weight: 600; }
+  .chips { display: flex; gap: 6px; }
+  .chips span { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); }
+  .type { color: var(--muted); font-size: 13px; }
+  .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  /* One concept large: the others step back. */
+  body.zoom main { grid-template-columns: 1fr; }
+  body.zoom article:not(.big) { display: none; }
+  body.zoom .stage { cursor: zoom-out; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1><small id="title"></small><span id="app"></span></h1>
+    <p class="intro" id="intro"></p>
+  </div>
+  <div class="tools" role="group" aria-label="View">
+    <button type="button" id="desktop" aria-pressed="true"></button>
+    <button type="button" id="phone" aria-pressed="false"></button>
+    <button type="button" id="light" aria-pressed="false"></button>
+    <button type="button" id="dark" aria-pressed="false"></button>
+    <button type="button" id="replay"></button>
+  </div>
+</header>
+<main id="cards"></main>
+<script>
+(() => {
+  const board = JSON.parse(document.getElementById('board').textContent);
+  const label = board.labels;
+  const SIZE = { desktop: [1280, 800], phone: [390, 760] };
+  let view = 'desktop';
+  let theme = '';
+  const text = (id, value) => { document.getElementById(id).textContent = value; };
+  text('title', label.title); text('app', board.app);
+  text('intro', `${label.intro} ${label.level} ${board.level}: ${board.levelName}.`);
+  for (const id of ['desktop', 'phone', 'light', 'dark', 'replay']) text(id, label[id]);
+  document.title = `${label.title} ${board.app}`;
+
+  const cards = document.getElementById('cards');
+  const src = (concept) => concept.src + (theme ? `?theme=${theme}` : '');
+  for (const [index, concept] of board.concepts.entries()) {
+    const card = document.createElement('article');
+    card.innerHTML = `
+      <div class="stage" tabindex="0" role="button"><iframe title="" loading="lazy"></iframe></div>
+      <div class="meta">
+        <div class="name"><span class="letter"></span><h2></h2></div>
+        <p class="idea"></p>
+        <p class="first"><b></b> <span></span></p>
+        <div class="chips"></div>
+        <div class="foot"><span class="type"></span><a class="open" target="_blank" rel="noopener"></a></div>
+      </div>`;
+    card.querySelector('.letter').textContent = concept.id.toUpperCase();
+    card.querySelector('h2').textContent = concept.name;
+    card.querySelector('.idea').textContent = concept.idea;
+    card.querySelector('.first b').textContent = `${label.first}:`;
+    card.querySelector('.first span').textContent = concept.first;
+    card.querySelector('.type').textContent = `${concept.display} / ${concept.text}`;
+    const frame = card.querySelector('iframe');
+    frame.title = `${concept.id.toUpperCase()}: ${concept.name}`;
+    const open = card.querySelector('.open');
+    open.textContent = label.open;
+    for (const colour of concept.colors) {
+      const chip = document.createElement('span');
+      chip.style.background = colour;
+      chip.title = colour;
+      card.querySelector('.chips').append(chip);
+    }
+    const stage = card.querySelector('.stage');
+    const zoom = () => { const on = !card.classList.contains('big'); document.body.classList.toggle('zoom', on); card.classList.toggle('big', on); fit(); };
+    stage.addEventListener('click', (event) => { if (!card.classList.contains('big') || event.target === stage) zoom(); });
+    stage.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); zoom(); } });
+    card.dataset.index = index;
+    card.concept = concept;
+    cards.append(card);
+  }
+
+  // The preview keeps its real size and is scaled to the card, so type and spacing stay true.
+  function fit() {
+    for (const card of cards.children) {
+      const stage = card.querySelector('.stage');
+      const frame = card.querySelector('iframe');
+      const [width, height] = SIZE[view];
+      stage.classList.toggle('phone', view === 'phone');
+      const room = stage.clientWidth || card.clientWidth;
+      const scale = view === 'phone' ? Math.min(1, room / width, (innerHeight * 0.82) / height) : room / width;
+      frame.style.width = `${width}px`;
+      frame.style.height = `${height}px`;
+      frame.style.transform = `scale(${scale})`;
+      stage.style.height = `${height * scale}px`;
+      frame.style.marginRight = `${-(width - width * scale)}px`;
+    }
+  }
+  function load() {
+    for (const card of cards.children) {
+      card.querySelector('iframe').src = src(card.concept);
+      card.querySelector('.open').href = src(card.concept);
+    }
+  }
+  function press(id, on) { document.getElementById(id).setAttribute('aria-pressed', String(on)); }
+  function setView(next) { view = next; press('desktop', view === 'desktop'); press('phone', view === 'phone'); fit(); }
+  function setTheme(next) { theme = theme === next ? '' : next; press('light', theme === 'light'); press('dark', theme === 'dark'); load(); }
+
+  document.getElementById('desktop').addEventListener('click', () => setView('desktop'));
+  document.getElementById('phone').addEventListener('click', () => setView('phone'));
+  document.getElementById('light').addEventListener('click', () => setTheme('light'));
+  document.getElementById('dark').addEventListener('click', () => setTheme('dark'));
+  document.getElementById('replay').addEventListener('click', load);
+  addEventListener('resize', fit);
+  addEventListener('keydown', (event) => {
+    if (event.target.closest('input, textarea')) return;
+    const key = event.key.toLowerCase();
+    if (['1', '2', '3'].includes(key) && cards.children[key - 1]) {
+      const card = cards.children[key - 1];
+      for (const other of cards.children) other.classList.toggle('big', other === card);
+      document.body.classList.add('zoom');
+      fit();
+    } else if (key === 'escape') {
+      document.body.classList.remove('zoom');
+      for (const card of cards.children) card.classList.remove('big');
+      fit();
+    } else if (key === 'd') setView('desktop');
+    else if (key === 'p') setView('phone');
+    else if (key === 'r') load();
+  });
+  load();
+  fit();
+})();
+</script>
+</body>
+</html>
