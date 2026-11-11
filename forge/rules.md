@@ -191,6 +191,9 @@ tables are in `../forge/levels.md`; four things have a level: the look
   and never more. Level 2 gets no 3D "as a bonus"; level 5 gets no fades
   passed off as a journey. The gate checks it:
   `python3 ../forge/level.py check <part>`.
+- Libraries and fonts reach the app through its own package manager,
+  never from a CDN or another host. At level 4 and 5 that includes
+  Three.js, installed without asking again: the level was the user's yes.
 - The user may change a level at any time; record the new one the same way.
 
 ## Where things live

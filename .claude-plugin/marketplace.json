@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "bugforge",
-      "description": "Build, audit and improve web apps with Claude: recon, plan, design, build, dashboard, motion, test, diff, brand, launch, pack, plus audit, inspect, compare, improve and a security gate. A go per phase, or auto mode.",
+      "description": "Build, audit and improve web apps with Claude, at the level you pick from 1 (Subtle) to 5 (Cinematic): research, plan, design with three moving concepts and a 3D scene kit, build, check (tests and a security gate), improve and launch. Every change shows on your own localhost. A go per phase, or auto mode.",
       "source": "./",
       "category": "productivity",
       "homepage": "https://github.com/253UgurSahin/BugForge"

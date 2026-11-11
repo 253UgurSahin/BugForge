@@ -8,7 +8,7 @@ The comment at the top of stage.js, lazy.js and glsl.js must name everything the
 because scene authors work from that comment. The folder also has to pass motioncheck.py.
 
 stage.js and lazy.js are also run, in Node with a make-believe browser and a stand-in for
-three.js (the repo does not ship three): the loop, pausing, reduced motion, the theme, the
+three.js (the kit ships without three; only the gallery has a copy): the loop, pausing, reduced motion, the theme, the
 pointer, quality, the fallback and destroy(), and for lazy.js that nothing loads too early.
 Those tests need Node and are skipped without it. What only a real browser can show (real WebGL,
 real pixels) is proved by hand with Playwright when the kit changes, not here."""
