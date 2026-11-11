@@ -7,15 +7,16 @@
      basins, the margin), no line and no letter. "day" on the day paper; "night" is the night print's tints
      over white, so it reads as how much each tint darkens the sheet the red lamp lights.
    - ink(): every line, sign and letter of the day print (contours, soundings, names, buoys, lights, the
-     rose, the neat line), over nothing: the colours with their coverage (premultiplied).
-   - pencil(): the pencilled course, its fixes, times, bearings and notes, as coverage (a byte a pixel).
+     rose, the neat line) and the pencil (the course, its fixes, times, bearings and notes, its line
+     clean, so it stays a pencil line however close the camera comes), over nothing: the colours with
+     their coverage (premultiplied).
    How: the SVG is put together again with the page's chart rules (every top-level `.chart` rule of the
    stylesheets) and the colour tokens of one theme, read from the `:root` and `:root[data-theme="dark"]`
    rules of tokens.css, so day and night can both be printed whatever theme the page shows now. The fonts go
    in as data, read from the page's own font files (same origin, no other host). The SVG becomes an image,
    the image is drawn on a canvas at the size asked for, so the print is as sharp as the camera comes close.
 
-   chartPrint(svg, { width }) -> { width, height, tokens, base(theme, width), ink(), pencil() } */
+   chartPrint(svg, { width }) -> { width, height, tokens, base(theme, width), ink() } */
 
 const THEMES = { day: ":root", night: ':root[data-theme="dark"]' };
 const breath = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -95,10 +96,8 @@ const LAYER = {
     .chart :is(${INKS}) { display: none !important; }
     .chart .c-neat > :not(.paper) { display: none !important; }`,
   ink: `.chart .c-sea path, .chart .c-land path, .chart .c-basin path { fill: none !important; }
-    .chart .c-neat .paper, .chart .c-pencil { display: none !important; }`,
-  pencil: `.chart > :not(defs):not(.c-pencil) { display: none !important; }
-    .chart .c-pencil { stroke: #000 !important; stroke-opacity: 1 !important; filter: none !important; }
-    .chart .c-pencil text, .chart .c-pencil .dot { fill: #000 !important; fill-opacity: 1 !important; }`,
+    .chart .c-neat .paper { display: none !important; }
+    .chart .c-pencil { filter: none !important; }`,
 };
 
 export function chartPrint(svg, { width = 4096 } = {}) {
@@ -127,7 +126,7 @@ export function chartPrint(svg, { width = 4096 } = {}) {
       const canvas = document.createElement("canvas");
       canvas.width = w;
       canvas.height = h;
-      const g = canvas.getContext("2d", { willReadFrequently: layer === "pencil" });
+      const g = canvas.getContext("2d");
       if (fill) { g.fillStyle = fill; g.fillRect(0, 0, w, h); }
       // in bands, with a breath between them, so the page never waits long for one big drawing
       const bands = Math.max(1, Math.ceil(h / 1024));
@@ -149,19 +148,7 @@ export function chartPrint(svg, { width = 4096 } = {}) {
     base(theme, w = Math.min(width, 2048)) {
       return paint(theme, "base", w, theme === "night" ? "#ffffff" : (tokens.day["--color-bg"] || "#f2ebdd"));
     },
-    /* every line, sign and letter of the day print, over nothing */
+    /* every line, sign and letter of the day print, and the pencil, over nothing */
     ink() { return paint("day", "ink", width, null); },
-    /* the pencil alone, read back as coverage, row 0 at the top */
-    async pencil() {
-      const canvas = await paint("day", "pencil", width, null);
-      const g = canvas.getContext("2d"), w = canvas.width, h = canvas.height, out = new Uint8Array(w * h);
-      for (let y = 0; y < h; y += 512) {
-        const rows = Math.min(512, h - y), data = g.getImageData(0, y, w, rows).data;
-        for (let i = 0, j = 3, k = y * w; i < w * rows; i++, j += 4) out[k + i] = data[j];
-        await breath();
-      }
-      canvas.width = canvas.height = 1;
-      return out;
-    },
   };
 }

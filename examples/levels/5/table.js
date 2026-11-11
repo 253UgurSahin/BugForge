@@ -10,8 +10,8 @@
      particles, on open water only), then the ink over the water, so every line and word stays as sharp
      and dark as printed and in register with the banks;
    - the safe window laid along the pencil line as the page draws a window everywhere (magenta hatch with
-     solid edges), and the boat at the head of it; then the pencil over all of it: the course, the fixes,
-     the times and bearings, exactly as pencilled on the drawn chart;
+     solid edges, the pencil line itself left clear), and the boat at the head of it; the pencil, its
+     course, fixes, times and bearings, is printed with the ink, exactly as pencilled on the drawn chart;
    - by night the red lamp is all the light there is: the sheet glows where it falls and goes dark toward
      its edges, the tints darken it as on the page's night chart, the ink is dark on the red.
    The opening, at the top of the page: the 3D sheet first draws itself exactly where the drawn chart
@@ -23,7 +23,7 @@
 
    mount(container, options) -> { stage, setProgress, setData, setPointer, setStory, pause, resume,
    destroy, onCamera, bedAt, level, night, surfaceAt, boatPoint, course }. Options: relief (seabed.js
-   reliefGrid()), print { base, baseNight, ink, pencil, width, height, tokens } (print.js), course (chart
+   reliefGrid()), print { base, baseNight, ink, width, height, tokens } (print.js), course (chart
    points of the pencil line), story ({ p, lamp: [x, z], lampY, reach, night, boat, hatch, follow } at
    points p of the journey), window (the stretch of the course sailed inside the safe window), hero
    { target, dist, el, az, fov, shift } and heroPhone (the hero's view, as an orbit, with its lens shift).
@@ -100,10 +100,10 @@ ${simplex2D}
 ${grain}
 ${reliefGLSL}
 ${poolGLSL}
-uniform sampler2D uBase, uBaseNight, uInk, uPencil, uWindTex;
+uniform sampler2D uBase, uBaseNight, uInk, uWindTex;
 uniform float uNight, uLampOn, uPosterLamp, uWater, uLevel, uLevelY, uRipple, uWindOn, uMaxH;
 uniform vec2 uWind, uStreak, uDrift, uHaze;
-uniform vec3 uPaper, uLampRatio, uWaterTint, uShoal, uWet, uPencil0, uPencil1, uInk1, uMagenta1, uWindow0, uWindow1, uRoom0;
+uniform vec3 uPaper, uLampRatio, uWaterTint, uShoal, uInk1, uMagenta1, uWindow0, uWindow1, uRoom0;
 uniform vec4 uCourse[COURSE_POINTS];   // xy: chart point, z: distance along the course to it
 uniform float uBoat, uWinFrom, uWinTo, uHatchOn, uBoatOn;
 uniform vec2 uBoatAt;
@@ -152,6 +152,10 @@ void main() {
   vec3 L = normalize(uLampPos - P);
   vec3 V = normalize(cameraPosition - P);
   float px = max(length(fwidth(chart)), 1e-4);    // one pixel in chart units, taken before any branch
+  float depth = uLevel - bed.g;                   // metres of water over this point now
+  float aw = fwidth(depth) + 0.002;
+  float wet = smoothstep(-aw, aw, depth) * uWater;
+  bool showDay = uNight < 0.999, showNight = uNight > 0.001;
 
   // ---- the light. The room from the north-west, as a cartographer shades relief; the lamp: its pool,
   // the slopes that face it, the shadows of the relief away from it. At the very start (uPosterLamp)
@@ -163,23 +167,9 @@ void main() {
 #if STEPS > 0
   if (uRise > 0.02) sh = mix(1.0, shadowAt(P + n * 0.003, L), uRise);
 #endif
-  vec3 base = texture(uBase, uv).rgb;
-  float paper = 1.0 - smoothstep(0.004, 0.03, distance(base, uPaper));
-  float pool = dayPool(P.xz) * uLampOn * mix(1.0, paper, uPosterLamp);
-  float lampLit = mix(1.0, clamp(face, 0.0, 1.25) * mix(0.3, 1.0, sh), uRise);
-  // the room keeps the paper as the page shows it; the lamp warms and brightens its pool, and its
-  // light is what the relief's shadows take away
-  vec3 dayLight = vec3(mix(1.0, 0.95, uRise) * hill);
-  dayLight *= mix(vec3(1.0), uLampRatio * mix(1.0, 1.05, uRise), pool * lampLit);
-  vec3 day = base * dayLight;
-
-  vec3 glow = nightGlow(P.xz) * mix(1.0, mix(0.72, 1.12, clamp(face, 0.0, 1.2)) * mix(0.62, 1.0, sh), uRise);
-  vec3 night = glow * texture(uBaseNight, uv).rgb;
 
   // ---- the water of the tide: a plane at its height, met by the eye's ray on its way to the bed
-  float depth = uLevel - bed.g;                   // metres of water over this point now
-  float aw = fwidth(depth) + 0.002;
-  float wet = smoothstep(-aw, aw, depth) * uWater;
+  float glint = 0.0, foam = 0.0, shallow = 0.0, wa = 0.0;
   if (wet > 0.001) {
     float reach = clamp((uLevelY - P.y) / max(V.y * length(cameraPosition - P), 1e-4), 0.0, 1.0);
     vec3 Q = P + (cameraPosition - P) * reach;
@@ -189,19 +179,14 @@ void main() {
            + snoiseGrad(Q.xz * vec2(6.1, 8.4) - w.yx * uRipple * 0.8) * 0.3;
     vec3 wn = normalize(vec3(-g.y * (0.008 + 0.022 * strength), 1.0, -g.z * (0.008 + 0.022 * strength)));
     vec3 Vq = normalize(cameraPosition - Q), Lq = normalize(uLampPos - Q);
-    float fres = pow(1.0 - clamp(dot(wn, Vq), 0.0, 1.0), 5.0);
     float hv = clamp(dot(wn, normalize(Lq + Vq)), 0.0, 1.0);
-    float glint = (pow(hv, 280.0) * 2.6 + pow(hv, 48.0) * 0.4) * (0.25 + 0.75 * sh);
+    glint = (pow(hv, 280.0) * 2.6 + pow(hv, 48.0) * 0.4) * (0.25 + 0.75 * sh) * wet;
     // the shoal tint deepens where the water stands shallow over a bank, a clearer wash over the deeps:
     // the banks surface and flood with the tide, with no line drawn of their own
-    float shallow = 1.0 - smoothstep(0.6, 3.2, depth);
-    float a = (0.05 + 0.2 * shallow) * smoothstep(0.0, 0.35, depth + 0.1);
-    vec3 dayWater = mix(uWaterTint, uShoal, shallow * 0.55) * dayLight;
-    day = mix(day, dayWater, a * wet);
-    day += (uLampRatio * 0.9 * glint * (0.35 + 0.65 * pool) + vec3(0.9, 0.93, 0.95) * fres * 0.06) * wet;
-    night = night * mix(1.0, 0.9, wet * smoothstep(0.0, 2.0, depth)) + glow * glint * 0.5 * wet;
-    // the wind over the water: the points' sharp cores, drawn out down the wind into short streaks
-    if (uWindOn > 0.0) {
+    shallow = 1.0 - smoothstep(0.6, 3.2, depth);
+    wa = (0.05 + 0.2 * shallow) * smoothstep(0.0, 0.35, depth + 0.1) * wet;
+    // the wind over the water by day: the points' sharp cores, drawn out down the wind into short streaks
+    if (uWindOn > 0.0 && showDay) {
       vec2 at = gl_FragCoord.xy / uResolution;
       float pts = 0.0, wsum = 0.0;
       for (int i = 0; i < STREAK_TAPS; i++) {
@@ -212,62 +197,74 @@ void main() {
       vec2 crossWind = vec2(-w.y, w.x);
       vec2 lanePos = vec2(dot(chart, crossWind) * 0.034, dot(chart, w) * 0.0045 - uRipple * 0.05);
       float lane = smoothstep(-0.1, 0.6, snoise(lanePos) * 0.75 + snoise(lanePos * 2.3 + 4.1) * 0.35);
-      float foam = clamp(pts * 2.0 / wsum, 0.0, 0.45) * uWindOn * smoothstep(0.8, 2.5, depth) * mix(0.15, 1.0, lane) * wet;
-      day = mix(day, vec3(1.0) * dayLight, foam * 0.5);
+      foam = clamp(pts * 2.0 / wsum, 0.0, 0.45) * uWindOn * smoothstep(0.8, 2.5, depth) * mix(0.15, 1.0, lane) * wet;
     }
   }
 
-  // ---- the ink, over the water: the day print's colours; by night dark on the red (the paper halos of
-  // the figures go, the magenta of the lights and the rose turns to the lamp's dim red)
   vec4 ink = texture(uInk, uv);
-  if (ink.a > 0.003) {
-    vec3 c = ink.rgb / ink.a;
-    float light = dot(c, vec3(0.3, 0.59, 0.11));
-    day = mix(day, toLinear(c) * mix(vec3(1.0), dayLight, 0.4), ink.a);
-    float magenta = clamp((c.r - c.g) * 3.0 - 0.4, 0.0, 1.0);
-    float halo = smoothstep(0.62, 0.86, light);
-    night = mix(night, mix(uInk1, uMagenta1 * (0.6 + 0.6 * glow / max(uNightLamp, vec3(0.01))), magenta), ink.a * (1.0 - halo) * 0.94);
-  }
-
-  // ---- the safe window along the pencil line: magenta hatch with solid edges; as it opens it sweeps out
-  // from the pier head; behind the boat full, ahead of it fainter
+  vec3 c = ink.a > 0.003 ? ink.rgb / ink.a : vec3(0.0);
   vec2 cr = course(chart);
+  float band = 0.0, hatch = 0.0, rim = 0.0;
   if (cr.x < 12.0 && uHatchOn > 0.002) {
+    // the safe window along the pencil line: magenta hatch with solid edges; as it opens it sweeps out
+    // from the pier head; behind the boat full, ahead of it fainter; the pencil line itself stays clear
     float winHead = uWinFrom + (uWinTo - uWinFrom) * smoothstep(0.0, 0.6, uHatchOn);
     float corridor = 1.0 - smoothstep(7.0, 7.0 + max(px * 1.2, 0.6), cr.x);
     float inWin = smoothstep(uWinFrom - 2.0, uWinFrom + 2.0, cr.y) * (1.0 - smoothstep(winHead - 6.0, winHead, cr.y));
     float ahead = smoothstep(uBoat - 1.5, uBoat + 1.5, cr.y) * step(uWinFrom + 1.0, uBoat);
     float on = min(1.0, uHatchOn * 1.25);
-    float band = corridor * inWin * on * mix(1.0, 0.5, ahead);
+    band = corridor * inWin * on * mix(1.0, 0.5, ahead);
     float stripe = dot(chart, vec2(0.78801075, 0.61566148)) / 4.0;   // 38 degrees, every 4 units
     float q = abs(fract(stripe) - 0.5) * 2.0;
     float fs = 1.5 * px / 4.0;
-    float hatch = smoothstep(0.76 - fs, 0.76 + fs, q);
-    float rim = (1.0 - smoothstep(0.35, 0.35 + px, abs(cr.x - 7.0))) * inWin * on;
+    hatch = smoothstep(0.76 - fs, 0.76 + fs, q) * smoothstep(1.3, 2.6, cr.x);
+    rim = (1.0 - smoothstep(0.35, 0.35 + px, abs(cr.x - 7.0))) * inWin * on;
+  }
+  float r = length(chart - uBoatAt);
+  float boatHalo = (1.0 - smoothstep(4.6, 4.6 + px + 0.2, r)) * uBoatOn;
+  float boatDot = (1.0 - smoothstep(3.1, 3.1 + px + 0.2, r)) * uBoatOn;
+
+  vec3 color = vec3(0.0);
+  if (showDay) {
+    vec3 base = texture(uBase, uv).rgb;
+    float paper = 1.0 - smoothstep(0.004, 0.03, distance(base, uPaper));
+    float pool = dayPool(P.xz) * uLampOn * mix(1.0, paper, uPosterLamp);
+    float lampLit = mix(1.0, clamp(face, 0.0, 1.25) * mix(0.3, 1.0, sh), uRise);
+    // the room keeps the paper as the page shows it; the lamp warms and brightens its pool, and its
+    // light is what the relief's shadows take away
+    vec3 dayLight = vec3(mix(1.0, 0.95, uRise) * hill);
+    dayLight *= mix(vec3(1.0), uLampRatio * mix(1.0, 1.05, uRise), pool * lampLit);
+    vec3 day = base * dayLight;
+    day = mix(day, mix(uWaterTint, uShoal, shallow * 0.55) * dayLight, wa);
+    day += uLampRatio * 0.9 * glint * (0.35 + 0.65 * pool);
+    day = mix(day, dayLight, foam * 0.5);
+    // the ink over the water, lit as the paper is; then the window's hatch, then the boat
+    day = mix(day, toLinear(c) * mix(vec3(1.0), dayLight, 0.4), ink.a);
     day = mix(day, uWindow0 * dayLight, band * 0.07);
     day = mix(day, uWindow0 * dayLight, band * hatch * 0.72);
     day = mix(day, uWindow0 * dayLight, rim * 0.65);
-    night = mix(night, uWindow1, band * hatch * 0.32 + rim * 0.3);
+    day = mix(day, uPaper * dayLight * 1.04, boatHalo);
+    day = mix(day, uWindow0, boatDot);
+    color = day;
   }
-
-  // ---- the pencil over everything: the course, the fixes, the times and bearings, as pencilled
-  // (graphite: a little broken by the grain of the paper, so a close look shows a pencil and not a pen)
-  float cov = texture(uPencil, uv).r * (0.8 + 0.2 * smoothstep(-0.5, 0.6, snoise(chart * 2.1)));
-  day = mix(day, uPencil0 * mix(vec3(1.0), dayLight, 0.3), clamp(cov * 1.1, 0.0, 0.88));
-  night = mix(night, uPencil1, clamp(cov * 1.25, 0.0, 0.95));
-
-  // ---- the boat: a dot in the window's colour at the head of the band, ringed in paper
-  if (uBoatOn > 0.01) {
-    float r = length(chart - uBoatAt);
-    float halo = 1.0 - smoothstep(4.6, 4.6 + px + 0.2, r);
-    float dotm = 1.0 - smoothstep(3.1, 3.1 + px + 0.2, r);
-    day = mix(day, uPaper * dayLight * 1.04, halo * uBoatOn);
-    day = mix(day, uWindow0, dotm * uBoatOn);
-    night = mix(night, uNightLampMid * 0.6, halo * uBoatOn);
-    night = mix(night, uWindow1, dotm * uBoatOn);
+  if (showNight) {
+    // by night the red lamp is all the light there is: the sheet glows where it falls and goes dark
+    // toward its edges, the tints darken it, the ink is dark on the red (the paper halos of the figures
+    // go, the magenta of the lights and the rose turns to the lamp's dim red)
+    vec3 glow = nightGlow(P.xz) * mix(1.0, mix(0.72, 1.12, clamp(face, 0.0, 1.2)) * mix(0.62, 1.0, sh), uRise);
+    vec3 night = glow * texture(uBaseNight, uv).rgb;
+    night = night * mix(1.0, 0.9, wet * smoothstep(0.0, 2.0, depth)) + glow * glint * 0.5;
+    if (ink.a > 0.003) {
+      float light = dot(c, vec3(0.3, 0.59, 0.11));
+      float magenta = clamp((c.r - c.g) * 3.0 - 0.4, 0.0, 1.0);
+      float halo = smoothstep(0.62, 0.86, light);
+      night = mix(night, mix(uInk1, uMagenta1 * (0.6 + 0.6 * glow / max(uNightLamp, vec3(0.01))), magenta), ink.a * (1.0 - halo) * 0.94);
+    }
+    night = mix(night, uWindow1, band * hatch * 0.3 + rim * 0.2);
+    night = mix(night, uNightLampMid * 0.6, boatHalo);
+    night = mix(night, uWindow1, boatDot);
+    color = mix(color, night, uNight);
   }
-
-  vec3 color = mix(day, night, uNight);
   // the far side of the sheet melts a little into the room, so a low view has depth and no hard edge
   float haze = smoothstep(uHaze.x, uHaze.y, distance(cameraPosition, P)) * 0.4;
   color = mix(color, mix(uRoom0, uNightBg, uNight), haze);
@@ -414,18 +411,12 @@ export function mount(container, options = {}) {
   const scene = stage.scene;
   const renderer = stage.renderer;
   // sharp at a slant: anisotropic filtering, cheap on a graphics chip, costly where it is drawn in software
-  const aniso = Math.min(stage.quality.name === "low" ? 2 : fine ? 16 : 8, renderer.capabilities.getMaxAnisotropy());
+  const aniso = Math.min(stage.quality.name === "low" ? 1 : fine ? 16 : 8, renderer.capabilities.getMaxAnisotropy());
   const relief = reliefTexture(o.relief);
   const bed = bedSampler(o.relief);
   const baseTex = canvasTexture(o.print.base, { srgb: true, aniso });
   const nightTex = canvasTexture(o.print.baseNight, { srgb: true, aniso });
   const inkTex = canvasTexture(o.print.ink, { srgb: false, premultiplied: true, aniso });
-  const pencilTex = new THREE.DataTexture(o.print.pencil, o.print.width, o.print.height, THREE.RedFormat, THREE.UnsignedByteType);
-  pencilTex.minFilter = THREE.LinearMipmapLinearFilter;
-  pencilTex.magFilter = THREE.LinearFilter;
-  pencilTex.generateMipmaps = true;
-  pencilTex.anisotropy = aniso;
-  pencilTex.needsUpdate = true;
 
   // ---- the colours: the day and the night print's own tokens, whatever the page's theme
   const day = o.print.tokens.day, nightT = o.print.tokens.night, css = getComputedStyle(container);
@@ -434,8 +425,7 @@ export function mount(container, options = {}) {
   const C = {
     paper: paperC, lampRatio: new THREE.Vector3(lampC.r / paperC.r, lampC.g / paperC.g, lampC.b / paperC.b),
     water: colour(day["--color-water"], "#cde0e2"), shoal: colour(day["--color-chart-shoal"], "#bedae0"),
-    wet: colour(day["--color-surface"], "#faf6ec"), pencil0: colour(day["--color-chart-pencil"], "#403d3b"),
-    pencil1: colour(nightT["--color-chart-pencil"], "#120504"), ink1: colour(nightT["--color-chart-ink"], "#170705"),
+    ink1: colour(nightT["--color-chart-ink"], "#170705"),
     magenta1: colour(nightT["--color-chart-magenta"], "#8f3525"), window0: colour(day["--color-accent"], "#a8155b"),
     window1: colour(nightT["--color-accent"], "#ff6a4d"), nightBg: colour(nightT["--color-bg"], "#130c0a"),
     nightLamp: colour(nightT["--color-lamp"], "#a62d17"), nightLampMid: colour(nightT["--color-lamp-mid"], "#57170d"),
@@ -457,12 +447,12 @@ export function mount(container, options = {}) {
       ...stage.uniforms, ...shared,
       uRelief: { value: relief.texture }, uRise: { value: stage.still ? 1 : 0 }, uMaxH: { value: relief.maxH + 0.01 },
       uOpen: { value: new THREE.Matrix4() },
-      uBase: { value: baseTex }, uBaseNight: { value: nightTex }, uInk: { value: inkTex }, uPencil: { value: pencilTex },
+      uBase: { value: baseTex }, uBaseNight: { value: nightTex }, uInk: { value: inkTex },
       uWindTex: { value: null }, uWindOn: { value: 1 }, uStreak: { value: new THREE.Vector2() }, uDrift: { value: new THREE.Vector2() },
       uPosterLamp: { value: stage.still ? 0 : 1 }, uWater: { value: stage.still ? 1 : 0 }, uLevel: { value: 1 }, uLevelY: { value: 0 },
       uRipple: { value: 0 }, uWind: { value: new THREE.Vector2(0.4, -0.4) }, uHaze: { value: new THREE.Vector2(30, 60) },
       uPaper: { value: C.paper }, uLampRatio: { value: C.lampRatio }, uWaterTint: { value: C.water }, uShoal: { value: C.shoal },
-      uWet: { value: C.wet }, uPencil0: { value: C.pencil0 }, uPencil1: { value: C.pencil1 }, uInk1: { value: C.ink1 },
+      uInk1: { value: C.ink1 },
       uMagenta1: { value: C.magenta1 }, uWindow0: { value: C.window0 }, uWindow1: { value: C.window1 }, uRoom0: { value: C.paper },
       uCourse: { value: course.map((p) => new THREE.Vector4(p[0], p[1], p[2], 0)) },
       uBoat: { value: 0 }, uBoatAt: { value: new THREE.Vector2(course[0][0], course[0][1]) }, uWinFrom: { value: 0 }, uWinTo: { value: 1e5 },
@@ -576,7 +566,7 @@ export function mount(container, options = {}) {
     const [sx, sz] = quality.pick([160, 144], [256, 230], [320, 288]);
     sheet.geometry.dispose();
     sheet.geometry = new THREE.PlaneGeometry(SHEET.w, SHEET.d, sx, sz).rotateX(-Math.PI / 2);
-    const steps = quality.pick(5, 8, 12), taps = quality.pick(8, 10, 12);
+    const steps = quality.pick(4, 8, 12), taps = quality.pick(6, 10, 12);
     if (paper.defines.STEPS !== steps || paper.defines.STREAK_TAPS !== taps) {
       paper.defines.STEPS = steps; paper.defines.STREAK_TAPS = taps; paper.needsUpdate = true;
     }
@@ -760,7 +750,7 @@ export function mount(container, options = {}) {
     paper.uniforms.uBoat.value = now.boat;
     paper.uniforms.uBoatAt.value.set(...along(now.boat));
     paper.uniforms.uHatchOn.value = now.hatch;
-    paper.uniforms.uBoatOn.value = smooth(0.3, 0.7, now.hatch) * (now.boat > 1 ? 1 : 0);
+    paper.uniforms.uBoatOn.value = smooth(0.5, 4, now.boat);              // the boat shows once it has cast off
   });
 
   const handle = stage.handle({
@@ -798,7 +788,7 @@ export function mount(container, options = {}) {
       sheet.onBeforeRender = () => {};
       onCamera.length = 0;
       if (handle.dispose) handle.dispose();
-      for (const t of [relief.texture, baseTex, nightTex, inkTex, pencilTex]) t.dispose();
+      for (const t of [relief.texture, baseTex, nightTex, inkTex]) t.dispose();
       wind.destroy();
     },
   });

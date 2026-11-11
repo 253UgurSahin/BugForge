@@ -275,16 +275,16 @@ function showChapter(index) {
 }
 
 // the hero's clock: once the opening is over and while the trip waits at its first chapter, the hours
-// run on from now toward the casting off (about four seconds an hour), hold, and start again. It rides
-// on the stage's own frames, so it stops whenever the scene does (reduced motion, paused, out of sight).
+// run on from now to the casting off (two and a half seconds an hour) and stop there, the window open
+// and the water high: where the trip begins. It rides on the stage's own frames, so it stops whenever
+// the scene does (reduced motion, paused, out of sight).
 function heroClock(journeyHandle) {
   const scene = journeyHandle.scene;
-  let hour = NOW, rest = 0, ready = !scene.opening || !scene.opening();
+  let hour = NOW, ready = !scene.opening || !scene.opening();
   journeyHandle.stage.container.addEventListener("tableopen", () => { ready = true; });
   return journeyHandle.stage.onFrame((time, delta) => {
-    if (current > 0 || journeyHandle.stage.still || !ready) return;
-    if (hour >= OFF) { rest += delta; if (rest > 2.4) { hour = NOW; rest = 0; } }
-    else hour = Math.min(OFF, hour + delta / 4);
+    if (current > 0 || journeyHandle.stage.still || !ready || hour >= OFF) return;
+    hour = Math.min(OFF, hour + delta / 2.5);
     const data = dataAt(hour);
     CHAPTERS[0].params.data.splice(0, 3, ...data);      // the journey blends on from where the clock is
     CHAPTERS[0].params.hour = hour;
@@ -292,6 +292,32 @@ function heroClock(journeyHandle) {
     scene.setData(data);
     say(hour);
   });
+}
+
+/* ---- a slow device (one that needs more than about a tenth of a second for a frame, as where the scene
+   is drawn in software) does not draw the table while the page is being scrolled: a long drawing holds
+   up the page's own record of how far it is scrolled, and the strip and the slips would be placed by a
+   stale one. The table catches up as soon as the scrolling rests. A device that keeps up never pauses. */
+function restWhileScrolling(journeyHandle) {
+  const stage = journeyHandle.stage;
+  let last = 0, rest = 0, held = false;
+  const gaps = [];
+  const slow = () => {
+    if (gaps.length < 6) return false;
+    const sorted = gaps.slice().sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)] > 110;
+  };
+  stage.onFrame(() => {
+    const now = performance.now();
+    if (last && !held) { gaps.push(now - last); if (gaps.length > 12) gaps.shift(); }
+    last = now;
+  });
+  addEventListener("scroll", () => {
+    if (stage.still || !slow()) return;
+    if (!held) { held = true; journeyHandle.pause("scrolling"); }
+    clearTimeout(rest);
+    rest = setTimeout(() => { held = false; last = 0; journeyHandle.resume("scrolling"); }, 280);
+  }, { passive: true });
 }
 
 /* ---- each slip is laid on the chart as it comes in: down from the lamp, settling with a little give */
@@ -319,11 +345,19 @@ function landSlips() {
   cards.forEach((card) => seen.observe(card));
 }
 
-/* the veil over the hero lifts as its words leave; the landfall's night follows its slip on screen */
+/* the veil over the hero lifts as its words leave; the strip marks the chapter whose slip is nearest the
+   middle of the screen (read from the page itself, so it is right however far the camera lags) */
 function onScroll() {
   const vh = window.innerHeight || 1;
   const hero = steps[0] ? steps[0].getBoundingClientRect() : null;
   if (hero) section.style.setProperty("--trip-hero", (1 - smooth(0.04, 0.42, -hero.top / vh)).toFixed(3));
+  let best = 0, gap = Infinity;
+  steps.forEach((step, i) => {
+    const box = (i === 0 ? step : step.querySelector(".trip__card") || step).getBoundingClientRect();
+    const d = i === 0 ? Math.max(0, -box.top - vh * 0.35) : Math.abs(box.top + box.height / 2 - vh * 0.5);
+    if (d < gap) { gap = d; best = i; }
+  });
+  if (best !== current) showChapter(best);
 }
 function landfallNight() {
   const card = cards[cards.length - 1];
@@ -365,7 +399,7 @@ if (section && steps.length) {
     const relief = bed.reliefGrid(coarse ? 257 : 385, coarse ? 232 : 347, 4);
     await pause();
     const chart = print.chartPrint(poster, { width: coarse ? 2048 : 4096 });
-    const [base, baseNight, ink, pencil] = [await chart.base("day"), await chart.base("night"), await chart.ink(), await chart.pencil()];
+    const [base, baseNight, ink] = [await chart.base("day"), await chart.base("night"), await chart.ink()];
     if (!reduce.matches && window.scrollY < 40) await settled();
     return {
       mount: (el, options) => journey.mount(el, {
@@ -373,7 +407,7 @@ if (section && steps.length) {
         scene: (stageEl) => {
           const scene = table.mount(stageEl, {
             relief, course: COURSE, story: STORY, window: [0, EDGE], hero: HERO, heroPhone: HERO_PHONE,
-            print: { base, baseNight, ink, pencil, width: chart.width, height: chart.height, tokens: chart.tokens },
+            print: { base, baseNight, ink, width: chart.width, height: chart.height, tokens: chart.tokens },
           });
           scene.dispose = callouts(scene, stageEl.querySelector(".trip__labels"));
           return scene;
@@ -382,7 +416,7 @@ if (section && steps.length) {
     };
   }, {
     chapters: CHAPTERS,
-    inertia: 0.35,
+    inertia: 0.2,
     dwell: 0.35,
     parallax: 0.04,
     drift: 0.005,
@@ -402,10 +436,12 @@ if (section && steps.length) {
     },
     lazy: { timeout: 400, margin: "100%" },
   });
-  section.addEventListener("chapter", (event) => showChapter(event.detail.index));
   trip.ready.then((journeyHandle) => {
     live = journeyHandle;
-    if (journeyHandle && journeyHandle.stage && journeyHandle.scene && journeyHandle.scene.setStory) heroClock(journeyHandle);
+    if (journeyHandle && journeyHandle.stage && journeyHandle.scene && journeyHandle.scene.setStory) {
+      heroClock(journeyHandle);
+      restWhileScrolling(journeyHandle);
+    }
   });
 
   // the chapter marks: a table of contents that flies there
@@ -414,17 +450,6 @@ if (section && steps.length) {
     event.preventDefault();
     live.goTo(Number(a.getAttribute("data-go")));
   }));
-  // no journey running (no WebGL, before it loads, paused, or the plain chart): the chapters are still
-  // marked as they pass
-  if ("IntersectionObserver" in window) {
-    const seen = new IntersectionObserver((entries) => {
-      const runs = section.getAttribute("data-journey") === "live" && !section.hasAttribute("data-plain") && root.getAttribute("data-motion") !== "paused";
-      if (runs) return;
-      const best = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-      if (best) showChapter(steps.indexOf(best.target));
-    }, { threshold: [0.35, 0.6] });
-    steps.forEach((step) => seen.observe(step));
-  }
   landSlips();
   let ticking = 0;
   addEventListener("scroll", () => { if (!ticking) ticking = requestAnimationFrame(() => { ticking = 0; onScroll(); }); }, { passive: true });
