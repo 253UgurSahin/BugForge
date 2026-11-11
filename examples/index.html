@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BugForge gallery</title>
+<meta name="description" content="What the forge-design skill builds at each look level, from 1 Subtle to 5 Cinematic, on one made-up app, and the 3D scene kit behind levels 4 and 5.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f1ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1013" media="(prefers-color-scheme: dark)">
+<script>
+  // The theme chosen with the buttons at the top, before the first paint. No choice: the system's.
+  try { var t = localStorage.getItem("bugforge-gallery-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<style>
+/* The BugForge gallery. The idea: a temper chart. Steel that is tempered turns from pale straw to blue
+   as it gets hotter; the five look levels take those five colours, so the hotter the level, the more it
+   shows. Ink on warm steel-grey paper by day, glowing on dark steel at night. Fonts are the gallery's own
+   copies in levels/shared/fonts, so nothing loads from another host. */
+@font-face { font-family: "Instrument Sans"; src: url("levels/shared/fonts/instrument-sans/instrument-sans-latin-wdth-normal.woff2") format("woff2"); font-weight: 400 700; font-stretch: 75% 100%; font-style: normal; font-display: swap; }
+@font-face { font-family: "Chivo Mono"; src: url("levels/shared/fonts/chivo-mono/chivo-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+
+:root {
+  color-scheme: light;
+  --bg: #f3f1ec;          /* steel-grey paper, a little warm */
+  --surface: #fbfaf6;
+  --sunk: #e9e6de;
+  --border: #d3cdc1;
+  --rule: #17191c;
+  --text: #17191c;
+  --muted: #565b61;
+  --accent: #a33f10;      /* the glow of hot iron: links and focus only */
+  --frame: #e2ded4;       /* behind a clip while it loads */
+  /* the temper colours of steel, one per level */
+  --t1: #dcc06a;          /* pale straw, about 220 C */
+  --t2: #c58f34;          /* straw, about 240 C */
+  --t3: #9a582b;          /* bronze, about 260 C */
+  --t4: #6e3f8e;          /* purple, about 280 C */
+  --t5: #2c56a5;          /* blue, about 300 C */
+  --font-sans: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Chivo Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --gutter: clamp(16px, 4vw, 40px);
+  --content: 1240px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1013; --surface: #16181c; --sunk: #0a0b0d; --border: #2b2e33; --rule: #ebe8e1;
+    --text: #ebe8e1; --muted: #a39f98; --accent: #ff9659; --frame: #08090b;
+    --t1: #f1dc8c; --t2: #e5b057; --t3: #d0844c; --t4: #ad82d0; --t5: #79a0ee;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1013; --surface: #16181c; --sunk: #0a0b0d; --border: #2b2e33; --rule: #ebe8e1;
+  --text: #ebe8e1; --muted: #a39f98; --accent: #ff9659; --frame: #08090b;
+  --t1: #f1dc8c; --t2: #e5b057; --t3: #d0844c; --t4: #ad82d0; --t5: #79a0ee;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 400 1rem/1.6 var(--font-sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; overflow-x: clip;
+}
+h1, h2, h3, p, dl, dd, figure, ol, ul { margin: 0; }
+h1, h2, h3 { text-wrap: balance; }
+p, dd { text-wrap: pretty; }
+img { display: block; max-width: 100%; height: auto; }
+a { color: inherit; }
+code { font-family: var(--font-mono); font-size: 0.875em; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.wrap {
+  width: 100%; max-width: calc(var(--content) + 2 * var(--gutter)); margin-inline: auto;
+  padding-left: max(var(--gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--gutter), env(safe-area-inset-right, 0px));
+}
+.skip {
+  position: absolute; left: 16px; top: 12px; z-index: 10; padding: 10px 14px;
+  background: var(--text); color: var(--bg); text-decoration: none; transform: translateY(-200%);
+}
+.skip:focus { transform: none; }
+.label { font: 500 0.75rem/1.3 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* ------------------------------------------------------------ top bar */
+.top { border-bottom: 1px solid var(--border); }
+.top__row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 32px; padding-block: 14px; }
+.mark { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 650; font-stretch: 88%; font-size: 1.125rem; letter-spacing: -0.005em; }
+.mark svg { width: 26px; height: 26px; }
+.mark span { font-weight: 400; color: var(--muted); }
+.top nav { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-right: auto; }
+.top nav a { text-decoration: none; color: var(--muted); font-size: 0.9375rem; padding-block: 6px; }
+.top nav a:hover { color: var(--text); }
+.theme { display: inline-flex; border: 1px solid var(--border); border-radius: 3px; padding: 2px; }
+.theme button {
+  font: 500 0.75rem/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); background: none; border: 0; border-radius: 2px; padding: 8px 10px; cursor: pointer;
+}
+.theme button:hover { color: var(--text); }
+.theme button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+
+/* ------------------------------------------------------------ hero */
+.hero { display: grid; gap: clamp(36px, 5vw, 64px); padding-block: clamp(40px, 7vw, 96px) clamp(56px, 8vw, 112px); }
+.hero h1 {
+  font-weight: 680; font-stretch: 78%;
+  font-size: clamp(2.75rem, 1.5rem + 5vw, 5.75rem); line-height: 0.97; letter-spacing: -0.016em;
+  margin: 18px 0 24px;
+}
+.hero .lead { font-size: clamp(1.0625rem, 1rem + 0.35vw, 1.25rem); line-height: 1.55; color: var(--muted); max-width: 34em; }
+.hero .lead strong { color: var(--text); font-weight: 600; }
+
+.scale { margin-top: clamp(32px, 4vw, 48px); }
+.scale ol { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
+.scale li { min-width: 0; }
+.scale a { display: grid; gap: 2px; padding: 12px 2px 0 0; border-top: 8px solid var(--t); text-decoration: none; }
+.scale b { font: 650 1.75rem/1 var(--font-sans); font-stretch: 80%; }
+.scale span { font-size: 0.875rem; font-stretch: 86%; font-weight: 500; overflow-wrap: anywhere; }
+.scale small { font: 500 0.6875rem/1.3 var(--font-mono); letter-spacing: 0.04em; color: var(--muted); }
+.scale a:hover span { text-decoration: underline; text-underline-offset: 3px; }
+.scale p { margin-top: 18px; font-size: 0.875rem; color: var(--muted); max-width: 44em; }
+
+.shot { display: grid; gap: 12px; min-width: 0; }
+.frame {
+  position: relative; overflow: hidden; background: var(--frame);
+  border: 1px solid var(--border); border-radius: 4px; aspect-ratio: 16 / 10;
+}
+.frame img { width: 100%; height: 100%; object-fit: cover; }
+.frame--wide { aspect-ratio: 640 / 306; }
+.shot figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 0.9375rem; color: var(--muted); }
+.tag { font: 600 0.75rem/1.3 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); padding-left: 14px; position: relative; }
+.tag::before { content: ""; position: absolute; left: 0; top: 50%; width: 8px; height: 8px; margin-top: -4px; background: var(--t); }
+
+@media (min-width: 960px) {
+  .hero { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: center; }
+}
+
+/* ------------------------------------------------------------ sections */
+.section { padding-block: clamp(56px, 8vw, 112px); border-top: 1px solid var(--rule); }
+.section__head { display: grid; gap: 16px; margin-bottom: clamp(40px, 6vw, 72px); max-width: 46rem; }
+.section h2 { font-weight: 650; font-stretch: 80%; font-size: clamp(2rem, 1.5rem + 2vw, 3rem); line-height: 1.04; letter-spacing: -0.01em; }
+.section__head p { color: var(--muted); font-size: 1.0625rem; }
+.section__head code { color: var(--text); background: var(--sunk); padding: 2px 6px; border-radius: 2px; overflow-wrap: anywhere; }
+
+/* ------------------------------------------------------------ the levels */
+.levels { display: grid; gap: clamp(56px, 8vw, 104px); }
+.level { display: grid; gap: 28px; position: relative; padding-top: 28px; border-top: 1px solid var(--border); }
+.level::before { content: ""; position: absolute; left: 0; top: -1px; width: 120px; height: 8px; background: var(--t); }
+.level__text { display: grid; gap: 18px; align-content: start; min-width: 0; }
+.level__head { display: flex; align-items: flex-end; gap: 18px; }
+.level__no { font: 680 clamp(4.5rem, 3rem + 4vw, 6.5rem)/0.8 var(--font-sans); font-stretch: 76%; letter-spacing: -0.03em; }
+.level h3 { font-weight: 650; font-stretch: 84%; font-size: clamp(1.625rem, 1.3rem + 1vw, 2.125rem); line-height: 1.05; }
+.level h3 span { display: block; font-weight: 400; font-stretch: 100%; font-size: 0.5em; letter-spacing: 0.01em; color: var(--muted); margin-top: 6px; }
+.level__what { font-size: 1.0625rem; max-width: 36em; }
+.facts { display: grid; gap: 14px; padding-block: 16px; border-block: 1px solid var(--border); }
+.facts div { display: grid; gap: 2px; }
+.facts dd { color: var(--muted); font-size: 0.9375rem; }
+.btn {
+  justify-self: start; display: inline-flex; align-items: center; gap: 10px;
+  font-weight: 600; font-size: 0.9375rem; text-decoration: none;
+  padding: 11px 16px; border: 1px solid var(--text); border-radius: 3px;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.btn svg { width: 16px; height: 16px; transition: transform 160ms ease; }
+.btn:hover { background: var(--text); color: var(--bg); }
+.btn:hover svg { transform: translateX(3px); }
+.btn:active { transform: translateY(1px); }
+
+@media (min-width: 960px) {
+  .level { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; }
+}
+
+/* ------------------------------------------------------------ the scenes */
+.scenes { display: grid; gap: 40px 24px; grid-template-columns: minmax(0, 1fr); list-style: none; padding: 0; }
+.scenes figcaption { display: grid; gap: 2px; }
+.scenes figcaption code { color: var(--text); font-size: 0.875rem; }
+@media (min-width: 640px) { .scenes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1040px) { .scenes { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.scenes-foot { margin-top: clamp(40px, 5vw, 56px); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; color: var(--muted); }
+
+/* ------------------------------------------------------------ open it */
+.open { display: grid; gap: 40px; }
+.steps { list-style: none; padding: 0; display: grid; gap: 28px; counter-reset: step; }
+.steps li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 12px; counter-increment: step; }
+.steps li::before { content: counter(step); font: 600 0.875rem/1.7 var(--font-mono); color: var(--muted); }
+.steps li > * { grid-column: 2; }
+.steps p { color: var(--muted); }
+.steps p strong { color: var(--text); font-weight: 600; }
+.cmd {
+  display: block; margin-top: 10px; padding: 14px 16px; overflow-x: auto; white-space: pre;
+  background: var(--sunk); border: 1px solid var(--border); border-radius: 3px; color: var(--text);
+}
+.own { display: grid; gap: 14px; align-content: start; padding: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; min-width: 0; }
+.own h3 { font-weight: 650; font-stretch: 86%; font-size: 1.5rem; line-height: 1.1; }
+.own p { color: var(--muted); }
+@media (min-width: 960px) { .open { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 56px; } }
+
+/* ------------------------------------------------------------ footer */
+.foot { padding-block: 40px 56px; border-top: 1px solid var(--rule); display: grid; gap: 12px; font-size: 0.875rem; color: var(--muted); }
+.foot p { max-width: 60em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, .btn svg { transition: none; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#levels">Skip to the levels</a>
+
+<header class="top">
+  <div class="wrap top__row">
+    <a class="mark" href="index.html" aria-label="BugForge gallery">
+      <svg viewBox="0 0 26 26" aria-hidden="true" fill="currentColor"><path d="M2 8h14.6c3 0 5.6 1.1 7.4 3.2h-6.4v1.6c0 1.4.9 2.3 2.2 2.6V18h-2.6l1.7 3.2H7.1L8.8 18H6.3v-2.6c1.3-.3 2.2-1.2 2.2-2.6v-1.6C5.4 11.2 3.3 10 2 8z"/></svg>
+      BugForge <span>gallery</span>
+    </a>
+    <nav aria-label="On this page">
+      <a href="#levels">The levels</a>
+      <a href="#scenes">3D scenes</a>
+      <a href="#open">Open it yourself</a>
+    </nav>
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-set="auto" aria-pressed="true">Auto</button>
+      <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+      <button type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="wrap hero" aria-labelledby="title">
+    <div>
+      <p class="label">forge-design &middot; look levels 1 to 5</p>
+      <h1 id="title">One app, five levels of look.</h1>
+      <p class="lead"><strong>Tidewatch</strong> is a made-up passage planner for small boats: a paper sea chart under a lamp. Each level below is the same page, with the same words, colours and type, built by forge-design at another level, from 1, Subtle, to 5, Cinematic. Open them side by side, then pick the level for your own app.</p>
+      <div class="scale">
+        <ol aria-label="The five levels">
+          <li style="--t: var(--t1)"><a href="#level-1"><b>1</b><span>Subtle</span><small>220 &deg;C</small></a></li>
+          <li style="--t: var(--t2)"><a href="#level-2"><b>2</b><span>Polished</span><small>240 &deg;C</small></a></li>
+          <li style="--t: var(--t3)"><a href="#level-3"><b>3</b><span>Expressive</span><small>260 &deg;C</small></a></li>
+          <li style="--t: var(--t4)"><a href="#level-4"><b>4</b><span>Showpiece</span><small>280 &deg;C</small></a></li>
+          <li style="--t: var(--t5)"><a href="#level-5"><b>5</b><span>Cinematic</span><small>300 &deg;C</small></a></li>
+        </ol>
+        <p>Each level wears the colour steel turns when it is tempered: pale straw at about 220 &deg;C, blue at about 300 &deg;C. The hotter the level, the more it shows.</p>
+      </div>
+    </div>
+    <figure class="shot">
+      <div class="frame">
+        <picture>
+          <source media="(prefers-reduced-motion: reduce)" srcset="previews/level-5-still.webp">
+          <img src="previews/level-5.webp" width="800" height="500" decoding="async" fetchpriority="high"
+               alt="Level 5 of Tidewatch: as the page scrolls, the camera flies low over a 3D sea chart along the pencilled course.">
+        </picture>
+      </div>
+      <figcaption><span class="tag" style="--t: var(--t5)">Level 5</span> Cinematic: scrolling sails the pencil line.</figcaption>
+    </figure>
+  </section>
+
+  <section class="section" id="levels" aria-labelledby="levels-title">
+    <div class="wrap">
+      <div class="section__head">
+        <h2 id="levels-title">The levels</h2>
+        <p>Each level keeps everything of the level below it and adds to it. forge-design asks which one you want, or you name it in your request: <code>/forge-design make my app look better, level 4</code>, or in Dutch <code>maak mijn app mooier, niveau 4</code>.</p>
+      </div>
+
+      <div class="levels">
+        <article class="level" id="level-1" style="--t: var(--t1)" aria-labelledby="l1">
+          <div class="level__text">
+            <div class="level__head"><span class="level__no" aria-hidden="true">1</span><h3 id="l1">Subtle <span lang="nl">Subtiel &middot; pale straw, about 220 &deg;C</span></h3></div>
+            <p class="level__what">One clean, consistent design, and nothing that moves on its own. Every button, link and field answers when you point at it, press it or reach it with the keyboard. Things fade in and out.</p>
+            <dl class="facts">
+              <div><dt class="label">On Tidewatch</dt><dd>The chart table: warm chart paper, deep sea ink, and chart magenta for the one main action and the safe window. Square corners, ruled like a tide table.</dd></div>
+              <div><dt class="label">Built with</dt><dd>CSS only.</dd></div>
+            </dl>
+            <a class="btn" href="levels/1/index.html">Open level 1 <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+          </div>
+          <figure class="shot">
+            <div class="frame"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/level-1-still.webp"><img src="previews/level-1.webp" width="800" height="500" loading="lazy" decoding="async" alt="Level 1 of Tidewatch: the sea chart page at rest, a button and the passage cards answering the pointer."></picture></div>
+            <figcaption>Hover, focus and press on every control.</figcaption>
+          </figure>
+        </article>
+
+        <article class="level" id="level-2" style="--t: var(--t2)" aria-labelledby="l2">
+          <div class="level__text">
+            <div class="level__head"><span class="level__no" aria-hidden="true">2</span><h3 id="l2">Polished <span lang="nl">Verzorgd &middot; straw, about 240 &deg;C</span></h3></div>
+            <p class="level__what">The page arrives with care. Content comes in piece by piece, the day's figures count up, the tide curve draws itself, and the passage dialog glides in and out.</p>
+            <dl class="facts">
+              <div><dt class="label">On Tidewatch</dt><dd>The safe window is hatched in across the tide curve; a small reaction on every control.</dd></div>
+              <div><dt class="label">Built with</dt><dd>CSS, View Transitions and the Web Animations API. No library.</dd></div>
+            </dl>
+            <a class="btn" href="levels/2/index.html">Open level 2 <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+          </div>
+          <figure class="shot">
+            <div class="frame"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/level-2-still.webp"><img src="previews/level-2.webp" width="800" height="500" loading="lazy" decoding="async" alt="Level 2 of Tidewatch: the page coming in piece by piece, the tide figures counting up and the curve drawing itself."></picture></div>
+            <figcaption>Content arrives, numbers count up, the curve draws in.</figcaption>
+          </figure>
+        </article>
+
+        <article class="level" id="level-3" style="--t: var(--t3)" aria-labelledby="l3">
+          <div class="level__text">
+            <div class="level__head"><span class="level__no" aria-hidden="true">3</span><h3 id="l3">Expressive <span lang="nl">Expressief &middot; bronze, about 260 &deg;C</span></h3></div>
+            <p class="level__what">Real depth, and a page that tells a story as you scroll. The chart lies on the table as a sheet you see in 3D, laid back with a corner lifting, and its printed layers part as you move. The tide week stays in place while its days go by.</p>
+            <dl class="facts">
+              <div><dt class="label">On Tidewatch</dt><dd>The signature moment: a lamp follows your hand over the chart, and at night it is the red lamp of a boat. Cards tilt and lift like paper.</dd></div>
+              <div><dt class="label">Built with</dt><dd>CSS 3D, scroll-driven animation and the kit's depth.js. Still no library.</dd></div>
+            </dl>
+            <a class="btn" href="levels/3/index.html">Open level 3 <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+          </div>
+          <figure class="shot">
+            <div class="frame"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/level-3-still.webp"><img src="previews/level-3.webp" width="800" height="500" loading="lazy" decoding="async" alt="Level 3 of Tidewatch: the chart lying on the table in 3D under a lamp that follows the pointer."></picture></div>
+            <figcaption>A sheet in 3D under a lamp that follows you.</figcaption>
+          </figure>
+        </article>
+
+        <article class="level" id="level-4" style="--t: var(--t4)" aria-labelledby="l4">
+          <div class="level__text">
+            <div class="level__head"><span class="level__no" aria-hidden="true">4</span><h3 id="l4">Showpiece <span lang="nl">Showpiece &middot; purple, about 280 &deg;C</span></h3></div>
+            <p class="level__what">A living 3D scene at the top, made of the app's own content. The printed chart becomes a relief: banks stand up, channels sink, and a sheet of water rises and falls with the tide while your pointer carries a low lamp across it. The chart's figures and names stay on it.</p>
+            <dl class="facts">
+              <div><dt class="label">On Tidewatch</dt><dd>Press &ldquo;Next 12 hours&rdquo; and the tide runs as a time-lapse: the banks dry out and the safe window opens.</dd></div>
+              <div><dt class="label">Built with</dt><dd>Three.js, installed with the app and loaded only when the scene is needed, and the scene kit. A still picture for weak devices, for browsers without WebGL and for people who asked for less motion.</dd></div>
+            </dl>
+            <a class="btn" href="levels/4/index.html">Open level 4 <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+          </div>
+          <figure class="shot">
+            <div class="frame"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/level-4-still.webp"><img src="previews/level-4.webp" width="800" height="500" loading="lazy" decoding="async" alt="Level 4 of Tidewatch: the sea chart as a live 3D relief, lit by a lamp that follows the pointer."></picture></div>
+            <figcaption>The chart as a live relief under the lamp.</figcaption>
+          </figure>
+        </article>
+
+        <article class="level" id="level-5" style="--t: var(--t5)" aria-labelledby="l5">
+          <div class="level__text">
+            <div class="level__head"><span class="level__no" aria-hidden="true">5</span><h3 id="l5">Cinematic <span lang="nl">Cinematisch &middot; blue, about 300 &deg;C</span></h3></div>
+            <p class="level__what">A film you steer by scrolling. The camera sails the pencil line: from the whole sheet down behind the pier head at 14:20, across the roads at 14:40, low down the Wielingen between the buoys, and at dusk the lamp turns red for the landfall.</p>
+            <dl class="facts">
+              <div><dt class="label">On Tidewatch</dt><dd>The water level and the wind come from the page's own tide and wind figures. Its own shaders draw the paper and the tide, the wind is a field of streaks on the graphics card, and &ldquo;Plan a passage&rdquo; unfolds toward you as a sheet of paper.</dd></div>
+              <div><dt class="label">Built with</dt><dd>The whole scene kit, composed: the scroll journey, custom shaders, particles and the app's live data. The plain chart and the tide table stay one key press away.</dd></div>
+            </dl>
+            <a class="btn" href="levels/5/index.html">Open level 5 <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+          </div>
+          <figure class="shot">
+            <div class="frame"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/level-5-still.webp"><img src="previews/level-5.webp" width="800" height="500" loading="lazy" decoding="async" alt="Level 5 of Tidewatch: the camera flying along the pencilled course over the 3D chart as the page scrolls."></picture></div>
+            <figcaption>A journey along the course, driven by the scroll.</figcaption>
+          </figure>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="scenes" aria-labelledby="scenes-title">
+    <div class="wrap">
+      <div class="section__head">
+        <h2 id="scenes-title">The 3D scene kit</h2>
+        <p>Levels 4 and 5 are built on a small kit of scenes for Three.js. Each takes its colours from the page, follows the pointer, keeps a calm side for text, and has a still picture and a pause button. forge-design shapes them to the app's own world; these clips show them as they come. They were recorded from the kit's own page.</p>
+      </div>
+      <ul class="scenes">
+        <li><figure class="shot"><div class="frame frame--wide"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/scene-form-still.webp"><img src="previews/scene-form.webp" width="640" height="306" loading="lazy" decoding="async" alt="Strands of light that breathe, turn and lean toward the pointer."></picture></div><figcaption><code>form.js</code><span>An object made of strands of light.</span></figcaption></figure></li>
+        <li><figure class="shot"><div class="frame frame--wide"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/scene-field-still.webp"><img src="previews/scene-field.webp" width="640" height="306" loading="lazy" decoding="async" alt="Tens of thousands of points drifting in a slow current."></picture></div><figcaption><code>field.js</code><span>Points adrift in a current, computed on the graphics card.</span></figcaption></figure></li>
+        <li><figure class="shot"><div class="frame frame--wide"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/scene-contour-still.webp"><img src="previews/scene-contour.webp" width="640" height="306" loading="lazy" decoding="async" alt="Living contour lines, as on a sea chart, rising under the pointer."></picture></div><figcaption><code>contour.js</code><span>Living contour lines.</span></figcaption></figure></li>
+        <li><figure class="shot"><div class="frame frame--wide"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/scene-water-still.webp"><img src="previews/scene-water.webp" width="640" height="306" loading="lazy" decoding="async" alt="Clear shallow water seen from above, with moving caustics."></picture></div><figcaption><code>aurora.js</code><span>Mode water: shallow water with caustics.</span></figcaption></figure></li>
+        <li><figure class="shot"><div class="frame frame--wide"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/scene-aurora-still.webp"><img src="previews/scene-aurora.webp" width="640" height="306" loading="lazy" decoding="async" alt="Soft curtains of light in the page's colours."></picture></div><figcaption><code>aurora.js</code><span>Mode aurora: curtains of light.</span></figcaption></figure></li>
+        <li><figure class="shot"><div class="frame frame--wide"><picture><source media="(prefers-reduced-motion: reduce)" srcset="previews/scene-datascape-still.webp"><img src="previews/scene-datascape.webp" width="640" height="306" loading="lazy" decoding="async" alt="The app's numbers as columns of light the camera moves around."></picture></div><figcaption><code>datascape.js</code><span>The app's own numbers as a sculpture.</span></figcaption></figure></li>
+      </ul>
+      <div class="scenes-foot">
+        <a class="btn" href="scenes/index.html">Try the scenes <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 8h11M9 4l4 4-4 4"/></svg></a>
+        <span>Change the colours, the strength and the theme yourself. That page is in Dutch.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="open" aria-labelledby="open-title">
+    <div class="wrap">
+      <div class="section__head">
+        <h2 id="open-title">Open it yourself</h2>
+        <p>The gallery is a folder of plain files. The 3D levels load Three.js as a module, which a browser refuses from a double-clicked file, so a small server on your own machine opens it.</p>
+      </div>
+      <div class="open">
+        <ol class="steps">
+          <li><p><strong>From the root of the BugForge repo,</strong> start the gallery:</p><code class="cmd">python3 examples/serve.py</code></li>
+          <li><p>It serves this folder on <strong>http://127.0.0.1:8765</strong>, for your machine only, and opens this page. Nothing is sent anywhere. Another port:</p><code class="cmd">python3 examples/serve.py --port 9000</code></li>
+          <li><p><strong>Levels 4 and 5 and the scenes use WebGL.</strong> Without a graphics card they still run, slowly. With less motion asked for in your system settings, each shows its still picture.</p></li>
+        </ol>
+        <aside class="own" aria-labelledby="own-title">
+          <p class="label">On your own app</p>
+          <h3 id="own-title">Pick a level, then see it on your own localhost.</h3>
+          <p>forge-design reads your app first, so the look comes from its own world. It shows three moving concepts at the level you chose; you pick one, it builds it into your app, and you see the change on your own screen, before and after.</p>
+          <code class="cmd">/forge-design make my app look better, level 4</code>
+        </aside>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  <p>Everything in Tidewatch is made up: the app, the harbour data and the numbers.</p>
+  <p>Three.js r187, MIT licence, in <a href="vendor/three/LICENSE">vendor/three</a>. Fonts: Newsreader, Instrument Sans and Chivo Mono, SIL Open Font License 1.1, in levels/shared/fonts with their licences (<a href="levels/shared/fonts/newsreader/LICENSE">Newsreader</a>, <a href="levels/shared/fonts/instrument-sans/LICENSE">Instrument Sans</a>, <a href="levels/shared/fonts/chivo-mono/LICENSE">Chivo Mono</a>).</p>
+</footer>
+
+<script>
+  // The three theme buttons: Auto follows the system, Light and Dark are remembered in this browser.
+  (function () {
+    var root = document.documentElement, key = "bugforge-gallery-theme";
+    var buttons = document.querySelectorAll("[data-theme-set]");
+    function show(choice) {
+      buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.themeSet === choice)); });
+    }
+    show(root.dataset.theme || "auto");
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var choice = b.dataset.themeSet;
+        if (choice === "auto") delete root.dataset.theme; else root.dataset.theme = choice;
+        try { if (choice === "auto") localStorage.removeItem(key); else localStorage.setItem(key, choice); } catch (e) {}
+        show(choice);
+      });
+    });
+  })();
+</script>
+</body>
+</html>
