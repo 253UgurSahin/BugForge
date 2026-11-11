@@ -16,7 +16,8 @@ This script reads that table and reports:
     medium  a form that misleads: a pie or donut with more than 5 parts, 3D, a gauge, a dual axis;
             each finding names the better form
 Empty means nothing, "-", "?", "tbd", "todo", "n/a", "none" or a <placeholder>. A row with
-`forge:allow` in it is not checked. Tables inside code blocks are not read.
+`forge:allow` in it is not checked. Tables inside code blocks are not read. Next to a dashboard.md it
+also reads every dashboard-<screen>.md (one report per screen of numbers), each checked on its own.
 
 --level N (1 to 5, the dashboard level of ../forge/levels.md) also reports, as high: a count of
 numbers that does not fit the level (3 to 5 at level 1, at most 7 at level 2, at most 9 from level
@@ -36,18 +37,19 @@ Usage:
 --json prints {"file", "numbers": [{"line", "number", "definition", "source", "unit", "period",
 "compared with", "form"}], "findings": [{"rule", "severity", "what", "where", "line", "why",
 "fix"}], "summary": {"numbers", "level" (null without --level), "critical", "high", "medium", "low",
-"fail_on", "failed"}}.
+"fail_on", "failed"}, "reports": [the same four keys for each report read, this one first]}.
 
 Exit codes:
-    0  no finding at or above --fail-on (default: high)
+    0  no finding at or above --fail-on (default: high), in any report read
     1  at least one finding at or above --fail-on
-    2  the check could not run: the file is missing, unreadable or too big, it has no
+    2  the check could not run: a report is missing, unreadable or too big, it has no
        "## Numbers" section, or that section has no table with the columns number, definition,
        source, unit and form, or the table has no rows; or --level auto found no dashboard level
        (no forge-work/levels.json, none in it, or it is a link): ask the user. Never a pass.
 """
 
 import argparse
+import glob
 import json
 import os
 import re
@@ -227,11 +229,11 @@ def level_on_record(path):
         raise ValueError("no dashboard level on record in %s (%s). %s" % (record, error, ASK))
 
 
-def say(text, stream=None):
-    """Print TEXT so that a Windows cp1252 pipe cannot crash on it: anything else becomes an escape."""
-    stream = stream or sys.stdout
-    encoding = getattr(stream, "encoding", None) or "utf-8"
-    print(text.encode(encoding, "backslashreplace").decode(encoding), file=stream)
+def reports(path):
+    """PATH and, when it is a dashboard.md, every dashboard-<screen>.md next to it."""
+    folder, name = os.path.split(path)
+    others = glob.glob(os.path.join(glob.escape(folder), "dashboard-*.md")) if name == "dashboard.md" else []
+    return [path] + sorted(other for other in others if os.path.isfile(other))
 
 
 def format_human(findings, summary, path):
@@ -250,6 +252,8 @@ def format_human(findings, summary, path):
 
 def main(argv=None):
     """Run the check from the command line. Returns the exit code: 0, 1 or 2 (see the top)."""
+    for stream in (sys.stdout, sys.stderr):  # what a cp1252 pipe cannot show comes out as \u escapes, not a crash
+        getattr(stream, "reconfigure", lambda **_: None)(errors="backslashreplace")
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=__doc__)
     parser.add_argument("file", metavar="DASHBOARD.md", help="normally forge-work/dashboard.md")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
@@ -261,35 +265,35 @@ def main(argv=None):
     try:
         level = level_on_record(args.file) if args.level == "auto" else int(args.level or 0) or None
     except ValueError as error:
-        say("error: %s The level was not checked, so this is not a pass." % error, sys.stderr)
+        print("error: %s The level was not checked, so this is not a pass." % error, file=sys.stderr)
         return 2
-    try:
-        with open(args.file, "rb") as handle:
-            data = handle.read(MAX_BYTES + 1)
-    except OSError as error:
-        say("error: cannot read %s: %s. /forge-design dashboard writes it in Step 3." % (args.file, error.strerror or error),
-            sys.stderr)
-        return 2
-    problem = "it is larger than %d bytes" % MAX_BYTES if len(data) > MAX_BYTES else (
-        "it holds NUL bytes: save it as UTF-8 text" if b"\x00" in data else "")
-    rows, text = [], data.decode("utf-8-sig", errors="replace")
-    if not problem:
-        rows, problem = read_numbers(text)
-    if problem:
-        say("error: %s cannot be checked: %s. The numbers were not checked, so this is not a pass."
-            % (args.file, problem), sys.stderr)
-        return 2
-    findings = check(rows, args.file, level, text)
-    worst = SEVERITIES.index(args.fail_on)
-    summary = {name: len([item for item in findings if item["severity"] == name]) for name in SEVERITIES}
-    summary.update(numbers=len(rows), level=level, fail_on=args.fail_on,
-                   failed=any(SEVERITIES.index(item["severity"]) <= worst for item in findings))
-    if args.json:
+    done, worst = [], SEVERITIES.index(args.fail_on)
+    for path in reports(args.file):
+        try:
+            with open(path, "rb") as handle:
+                data = handle.read(MAX_BYTES + 1)
+            problem = "it is larger than %d bytes" % MAX_BYTES if len(data) > MAX_BYTES else (
+                "it holds NUL bytes: save it as UTF-8 text" if b"\x00" in data else "")
+        except OSError as error:
+            data, problem = b"", "cannot read it (%s); /forge-design dashboard writes it in Step 3" % (error.strerror or error)
+        rows, text = [], data.decode("utf-8-sig", errors="replace")
+        if not problem:
+            rows, problem = read_numbers(text)
+        if problem:
+            print("error: %s cannot be checked: %s. The numbers were not checked, so this is not a pass."
+                  % (path, problem), file=sys.stderr)
+            return 2
+        findings = check(rows, path, level, text)
+        summary = {name: len([item for item in findings if item["severity"] == name]) for name in SEVERITIES}
+        summary.update(numbers=len(rows), level=level, fail_on=args.fail_on,
+                       failed=any(SEVERITIES.index(item["severity"]) <= worst for item in findings))
         numbers = [{key: value for key, value in row.items() if key != "raw"} for row in rows]
-        say(json.dumps({"file": args.file, "numbers": numbers, "findings": findings, "summary": summary}, indent=2))
+        done.append({"file": path, "numbers": numbers, "findings": findings, "summary": summary})
+    if args.json:
+        print(json.dumps(dict(done[0], reports=done), indent=2))
     else:
-        say(format_human(findings, summary, args.file))
-    return 1 if summary["failed"] else 0
+        print("\n\n".join(format_human(item["findings"], item["summary"], item["file"]) for item in done))
+    return 1 if any(item["summary"]["failed"] for item in done) else 0
 
 
 if __name__ == "__main__":

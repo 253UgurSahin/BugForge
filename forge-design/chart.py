@@ -135,8 +135,9 @@ def colours(tokens, count):
                 "grid": "currentColor", "bg": None, "series": series}
     roles = tokens.get("color") if isinstance(tokens.get("color"), dict) else {}
 
-    def role(name, fallback=None):
+    def role(name, fallback=None):  # chart-1 written as var(--color-accent) is the accent's colour
         value = roles.get(name, roles.get(fallback))
+        value = roles.get(fallback) if fallback and re.match(r"var\(--color-[\w-]+\)$", str(value).strip()) else value
         need(isinstance(value, str) and HEX.match(value.strip()), 'the tokens file needs color.%s as "#rgb" or "#rrggbb"' % name)
         return value.strip()
 

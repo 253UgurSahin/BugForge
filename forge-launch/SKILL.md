@@ -37,9 +37,10 @@ Also for this skill:
   reviews, not even without a name; a real user's words only with their written OK, noted in launch.md. No names,
   logos or screenshots of competitors or the original on the site. No fake countdowns or pre-ticked boxes.
 - Legal pages are written fresh in plain words: a checklist to verify, not legal advice. Never invent a business
-  detail: write `TO-FILL` until the user gives it. Stripe stays in test mode.
-- The stack runs production images: `docker compose up -d --build --wait` after each change, before you open a page,
-  take a shot, run pagecheck or run the end-to-end tests.
+  detail: write `TO-FILL` until the user gives it. Stripe stays in test mode. In auto mode Steps 1.2, 1.3, 4.1 and
+  4.4 ask nothing (rules.md section 7): each fact is `TO-FILL`, who buys is consumers (the stricter rules) until the
+  user says otherwise, the headline from plan.md, only strictly necessary cookies; name each in the checkpoint.
+- The stack runs production images: `docker compose up -d --build --wait` after each change, before you look or test.
 - Commit after each step that changed the app (`launch: pricing and checkout`) once all tests pass and these exit 0:
   `python3 ../forge-check/secretscan.py .`, `python3 ../forge-design/sweep.py .` and (clone mode) `../forge-build/copycheck.py`.
 
@@ -58,7 +59,8 @@ Also for this skill:
    write its folder, branch (`git branch --show-current`, `git worktree list`) and any service worker in the
    `Runs at:` line (cannot tell: ask "How do you open the app, and at which address?"). **Before** shots of every
    public page there is now (at least `/`) into `forge-work/launch/shots/before`, with `forge-work/design/shots.mjs`
-   (a copy of `../forge-design/shots.example.mjs`). Tell the user in two lines what comes and in which order.
+   (copy `../forge-design/shots.example.mjs` there first, over an older copy too: `../forge-design/review.md`
+   section 1). Tell the user in two lines what comes and in which order.
 
 ## Step 2: the landing page
 Public, no login, full HTML from the server (link previews skip JavaScript). It is the app's front door, built in
@@ -66,15 +68,8 @@ the concept the user picked (the `Concept:` line of `forge-work/design/brief.md`
 **The level.** `python3 ../forge/level.py get look` prints it. Exit 1, none yet: ask the one question of rules.md
 section 10 (the lines of `python3 ../forge/level.py show look`, and where the examples are), also in auto mode, and
 record it: `python3 ../forge/level.py set look <n> --said '<their words>'`. Then build exactly what that level asks,
-never less and never more, and write `Level: N` in launch.md. What each level adds (`../forge/levels.md`):
-
-| level | what the person sees | built with |
-| --- | --- | --- |
-| 1 Subtle (Subtiel) | one clean, consistent design; every button, link and field reacts to hover, focus and press; fades | CSS only |
-| 2 Polished (Verzorgd) | + content arrives piece by piece, page transitions, numbers count up, an outline while it loads, messages and dialogs move in and out | CSS, View Transitions, Web Animations API |
-| 3 Expressive (Expressief) | + the page tells a story as you scroll, springy movement, real depth (tilting cards, layered panels), one signature moment for this app only | + CSS 3D, scroll-driven animation, `scenes/depth.js` |
-| 4 Showpiece | + a living 3D scene in the hero, made for what this app is about, light and depth that follow the pointer, depth while scrolling | + Three.js (local), the scene kit |
-| 5 Cinematic (Cinematisch) | + a 3D journey as you scroll (a camera through the page's chapters), custom shaders, forms that react to the pointer and to the app's live data | + the whole scene kit, composed |
+never less and never more, and write `Level: N` in launch.md. What each level adds, and what the first screen
+shows at rest at 1440 and 390 wide: the look table and "What each look level shows" in `../forge/levels.md`.
 
 Level 4 and 5: the hero scene belongs on this page. When `/forge-design motion` built one, mount that same scene
 here; else build it as `../forge-design/motion.md` sections 9 and 10 say, wired as the profile's "3D scene" line in
@@ -107,10 +102,10 @@ signing up) and an email before a trial ends or a yearly plan renews.
   VAT on deposits (kept ones too) and consumer sales to other EU countries over EUR 10,000 a year: ask the bookkeeper.
   Consumers may end a subscription after its first year at a month's notice (art. 6:236 sub j BW): renew yearly as
   monthly, or refund pro rata.
-- The app sells exactly that. New prices: update plan.md's Payments with a decisions-log row (the only forge file you
-  edit besides launch.md). Prices live in the app's database (one-off: each item's amount in cents; subscriptions:
-  tier, amount in cents, interval, trial days, Stripe price ID), filled by a migration or the seed, and pages read
-  them there: never an amount or price ID in browser code. Static: Payment Links from the Dashboard, in the HTML.
+- The app sells exactly that. New prices: wait for the user's yes (auto mode too), then update plan.md's Payments with
+  a decisions-log row (the only forge file you edit besides launch.md). Prices live in the app's database (amounts in
+  cents; subscriptions also tier, interval, trial days, Stripe price ID), filled by a migration or the seed, and pages
+  read them there: never an amount or price ID in browser code. Static: Payment Links from the Dashboard, in the HTML.
 - Subscriptions: products and prices in test mode, made by the user in the Dashboard or by a seed command that stops
   unless the key starts with `sk_test_` or `rk_test_`, never prints it and reuses prices by `lookup_key`.
 
@@ -152,11 +147,16 @@ In the profile's test runner and with Playwright (as in `../forge-check/e2e.exam
 ## Step 7: show it
 1. **Make it show**: `docker compose up -d --build --wait` from the work branch; `PWA: yes`: bump `VERSION` in `sw.js`.
    Load every new page on the user's address yourself.
-2. **After** shots with the same flags into `forge-work/launch/shots/after`; `python3 ../forge-design/changed.py
-   forge-work/launch/shots/before forge-work/launch/shots/after` must say VISIBLE CHANGE (exit 1: find the reason in
-   rules.md section 9 and fix it; exit 2 is never a pass). From level 2, `--frames --video` of `/`: `changed.py
-   --moves` on its frames says something moves. `python3 ../forge-design/motioncount.py . --level auto` and
-   `python3 ../forge/level.py check look --report forge-work/launch.md` exit 0. Write it all under `## Shown`.
+2. **After** shots with the same flags plus `--overflow --contrast` into `forge-work/launch/shots/after`, with no line
+   "wide", "low contrast" or "console"; `python3 ../forge-design/changed.py forge-work/launch/shots/before
+   forge-work/launch/shots/after` must say VISIBLE CHANGE (exit 1: find the reason in rules.md section 9; exit 2 is
+   never a pass). From level 2, `--frames --video` of `/` into `forge-work/launch/shots/motion` (from level 4 with
+   `--scene-frames`): `changed.py --moves` on its `home-390-f[1-4].png`, and on `home-1440-s*.png` (the hero scene),
+   says something moves. `python3 ../forge-design/motioncount.py . --level auto` and `python3 ../forge/level.py check
+   look --report forge-work/launch.md` exit 0. Write it all under `## Shown`.
+3. **Walk** the new pages when `python3 ../forge/level.py get test` says 3 or more: add them to
+   `forge-work/test/routes.json` and walk the next round as `../forge-check/steps/test.md` Step 6 says (its findings
+   are bugs, fixed there); `python3 ../forge-check/walkcheck.py forge-work/test/walk.json` exits 0.
 
 ## Output
 `forge-work/launch.md` from the template; in the app the pages, prices, checkout and tests, committed step by step.

@@ -22,7 +22,11 @@ shots under `forge-work/design/shots/`.
 - Code already there (login or payments for the user's own app): no scaffold. Do Step 1's branch
   check, follow the code's stack and conventions (`python3 ../forge-check/detect.py .`) and run it
   the way it runs now. New screens follow its look, or the specs when the design part ran. With no
-  brief there is no look review (Steps 3 and 7); the before and after shots are still taken.
+  brief there is no look review (Steps 3 and 7); the before and after shots are still taken. Tests
+  can empty the database they reach: before their first run, `python3 ../forge-check/testdb.py .`.
+  Exit 0: run them. Exit 1 (the database the app uses here, or it cannot tell): ask the user first,
+  in auto mode too; no go: only the tests that reach no database (`../forge-check/steps/test.md`
+  Step 2.6), the rest in the build log as not run.
 
 ## The level
 
@@ -74,8 +78,13 @@ line under the title of build-log.md.
   list`), and whether a service worker sits in front. Cannot tell: ask "How do you open the app, and
   at which address?" Write it under `## How it runs` in build-log.md, above its table. Work in that
   folder itself, never in a git worktree or a copy: the user's server would not see it.
-- The stack runs production images: code is copied in when an image is built. After a code or `.env` change,
-  `docker compose up -d --build --wait` before you look at it in the browser or take a screenshot.
+- **Make it show** after a code or `.env` change, before you look at it in the browser or take a screenshot. A
+  new app's stack runs production images (code is copied in when an image is built), so rebuild it:
+  `docker compose up -d --build --wait`. The user's own app, as `## How it runs` says: a dev server shows it by
+  itself (Laravel: CSS and JS only while `npm run dev` runs; no `public/hot`: `npm run build` after each change
+  to them); a built app: build it again and restart it the way it was started (Next.js: `npm run build`, then
+  `npm start`; Laravel or Django behind a server: what that server needs); containers: `docker compose up -d
+  --build --wait` too. Ask before you stop a server the user started.
 - Installers, generators (`php artisan make:*`, `manage.py makemigrations`, `drizzle-kit generate`) and tests run on
   this machine: laravel needs PHP 8.3+ with pdo_mysql, Composer and Node, django Python 3.12+ in a `.venv`, next and
   static Node 24. Missing: tell the user what to install (laravel: php.new) and wait. Or run one command in the
@@ -84,7 +93,9 @@ line under the title of build-log.md.
   `composer config platform.php <this machine's PHP version> && composer update`.
 - Tests use the real database engine. The db service publishes no port, so a git-ignored
   `docker-compose.override.yml` publishes it on this machine only (`ports: ["127.0.0.1:3307:3306"]`, PostgreSQL
-  `5433:5432`) for the test settings (laravel: `DB_HOST`, `DB_PORT`, `DB_DATABASE=testing` in phpunit.xml).
+  `5433:5432`) for the test settings (laravel: `DB_HOST` 127.0.0.1, `DB_PORT` 3307 and `DB_DATABASE` testing in
+  phpunit.xml, each with `force="true"` as `../forge-plan/profiles.md` says: without it the `.env` that compose
+  gives a container wins there, and `../forge-check/testdb.py` stops the tests as not sure).
 - **Shots**: `../forge-design/review.md` section 1 says how (`forge-work/design/shots.mjs`, a copy of
   `../forge-design/shots.example.mjs`). Signed-in screens: a short Playwright script signs alice in
   and saves `context.storageState({ path: "forge-work/design/alice.json" })`; then `--state` that file.
@@ -100,7 +111,9 @@ line under the title of build-log.md.
    - next: `npx create-next-app@latest app --yes --use-npm --disable-git`
    - static: `npm create vite@latest app -- --template <the template in plan.md>`
 3. In the temp folder delete `.git`, `node_modules` and `.next`, for laravel also the installer's `.env` and
-   `database/database.sqlite` (both for SQLite). Then `cp -an <that folder>/app/. .` (dotfiles too, no overwrites;
+   `database/database.sqlite` (both for SQLite). A `package.json` or lockfile already in the project root would be
+   kept over the scaffold's: stop and name it; an older Playwright install (only `@playwright/test` in it) moves to
+   `forge-work/old-root/`, anything else: ask. Then `cp -an <that folder>/app/. .` (dotfiles too, no overwrites;
    GNU cp's `-n` warning is harmless) and, all but django, `npm install`: the images build from its lockfile.
 4. Copy the container templates of the pack part, this skill's `templates/<profile>/`, over the scaffold's files,
    fitted as Step 3 of `../forge-build/steps/pack.md` says (`dockerignore` as `.dockerignore`, `env.example` as
@@ -114,8 +127,12 @@ line under the title of build-log.md.
    `'csp_safe' => true` in `config/livewire.php`, not `'unsafe-eval'`; an inline script: its `sha256-` hash).
    Laravel's own error pages have an inline `<style>` it blocks: add `resources/views/errors/minimal.blade.php`
    (they all extend it) on the app's layout, with no database calls, and test that a 404 has no `<style>`.
-8. **Before shots.** A new app has nothing yet, so the scaffold's start page is the before: shots of `/` into
-   `forge-work/design/shots/before`. The user's own app: every screen you will touch, before the first change.
+8. **Before shots.** A new app has nothing yet, so the scaffold's start page is the before: shots of `/` and of
+   the path of each screen in plan.md or recon.md (what that address shows now: a 404 page is a before too, and
+   the run's exit 1 for it is expected here) into `forge-work/design/shots/before`, so each built screen has a
+   pair. A path the scaffold sends to its sign-in page gets no before (shots.mjs saves none there): name it in
+   build-log.md, so its missing pair is expected. The user's own app: every screen you will touch, before the
+   first change.
 9. Commit (Step 6): `build: scaffold <profile> app and compose stack`. Then tell the user what comes, in which
    order (plan.md's build order) and roughly how long.
 
@@ -140,12 +157,14 @@ The core loop from recon.md's flows (idea mode: plan.md's), end to end on the re
 anything else (booking app: create an event type, book a slot on the public page, see it on the dashboard). It uses
 the basic components of Step 2; the finish of each screen comes in Step 4.
 
-1. Rebuild (`docker compose up -d --build --wait`) and load the slice's screens on the address of "Where things run".
+1. Make it show as "Where things run" says (a new app: `docker compose up -d --build --wait`) and load the slice's
+   screens on its address.
 2. Shots of those screens into `forge-work/design/shots/round-1`, and the first round of the look review on them
    (`../forge-design/review.md`, sections 2 to 4). What it finds wrong in the system (tokens, a component) is
    fixed now, before the other screens copy it.
 3. Checkpoint, at most 5 lines: what works, the address and what to click, in order, to try the loop; the paths of
-   the shots and the review's scores; what is next. Wait for the user's go.
+   the shots and the review's scores; what is next. Wait for the user's go; in auto mode, give these lines as a
+   report and go on (rules.md section 7).
 
 ## Step 4: screen by screen
 
@@ -179,7 +198,10 @@ After each finished screen, one line to the user: the screen, its address, what 
   weekly availability as local times plus the zone (`Europe/Amsterdam`), so daylight saving cannot shift them.
 - **Accounts, keys, packages**: the user creates every account and key (Stripe test mode, SMTP, OAuth apps); you
   never sign up or type a password, card or live key. Official APIs, fewest scopes, well-known maintained packages.
-  Google scopes such as Calendar need weeks of OAuth verification: tell the user early.
+  Google scopes such as Calendar need weeks of OAuth verification: tell the user early. plan.md has payments: in
+  the message that starts the build, ask the user to put the Stripe test keys in `.env` (payments.md section 2;
+  never in the chat). Until they are there, and in auto mode without them, Stripe is mocked in the tests and the
+  keys go under "For you" in the checkpoint; the build does not wait for them.
 - **Migrations** are checked in and run when the stack starts, never by hand on a server.
 - **Tests** with the code, in the profile's runner (PHPUnit or Pest, pytest-django, Vitest), run as "Where things
   run" says: the main path, the access check with a second user, the edge cases that bite (daylight saving, double
@@ -196,10 +218,12 @@ After each finished screen, one line to the user: the screen, its address, what 
 
 ## Step 7: finish the build, show it and check in
 
-1. The full suite passes, `docker compose up -d --build --wait` gives a healthy stack, and copycheck.py exits 0
-   (clone mode).
-2. **Make it show.** The stack was just rebuilt from the work branch. `PWA: yes`: bump `VERSION` in `sw.js`, so
-   a browser that ran the app before drops its old files. Load every screen on the address yourself.
+1. The full suite passes, the app runs the way `## How it runs` says (a new app: `docker compose up -d --build
+   --wait` gives a healthy stack), and copycheck.py exits 0 (clone mode).
+2. **Make it show**, as "Where things run" says: a new app's stack was just rebuilt from the work branch; the
+   user's own app, a built app or containers, is rebuilt and restarted now (a dev server already shows it).
+   `PWA: yes`: bump `VERSION` in `sw.js`, so a browser that ran the app before drops its old files. Load every
+   screen on the address yourself.
 3. **After shots** of every screen into `forge-work/design/shots/after`, with the flags of the before shots. Then
    `python3 ../forge-design/changed.py forge-work/design/shots/before forge-work/design/shots/after` must exit 0
    (VISIBLE CHANGE; it compares the pairs both folders hold). Exit 1: find which reason of rules.md section 9 it
@@ -213,11 +237,12 @@ After each finished screen, one line to the user: the screen, its address, what 
 
 ## Output
 
-The app in the project root, running in its compose stack; in forge-work/ `features.csv` (`clone` filled),
-`build-log.md` (`Level:`, `## How it runs`, the table), `design/shots/` and `design/review.md` and, in clone mode,
-`clone-screens/`; one commit per screen or feature on the work branch.
+The app in the project root, running in its compose stack (the user's own app: the way it ran before); in
+forge-work/ `features.csv` (`clone` filled), `build-log.md` (`Level:`, `## How it runs`, the table), `design/shots/`
+and `design/review.md` and, in clone mode, `clone-screens/`; one commit per screen or feature on the work branch.
 
 ## Next
 
 The dashboard and motion parts of `/forge-design`, at the levels the user chose (in `/forge` each is an optional
-phase), then `/forge-check test`; or back to `/forge` when it runs the phases.
+phase; motion is skipped only at look level 1, rules.md section 10), then `/forge-check test`; or back to `/forge`
+when it runs the phases.

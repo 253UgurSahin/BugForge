@@ -3,7 +3,7 @@
 Read this before you write payment code in forge-build build. Checked on 2026-10-27 against Stripe's docs, the Laravel
 Cashier docs and the three official SDKs (sources at the bottom). When a call fails or this page disagrees with
 the docs for the API version your SDK pins, the docs win. The general rules (test mode only, keys in `.env`, no
-card data, the price from your own database) are in SKILL.md and `../forge/rules.md`.
+card data, the price from your own database) are in `../forge/rules.md` and Step 5 of `../forge-build/steps/build.md`.
 
 ## 1. First: whose money is it?
 

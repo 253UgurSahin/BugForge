@@ -24,7 +24,9 @@ Also for this part:
 The mode decides where to start: clone (`forge-work/recon.md` exists; the original comes first), idea
 (the closest existing apps) or improve (the user's own app: the apps it loses customers to). Ask when
 unclear. Suggest candidates ("<app> alternatives", "<category> app Nederland"), the user picks 2 to 5.
-Note for each: name, homepage, who it is for, the country it sells in.
+In auto mode (`../forge/rules.md` section 7) this part does not stop: you pick the 2 to 5 and write
+why in compare.md (Steps 4 and 6 say what else you decide). Note for each: name, homepage, who it is
+for, the country it sells in.
 
 ## Step 2: read their public pages
 
@@ -52,7 +54,8 @@ never over an existing file) or "save as" from a browser. Run `python3 ../forge-
 
 Aim for 100 or more reviews across at least three sources, newest first. Read the 3 and 4 star
 reviews too: "love it, but..." is where the best fixes hide. Sources out of reach (blocked, no text)?
-Tell the user which and the sample size, and ask: go on with a thin sample, or skip compare.
+Tell the user which and the sample size, and ask: go on with a thin sample, or skip compare. Auto
+mode: go on, and write "thin" with the sample size in compare.md's Sample line and the checkpoint.
 
 | source | how |
 |---|---|
@@ -104,8 +107,9 @@ Pick the top 5 to 8 by evidence times how cheap the fix is, as a table with the 
 C002, ...), fix (what to build or change), effort (S, M or L) and evidence (theme, reviews, sources).
 
 - Clone and idea mode: add each to `forge-work/features.csv`: `area` the screen or flow it belongs
-  to, `original` no, `clone` no, a priority agreed with the user, the ID in notes. A value with a
-  comma goes in double quotes: `SMS reminders,booking,should,no,no,"C003: 23 reviews, 4 sources"`.
+  to, `original` no, `clone` no, a priority agreed with the user (auto mode: should; must only for a
+  fix the user named), the ID in notes. A value with a comma goes in double quotes:
+  `SMS reminders,booking,should,no,no,"C003: 23 reviews, 4 sources"`.
   No features.csv yet: create it with the header `feature,area,priority,original,clone,notes`. A
   fix to a feature already there gets no new row: add `also C003: <the fix>` to that row's notes.
 - Improve mode: leave features.csv alone. The fix plan is a list of ideas; the user picks.

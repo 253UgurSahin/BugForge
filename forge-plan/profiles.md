@@ -89,13 +89,13 @@ No preference and no clear row: laravel. Write the reason in plan.md either way.
   in the migration as `DB::statement()` after `Schema::create()`; one active row per user is
   `$table->unique(['user_id', 'active'])` on a nullable `active`. Data access: a policy per model a
   user owns (`app/Policies`) plus queries through the owner (`$request->user()->invoices()`).
-- **Tests**: PHPUnit 12 (the skeleton's default) or Pest 5 (PHP 8.4+), `php artisan test`,
-  `RefreshDatabase`; Playwright end to end. In `phpunit.xml`, with `force="true"`: `DB_CONNECTION`
-  `mariadb` and `DB_DATABASE` `testing` (SQLite lacks the MariaDB rules), `LOG_CHANNEL` `null`
-  (`.env.example` logs to stderr); then `php artisan config:clear`. A `.sql` file in the db
-  service's `/docker-entrypoint-initdb.d` makes the database when the volume is new (`app` is the
-  `DB_USERNAME`): `CREATE DATABASE testing; GRANT ALL ON testing.* TO 'app'@'%';`. CSS and JS are
-  built in the image, not on the host: `$this->withoutVite()` in `setUp()` of `tests/TestCase.php`.
+- **Tests**: PHPUnit 12 (the skeleton's default) or Pest 5 (PHP 8.4+), `php artisan test`, `RefreshDatabase`;
+  Playwright end to end. In `phpunit.xml`, with `force="true"`: `DB_CONNECTION` `mariadb`, `DB_HOST` `127.0.0.1` and
+  `DB_PORT` `3307` (the override's, `../forge-build/steps/build.md`), `DB_DATABASE` `testing` (SQLite lacks the
+  MariaDB rules), `LOG_CHANNEL` `null` (`.env.example` logs to stderr); then `php artisan config:clear`. A `.sql`
+  file in the db service's `/docker-entrypoint-initdb.d` makes the database when the volume is new (`app` is the
+  `DB_USERNAME`): `CREATE DATABASE testing; GRANT ALL ON testing.* TO 'app'@'%';`. CSS and JS are built in the
+  image, not on the host: `$this->withoutVite()` in `setUp()` of `tests/TestCase.php`.
 - **Stripe**: `stripe/stripe-php` 22, or Laravel Cashier 16 for subscriptions (then no stripe-php of
   your own, Cashier brings 21 or older, and `CASHIER_CURRENCY=eur`, its default is usd). `.env`
   names, Cashier's either way: `STRIPE_KEY`, `STRIPE_SECRET`, `STRIPE_WEBHOOK_SECRET`.

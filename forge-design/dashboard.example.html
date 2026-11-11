@@ -6,12 +6,13 @@
 <title>Order desk: dense dashboard example</title>
 <!-- forge-design dashboard example: the dense "HUD" level. One file, no script, no external request.
      Every value on this page is example data for a made-up product and adds up: 606 orders in the
-     strip, in the main chart and in the matrix. In a real app each number comes from a query. -->
+     strip, in the main chart, in the matrix and in the bars with depth (P-06, ../forge-design/bars3d.css).
+     In a real app each number comes from a query. -->
 <style>
 :root {                      /* in an app these come from forge-work/design/tokens.json (theme.py) */
   color-scheme: light dark;
   --color-bg: #f3f5f4; --color-surface: #ffffff; --color-border: #c9d3d1; --color-text: #142025;
-  --color-text-muted: #51626a; --color-accent: #0f766e; --color-chart-2: #8a5200; --color-chart-3: #6540c2;
+  --color-text-muted: #51626a; --color-accent: #0f766e; --color-chart-1: #0f766e; --color-chart-2: #8a5200; --color-chart-3: #6540c2;
   --color-danger: #b3261e; --color-success: #186b3b;
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -19,7 +20,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root { --color-bg: #0b1014; --color-surface: #111a20; --color-border: #2a3942; --color-text: #e6edf0;
-    --color-text-muted: #93a3ad; --color-accent: #5ad1c0; --color-chart-2: #f0b45a; --color-chart-3: #b79cf5;
+    --color-text-muted: #93a3ad; --color-accent: #5ad1c0; --color-chart-1: #5ad1c0; --color-chart-2: #f0b45a; --color-chart-3: #b79cf5;
     --color-danger: #ff8f7d; --color-success: #7ddc9a; }
 }
 * { box-sizing: border-box; }
@@ -32,10 +33,12 @@ h2 { font: 600 var(--label) var(--font-mono); letter-spacing: .1em; text-transfo
 .meta, .note { color: var(--color-text-muted); font-size: var(--label); margin: 0; }
 .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-/* readout strip: as many tiles per row as fit, never narrower than 150px */
-.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; margin: 0 0 var(--gap);
-  background: var(--color-border); border: 1px solid var(--color-border); }
-.strip div { background: var(--color-surface); padding: 8px var(--pad); min-width: 0; }
+/* readout strip: as many tiles per row as fit, never narrower than 150px. The lines are drawn per cell
+   (not as a gap over a border-coloured background), so a half-empty last row stays empty */
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin: 0 0 var(--gap);
+  border-top: 1px solid var(--color-border); border-left: 1px solid var(--color-border); }
+.strip div { background: var(--color-surface); padding: 8px var(--pad); min-width: 0;
+  border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
 .strip dt { font: var(--label) var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-muted); }
 .strip dd { margin: 0; }
 .strip .v { font: 600 var(--value)/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -43,10 +46,12 @@ h2 { font: 600 var(--label) var(--font-mono); letter-spacing: .1em; text-transfo
 .delta { font-size: var(--label); }
 .good { color: var(--color-success); } .bad { color: var(--color-danger); }
 
-/* panels: a thin frame with corner ticks; the grid is main | connector | side */
+/* panels: a thin frame with corner ticks; the grid is main | connector | side. The side rows are equal and the
+   connector's ends fixed only because this page has no script: an app lets each panel take the height its content
+   needs and ends each leader line at the measured centre of its panel (dashboard.md section 7) */
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) 36px minmax(230px, 300px); margin-bottom: var(--gap); }
 .side { display: grid; grid-auto-rows: 1fr; gap: var(--gap); }
-.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: var(--gap); }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr); gap: var(--gap); }
 .panel { position: relative; background: var(--color-surface); border: 1px solid var(--color-border); padding: var(--pad); min-width: 0; }
 .panel::before, .panel::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--color-accent); }
 .panel::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
@@ -96,6 +101,119 @@ th:first-child, td:first-child, .log td:nth-child(3), .log th:nth-child(3) { tex
 .sparks dt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sparks dd { margin: 0; text-align: right; }
 .sparks svg { display: block; color: var(--color-accent); }
+
+/* bars3d.css, copied as it is: bars with depth (P-06). In an app it is a file of its own */
+.bars3d {
+  --bars3d-dx: 10px;                       /* the depth vector: right and up */
+  --bars3d-dy: 6px;
+  --bars3d-width: clamp(8px, 46%, 32px);   /* a bar's front face, in its column */
+  --bars3d-height: 220px;                  /* the plot, without the room above it for the labels */
+  --bars3d-light: white;                   /* light falls on the top face, the side is in shade */
+  --bars3d-shade: black;
+  --bars3d-on: var(--color-surface);       /* the panel's background: the crosshair passes behind a value */
+  position: relative;
+  box-shadow: none;                        /* depth.css gives a tilt card a shadow; a HUD has none */
+}
+.bars3d-plot {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  height: var(--bars3d-height);
+  padding-top: calc(var(--bars3d-dy) + 1.5em);        /* room for the top face and the value */
+  border-bottom: 1px solid var(--color-text-muted);   /* the zero baseline */
+  font-size: var(--text-xs, 12px);
+}
+.bars3d-col {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  clip-path: inset(-100vh -100vw 0 -100vw);           /* only below the baseline is cut off */
+}
+.bars3d-bar {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: var(--bars3d-width);
+  height: 100%;
+  margin-left: calc(var(--bars3d-width) / -2 - var(--bars3d-dx) / 2);
+  transform: translateY(calc((1 - var(--h, 0)) * 100%));
+  background: var(--color-chart-1);
+}
+.bars3d-top,
+.bars3d-side { position: absolute; pointer-events: none; transform-origin: bottom left; }
+.bars3d-top {
+  left: 0;
+  bottom: 100%;
+  width: 100%;
+  height: var(--bars3d-dy);
+  background: color-mix(in oklab, var(--color-chart-1), var(--bars3d-light) 35%);
+  transform: skewX(calc(atan2(var(--bars3d-dx), var(--bars3d-dy)) * -1));
+}
+.bars3d-side {
+  left: 100%;
+  bottom: 0;
+  width: var(--bars3d-dx);
+  height: 100%;
+  background: color-mix(in oklab, var(--color-chart-1), var(--bars3d-shade) 30%);
+  transform: skewY(calc(atan2(var(--bars3d-dy), var(--bars3d-dx)) * -1));
+}
+.bars3d-value {
+  position: absolute;
+  left: calc(50% + var(--bars3d-dx) / 2);
+  bottom: calc(100% + var(--bars3d-dy) + 2px);
+  translate: -50% 0;
+  padding: 0 2px;
+  background: var(--bars3d-on);
+  line-height: 1.25;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+.bars3d-cross {                                       /* behind the bars; moved on the compositor */
+  position: absolute;
+  inset: calc(var(--bars3d-dy) + 1.5em) 0 0;
+  z-index: 0;
+  pointer-events: none;
+  container-type: inline-size;
+}
+.bars3d-cross > i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  translate: calc((var(--x, 0) + .5) / var(--n, 1) * 100cqw) 0;
+  background: var(--color-text-muted);
+}
+.bars3d-labels {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  margin-top: 4px;
+  font-size: var(--text-xs, 12px);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.bars3d-labels > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .bars3d-bar {                                       /* rises once, then moves to a new value */
+    transition: transform var(--duration-slower, 700ms) var(--ease-standard, ease);
+    animation: bars3d-rise var(--duration-slower, 700ms) var(--ease-standard, ease) both;
+    animation-delay: calc(var(--i, 0) * var(--duration-stagger, 40ms));
+  }
+  .bars3d-cross > i { transition: translate var(--duration-fast, 120ms) var(--ease-standard, ease); }
+}
+@keyframes bars3d-rise { from { transform: translateY(100%); } }
+/* end of bars3d.css */
+
+/* P-06's values, by class (a strict Content-Security-Policy blocks style attributes); an app sets --h
+   from its data. The scale's top is 300: North's 269 is .897 */
+figure { margin: 0; }
+.depth .bars3d { --bars3d-height: 150px; }
+.depth .bars3d-plot, .depth .bars3d-labels { --n: 3; }
+.depth .bars3d-col:nth-child(2) { --i: 1; } .depth .bars3d-col:nth-child(3) { --i: 2; }
+.north { --h: .897; } .central { --h: .713; } .south { --h: .41; }
 
 @container (max-width: 860px) {          /* one column: the connector goes, the panels stack */
   .grid, .row { grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
@@ -221,8 +339,23 @@ th:first-child, td:first-child, .log td:nth-child(3), .log th:nth-child(3) { tex
   </section>
 
   <section class="panel" aria-labelledby="p6">
-    <h2 id="p6"><span>Sequence log</span><span>P-06</span></h2>
-    <div class="scroll" tabindex="0" role="region" aria-labelledby="p6">
+    <h2 id="p6"><span>Orders per region, with depth</span><span>P-06</span></h2>
+    <figure class="depth">
+      <div class="bars3d" role="img" aria-label="Orders per region today: North 269, Central 214, South 123. Yesterday: North 251, Central 198, South 110.">
+        <div class="bars3d-plot">
+          <div class="bars3d-col"><div class="bars3d-bar north"><span class="bars3d-top"></span><span class="bars3d-side"></span><span class="bars3d-value">269</span></div></div>
+          <div class="bars3d-col"><div class="bars3d-bar central"><span class="bars3d-top"></span><span class="bars3d-side"></span><span class="bars3d-value">214</span></div></div>
+          <div class="bars3d-col"><div class="bars3d-bar south"><span class="bars3d-top"></span><span class="bars3d-side"></span><span class="bars3d-value">123</span></div></div>
+        </div>
+      </div>
+      <div class="bars3d-labels" aria-hidden="true"><span>North</span><span>Central</span><span>South</span></div>
+    </figure>
+    <p class="note num">Yesterday: North 251, Central 198, South 110 (559). By channel: the matrix P-03.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="p7">
+    <h2 id="p7"><span>Sequence log</span><span>P-07</span></h2>
+    <div class="scroll" tabindex="0" role="region" aria-labelledby="p7">
       <table class="log num">
         <thead><tr><th scope="col">Seq</th><th scope="col">Time (UTC)</th><th scope="col">Event</th><th scope="col">Result</th></tr></thead>
         <tbody>

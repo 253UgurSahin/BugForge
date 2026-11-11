@@ -97,6 +97,8 @@ locale write the component in the app's templates (section 6).
 ```
 
 - `minmax(0, 1fr)`, not `1fr`: a long number or a wide table can then never push a column wider.
+  Grid and flex items that hold text get `min-width: 0` as well: a 60-character name then wraps or
+  is cut with its full text reachable, and never pushes the page sideways at 390px.
 - Reading order is source order. Do not reorder panels with `order` or grid placement on small
   screens: keyboard and screen reader users would get a different order than the eye.
 - 390px: one column of panels, tiles in two columns; a table scrolls inside `overflow-x: auto` on a
@@ -112,13 +114,13 @@ locale write the component in the app's templates (section 6).
 | numbers on screen | 3 to 5 | 5 to 7 | 7 to 9, in groups |
 | page padding / gap | 32 / 24 | 24 / 16 | 16 / 12 |
 | panel padding | 24 | 16 | 12 |
-| tile value | 32 to 40, weight 600 to 700 | 24 to 28 | 20 to 22, monospace |
-| label | 13 to 14 | 12 to 13 | 11, capitals, letter-spacing .08em |
+| tile value | 32 to 40, weight 600 to 700 | 24 to 28 | 20 to 22, tabular figures (monospace for a technical concept) |
+| label | 13 to 14 | 12 to 13 | 11 to 13; capitals and letter-spacing .08em when the concept's type uses them |
 | body and table text | 16 | 14 | 12 to 13 |
 | table row height | 48 | 40 | 28 to 32 |
 | chart height | 280 to 360 | 220 to 280 | 84 to 220 |
-| panel look | surface, radius, a soft shadow | surface, radius, a 1px border | 1px frame, no radius, no shadow |
-| theme | light first | light and dark | dark first, light still works |
+| panel look | surface, radius, a soft shadow | surface, radius, a 1px border | 1px frame, the brief's smallest radius, no shadow |
+| theme | the brief's default | the brief's default, both themes | the brief's default (dark first only for a technical concept), both themes |
 
 Never under 11px, at any density. Dense means less padding and smaller type, not less contrast.
 Phones get one level calmer than the desktop: a dense screen at 390px is the standard sizes.
@@ -158,29 +160,42 @@ Every chart, from chart.py or written in the app's templates, has the same parts
 
 ## 7. The HUD pattern
 
-A dense, dark, technical screen. It works when every element is data; it fails when it is costume.
+A dense screen. It works when every element is data; it fails when it is costume. Its parts (the
+strip, the panels, the leader lines, the crosshair, the log, the charts with depth) are what
+dashboard level 4 asks for. How they look is the brief's: its type, colours, default theme and
+ornament. A warm or calm concept gets a warm, calm HUD, never a control room pasted on (a higher
+level is more of the app's own taste: `../forge/levels.md`). Monospace values, capitals, panel
+numbers, corner ticks and dark first belong to a technical concept (an instrument, a chart room, a lab).
 
 - **Readout strip** across the top: 5 to 8 small tiles in one row (`auto-fit, minmax(150px, 1fr)`),
-  1px lines between them, label in 11px capitals, value in 20 to 22px monospace with tabular
-  figures, the unit small, the delta in words. It is a `<dl>`: label `<dt>`, value `<dd>`.
-- **Panels**: a 1px frame in the border role on the surface role, 12px padding, a small heading with
-  a panel number on the right ("P-03") that the log or an alert can refer to. Corner ticks (two 8px
-  borders in the accent) are decoration: `::before` and `::after`, nothing in the markup.
-- **Leader lines** join a main panel to its detail panels, or a point to its callout. Draw them as
-  one stretched SVG in its own grid column between the panels (`preserveAspectRatio="none"`, 1px
-  `currentColor`, `aria-hidden="true"`), ending where the side panels' centres are: with three equal
-  rows that is 1/6, 1/2 and 5/6 of the height. Hide the column when the panels stack. A leader line
-  must point at something; lines that only fill space are noise.
+  1px lines between them, a small label (11 to 13px; capitals when the concept's type uses them),
+  the value at 20 to 22px with tabular figures (monospace for a technical concept), the unit small,
+  the delta in words. It is a `<dl>`: label `<dt>`, value `<dd>`.
+- **Panels**: a 1px frame in the border role on the surface role, 12px padding, a small heading the
+  log or an alert can refer to: its name, or a panel number on the right ("P-03") for a technical
+  concept. Corner ticks (two 8px borders), only where the concept has such ornament, are
+  decoration: `::before` and `::after`, nothing in the markup; in the accent only when the brief
+  allows the accent on decoration, else in the `border-input` role.
+- **Leader lines** join a main panel to the detail panels that split its numbers (the orders of P-01
+  by region, by channel, by status), or a point to its callout. Draw them as one stretched SVG in its
+  own grid column between the panels (`preserveAspectRatio="none"`, 1px `currentColor`,
+  `aria-hidden="true"`), each ending at the measured centre of its panel: a `ResizeObserver` on the
+  panels sets the path, as the side panels take the height their content needs (equal `1fr` rows
+  stretch the main chart and leave panels half empty). Hide the column when the panels stack. A
+  leader line must point at something: a screen whose side panels are not parts of the main chart
+  (a list of what needs attention) draws none and says so under `## Built` (`none:` and why).
 - **Value matrix**: section 9. **Dot field**: one mark per unit (workers, seats, days), state by
   shape as well as colour (filled, ring, diamond), a key with counts under it, and the counts as its
   accessible name.
 - **Sparkline panel**: a three-column grid (name, sparkline, last value), one row per thing, all
   sparklines on the same time span.
 - **Sequence log**: a real table, newest first: sequence number, time with its zone, event, result
-  as a word (OK, Retry, Failed). Monospace, 28px rows, the event column may wrap.
+  as a word (OK, Retry, Failed). Tabular figures (monospace for a technical concept), 28px rows, the
+  event column may wrap.
 - **Colour**: one accent for data, the text roles, and the danger role for what needs action. If
   everything glows, nothing is urgent. No fake scan lines, no blinking, no decorative numbers.
-- Dark first: set `color-scheme: light dark` and take both sets from the tokens.
+- **Theme**: the brief's default theme, dark first only when the concept is; both sets from the
+  tokens, `color-scheme` set per theme.
 
 ## 8. Tables
 
@@ -202,19 +217,21 @@ A dense, dark, technical screen. It works when every element is data; it fails w
 ## 9. The value matrix
 
 A matrix of values (hour by weekday, region by channel) is an HTML `<table>` with `<th scope>` on
-both axes: it can be read out and looked up, which a picture cannot. Tint each cell on a sequential
-ramp in five steps, by class (`.t1` to `.t5`), with the accent mixed into the surface:
-`background: color-mix(in srgb, var(--color-accent) calc(var(--t) * 7%), transparent)`. Keep the
-tint light enough that the text role still has 4.5:1 on the darkest step, and print the value in
-every cell: the tint helps the eye, the number carries the meaning. Totals go in a last row and
-column when they are asked for. Over about 12 by 12 cells: drop the numbers, add a title per cell.
+both axes: it can be read out and looked up, which a picture cannot. Tint each cell on the
+sequential ramp in five steps, by class: `.t1 { background: var(--color-chart-seq-1); }` up to
+`.t5` and `chart-seq-5`, roles in tokens.json with their dark values. contrast.py checks the text on
+the lightest and the darkest step (4.5:1); it cannot check a `color-mix` of the accent, so that is no
+ramp. Print the value in every cell: the tint helps the eye, the number carries the meaning. Totals
+go in a last row and column when they are asked for. Over about 12 by 12 cells: drop the numbers,
+add a title per cell.
 
 ## 10. Colour sets
 
 - **Categorical** (`chart-1` to `chart-6`): `chart-1` is the accent; the others turn the hue and
   alternate lighter and darker, so neighbours differ in lightness too. Each has 3:1 against the
   background. Over 6 categories: group the rest as "Other" in the muted text role.
-- **Sequential**: one hue from faint to full, 5 steps, light means low (on dark: dim means low).
+- **Sequential**: one hue from faint to full, 5 steps, light means low (on dark: dim means low):
+  `chart-seq-1` to `chart-seq-5`, the text on the first and the last step as pairs.
 - **Diverging**: only when the middle means something (zero, a target): two hues with a neutral
   middle, never red against green; orange against blue survives every common colour blindness.
 - **Status** uses the success, warning and danger roles, always with a word or a shape.
@@ -259,7 +276,8 @@ or counts: the final values show at once, and no information is lost.
   filter. **Comparison**: the earlier period as a faint second line, or a change column. A value
   matrix (section 9). **Live refresh**: every 30 to 60 seconds, or server-sent events; it stops in
   a hidden tab, has a pause control, and only a short summary is `aria-live="polite"`.
-- **4 Showpiece**: dense, dark first: the HUD composition of section 13.
+- **4 Showpiece**: dense: the HUD composition of section 13. Its parts are the level; its type,
+  colours, theme and ornament are the concept's (section 7), dark first only when the concept is.
 - **5 Cinematic**: section 13 plus the data scene of section 14, which shows the same data as the
   table and the matrix in 3D. The table stays one key press away.
 
@@ -268,7 +286,9 @@ between periods; drill-down to the orders"): `dashcheck.py --level 3` and up loo
 
 ## 13. The HUD composition (level 4)
 
-A control room on one screen, at 1440 by 900. Every element is data (section 7):
+Everything that matters on one screen, at 1440 by 900. Every element is data. The parts below are
+the level; their type, colour, theme and ornament come from the brief (section 7), so the sketch
+shows the structure, not a look:
 
 ```
 +--------------------------------------------------------------------------------+
@@ -283,31 +303,46 @@ A control room on one screen, at 1440 by 900. Every element is data (section 7):
 ```
 
 - **Grid**: the strip spans all 12 columns; then the main panel 7, the leader-line column 1, three
-  detail panels stacked in 4; then two panels of 6. Panel numbers (P-01) let the log refer to them.
+  detail panels stacked in 4, each as tall as its content; then two panels of 6. Panel numbers
+  (P-01) let the log refer to them.
 - **The linked crosshair**: one position (an index on the shared time axis) drives a thin vertical
-  line on every chart with that axis, and the readouts show the values at that moment ("at 14:00").
-  One small script holds the position and sends a custom event; each chart listens. Pointer: it
-  follows. Keyboard: the arrow keys on the focused main chart move it, Home and End jump, Escape
-  lets go. A text line under the strip says the time and the values, updated at most twice a second.
-  Charts on another axis do not follow it.
+  line on every chart with that axis. One small script holds the position and sends a custom event;
+  each chart listens. Pointer: it follows. Keyboard: the arrow keys on the focused main chart move
+  it, Home and End jump, Escape lets go. One text line under the strip says the time and the values
+  at that moment, updated at most twice a second. Readouts that are period totals keep their period
+  value; only while the crosshair is held or chosen, each adds the moment's value in its sub-line
+  ("on 7 Nov: 4"). Charts on another axis do not follow it. Move the line on the compositor: an
+  overlay with `container-type: inline-size`, the line at `translate: calc((var(--i) + .5) /
+  var(--n) * 100cqw) 0` with a transition on `translate`; never `left` with a transition (layout).
 - **Charts with a 3D look**: CSS 3D (a panel tilted by at most 12 degrees with `perspective` on its
-  parent, bars as faces with a side and a top) or canvas 2D drawn with
-  depth (an isometric grid of bars). The depth is a view: no strong perspective (a near bar must
-  never look bigger than a far bar of the same value), one baseline, every value printed or in the
-  table next to it. Write it in the form column with its table: "bars with depth (CSS 3D) + table".
+  parent, bars as faces with a side and a top: `../forge-design/bars3d.css` is the recipe) or canvas
+  2D drawn with depth (an isometric grid of bars). The depth is a view: no strong perspective (a
+  near bar must never look bigger than a far bar of the same value), one baseline, every value
+  printed or in the table next to it. Write it in the form column with its table: "bars with depth
+  (CSS 3D) + table". The bars grow by `translateY`, never by `scaleY` (it squashes the top and side
+  faces) or `height` (layout); the crosshair runs behind them; the kit's `depth.js` may lean the
+  plane, with the bars inside a `data-depth-layer` wrapper (depth.js writes `transform` on a layer).
 - **Leader lines** and the **sequence log**: section 7. The log takes the events the readouts
   react to (an import finished, a threshold crossed), with the panel number.
 - **Motion**: a readout that changes tints its background once (300 ms, never a blink), a new log
   row slides in, the crosshair follows the pointer without lag.
 - **390px**: the strip in two columns, panels stacked in source order, the leader column hidden,
   the crosshair moved by tapping the chart and by two buttons (earlier, later).
+- **The look's scene on the same screen.** At look level 4 or 5 the app's first screen holds the
+  living scene (`../forge/levels.md`, "What each look level shows": a third of the height at 1440,
+  the full width at 390). When that first screen is this data screen, the scene is the HUD's top
+  band, fed by the screen's own numbers (the kit scene's `setData`, values 0 to 1, from the same
+  scoped query), with the readout strip right under it (or on it over a scrim, text 4.5:1); the
+  panels start below, so the HUD may run past 900px. When the app's first screen is another one,
+  the scene stays there and the HUD keeps its 1440 by 900.
 
 ## 14. The data scene (level 5)
 
 - **What**: `../forge-design/scenes/datascape.js` from the scene kit shows a matrix of the app's
   own values (region by week, hour by weekday) as a 3D field of bars or ridgelines. It needs three
-  (installed with npm, never a CDN) and the kit's `stage.js`, `glsl.js` and `lazy.js` next to it.
-  Read the comment at the top of datascape.js for its options before you use them.
+  (through the app's own package manager, `../forge-design/motion.md` section 5; never a CDN) and
+  the kit's `stage.js`, `glsl.js` and `lazy.js` next to it. Read the comment at the top of
+  datascape.js for its options before you use them.
 - **Fed from the server**: the same query as the table and the matrix, under the same access rules,
   returns the rows, the columns and the values for the signed-in user's team and the period. The
   page passes the values to `setData`. The scene draws sample values when it gets none: mount it
@@ -337,13 +372,14 @@ changed.py finds no change. Write `forge-work/design/signin.mjs` once, next to `
 finds the same Playwright), and fit the three form lines to the app's own sign-in form:
 
 ```js
-// node forge-work/design/signin.mjs http://localhost:3000 /app/statistieken
+// DEMO_EMAIL=.. DEMO_PASSWORD=.. node forge-work/design/signin.mjs http://localhost:3000 /app/statistieken
+// another reader, their own file: ... signin.mjs http://localhost:3000 /admin forge-work/design/admin.json
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 let pw; try { pw = require('@playwright/test'); } catch { pw = require('playwright'); }
-const [base, path = '/'] = process.argv.slice(2);
+const [base, path = '/', state = 'forge-work/design/alice.json'] = process.argv.slice(2);
 const { DEMO_EMAIL: email, DEMO_PASSWORD: password } = process.env;
-if (!base || !email || !password) { console.error('usage: DEMO_EMAIL=.. DEMO_PASSWORD=.. node signin.mjs BASE [PATH]'); process.exit(2); }
+if (!base || !email || !password) { console.error('usage: DEMO_EMAIL=.. DEMO_PASSWORD=.. node signin.mjs BASE [PATH] [STATE]'); process.exit(2); }
 const browser = await pw.chromium.launch();
 const context = await browser.newContext();
 const page = await context.newPage();
@@ -355,9 +391,10 @@ await page.getByLabel(/e-?mail/i).fill(email);
 await page.getByLabel(/password|wachtwoord/i).fill(password);
 await page.getByRole('button', { name: /sign in|log in|inloggen/i }).click();
 await page.waitForURL((url) => !url.pathname.startsWith('/login'));
-await context.storageState({ path: 'forge-work/design/alice.json' });
+await context.storageState({ path: state });
 errors.length = 0; // only the errors of the dashboard itself
-await page.goto(new URL(path, base).href, { waitUntil: 'networkidle' });
+await page.goto(new URL(path, base).href, { waitUntil: 'load' });
+await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {}); // a live refresh never goes quiet
 await page.waitForTimeout(1500);
 console.log(errors.length ? errors.join('\n') : 'no console errors on ' + path);
 await browser.close();
@@ -370,6 +407,74 @@ process.exit(errors.length ? 1 : 0);
 - That user has enough rows to fill every panel (a week of catches is not enough for a heat map by
   month). A near-empty dev database shows empty states: honest, but nothing of the level shows.
   Ask before you add seed rows; the screen labels them seed, and the checkpoint says so.
-- `forge-work/design/alice.json` holds a session: it stays in `forge-work/` (git-ignored, never
-  shipped) and is passed as `--state` to every shot, before and after alike.
+- Each state file (`alice.json`, `admin.json`) holds a session: it stays in `forge-work/`
+  (git-ignored, never shipped) and is passed as `--state` to the shots of its reader's screens,
+  before and after alike.
 - Run it again after the build: it prints each console error of the dashboard and exits 1 on any.
+
+**The full states with a fixture.** No yes for seed rows (the whole look asks nothing after the
+pick), and always for the extremes and long labels of the steps' Step 8: a fixture, never in the
+user's database. Make the rows with the app's own code (its statistics function on invented rows: a
+month of 1,234, a 60-character name, one failed load) and save them as
+`forge-work/design/fixture.json`. The hand-over says which state the user's own data shows ("few").
+
+- **Data the browser fetches** (an API route the page calls): `forge-work/design/fixture.mjs` below,
+  next to `shots.mjs` as signin.mjs is, answers that route with the fixture and takes the shots at
+  390 and 1440 itself (shots.mjs only looks, so it cannot do this).
+- **A screen the server renders** (Blade, Django templates, Next.js server components, a period in
+  GET parameters) has no route the browser can answer: give the fixture rows to a copy of the dev
+  database behind a second instance of the app, run from a copy of the folder on a free port
+  (`../forge/rules.md` section 9: install there, copy `.env` in, never printed; Next.js runs one dev
+  server per folder). An SQLite file inside the project comes along in that copy; a database server
+  (MySQL, PostgreSQL): a second database from a dump, only with the user's yes. Before any row goes
+  in, point the copy at its own database through the environment, never by editing `.env`: the
+  second database (`DB_DATABASE=`, `DATABASE_URL=`), and SQLite too, as `.env` often names the file
+  by an absolute path that still leads to the user's own (`DB_DATABASE=<the copy>/database/database.sqlite`).
+  That goes for the second instance and for every command that puts the rows in (a seeder, tinker,
+  a shell). Check first, with that environment, where it writes (Laravel: `php artisan db:show`; Django:
+  `connection.settings_dict['NAME']` in `manage.py shell`), or the rows land in the user's database.
+  Put the rows in the copy, sign in on that address (signin.mjs, a state file of its own), run
+  fixture.mjs there with `-` for the route, then stop that instance and delete the copy and its
+  database. The user's own database is never touched.
+
+```js
+// node forge-work/design/fixture.mjs http://localhost:3000 /app/statistieken forge-work/dashboard/fixture '**/api/stats**'
+// a screen the server renders, on the second instance: ... fixture.mjs http://localhost:3001 /app/statistieken OUT - STATE
+// a screen nobody signs in for: STATE none
+import { createRequire } from 'node:module';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+const require = createRequire(import.meta.url);
+let pw; try { pw = require('@playwright/test'); } catch { pw = require('playwright'); }
+const [base, path, out, pattern = '-', state = 'forge-work/design/alice.json'] = process.argv.slice(2);
+if (!out) { console.error('usage: node fixture.mjs BASE PATH OUT [ROUTE|-] [STATE|none]'); process.exit(2); }
+if (state !== 'none' && !existsSync(state)) { console.error(`no ${state}: run signin.mjs first`); process.exit(2); }
+const fixture = pattern === '-' ? null : JSON.parse(readFileSync('forge-work/design/fixture.json', 'utf8'));
+const asked = new URL(path, base);
+const bare = (name) => name.replace(/\/+$/, '') || '/';
+mkdirSync(out, { recursive: true });
+const browser = await pw.chromium.launch();
+let failed = 0;
+for (const [width, height] of [[390, 844], [1440, 900]]) {
+  const context = await browser.newContext({ storageState: state === 'none' ? undefined : state,
+    viewport: { width, height }, reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  if (fixture) await page.route(pattern, (route) => route.fulfill({ json: fixture }));
+  const response = await page.goto(asked.href, { waitUntil: 'load' });
+  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {}); // a live refresh never goes quiet
+  const landed = new URL(page.url()).pathname; // a redirect to the sign-in page answers 200 too
+  const away = bare(landed) !== bare(asked.pathname) ? `it led to ${landed}, not ${asked.pathname}`
+    : await page.locator('input[type="password"]:visible').count() ? `${landed} shows a password field` : '';
+  const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  if (!away) await page.screenshot({ path: `${out}/fixture-${width}.png`, fullPage: true });
+  const problem = away ? `${away}: a sign-in page? sign in again (signin.mjs); no picture`
+    : !response?.ok() ? `status ${response?.status()}` : sideways ? 'WIDE, it scrolls sideways' : '';
+  console.log(`${out}/fixture-${width}.png: ${problem || 'fits'}`);
+  failed += problem ? 1 : 0;
+  await context.close();
+}
+await browser.close();
+process.exit(failed ? 1 : 0);
+```
+
+Look at both pictures yourself: a long label wraps or is cut with its full text reachable, a
+million fits its tile, the failed panel says it failed while the others still show.

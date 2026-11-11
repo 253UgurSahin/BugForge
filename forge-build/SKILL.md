@@ -74,12 +74,15 @@ The build is not finished until the user has seen it on their own screen (rules.
 1. Before any change: what serves the user's local URL (for a new app, its compose stack on
    `http://localhost:8080`), from which folder and branch, and whether a service worker sits in
    front. At the top of build-log.md.
-2. Before shots (`../forge-design/review.md` section 1): the scaffold's start page for a new app,
-   every screen you will touch for the user's own app.
+2. Before shots (`../forge-design/review.md` section 1): for a new app the scaffold's start page and
+   the path of each planned screen, for the user's own app every screen you will touch.
 3. Progress: the order at the start, the vertical slice shown running with its shots, then one
    line per finished screen. Never silent for long.
-4. Make it show: `docker compose up -d --build --wait` (the stack runs production images), bump a
-   stale service worker cache, and load the address yourself.
+4. Make it show: a new app, `docker compose up -d --build --wait` (the stack runs production
+   images); the user's own app, as `## How it runs` says (a dev server shows it by itself, in
+   Laravel CSS and JS only while `npm run dev` runs, else `npm run build` after each change to
+   them; a built app or containers: rebuild and restart them, and ask before you stop a server the
+   user started). Bump a stale service worker cache, and load the address yourself.
 5. After shots and proof: `python3 ../forge-design/changed.py <before> <after>` says VISIBLE
    CHANGE. The look review of `../forge-design/review.md` runs after the slice and at the end.
 6. Hand over: the branch, the address, where to click first, the paths of the shots, how to go back.

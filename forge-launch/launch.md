@@ -42,7 +42,7 @@ In the brand voice, in the concept and at the level above. Tick each part once y
 
 - Competitor prices: {{from compare.md | read again YYYY-MM-DD, untrusted.py: no hits | none (compare skipped)}}
 - Price feedback: {{14 of 112 reviews mention price (feedback.md) | none}}
-- plan.md: {{unchanged | Payments section updated, decisions log row of YYYY-MM-DD}}
+- plan.md: {{unchanged | Payments section updated after the user's yes (YYYY-MM-DD), decisions log row}}
 - Shown: {{on /pricing | on the service list and the booking page, with the cancelling and no-show rules}}
 - Checkout by hand, test mode, iDEAL "Authorize": {{Solo ok, Team ok | Haircut deposit ok}} ({{YYYY-MM-DD}})
 
@@ -118,8 +118,11 @@ Check against acm.nl (selling to consumers), the KvK and the Belastingdienst. No
 
 What the user sees on their own screen (rules.md section 9 of the forge pack).
 
-- Before and after: forge-work/launch/shots/before and after; changed.py: {{VISIBLE CHANGE, 41% of home-1440-light.png}}
-- Moves: {{changed.py --moves on the frames of /: something moves | level 1: no frames taken}}
-- Clip: {{forge-work/launch/shots/after/home-1440.webm | none (level 1)}}
+- Before and after: forge-work/launch/shots/before and after; changed.py: {{VISIBLE CHANGE, 41% of home-1440-light.png}};
+  --overflow and --contrast: {{no line}}
+- Moves: {{changed.py --moves on f1 to f4 of / (home-390-f[1-4].png): something moves; levels 4 and 5 also on
+  home-1440-s*.png: the hero scene moves | level 1: no frames taken}}
+- Clip: {{forge-work/launch/shots/motion/home-1440.webm | none (level 1)}}
 - motioncount.py --level auto: {{exit 0}}; level.py check look: {{exit 0}}
+- Walk of the new pages: {{round r2, walkcheck.py exit 0 | test level under 3: not walked}}
 - Told the user: {{the branch, the address, where to look first, the reduced-motion setting, how to go back}}

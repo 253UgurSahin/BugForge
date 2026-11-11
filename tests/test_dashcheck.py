@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -397,6 +398,49 @@ class LevelOnRecord(DashCase):
         self.assertIn("link", err)
 
 
+class Screens(DashCase):
+    """One report per screen of numbers: dashboard.md, and dashboard-<screen>.md next to it, each checked."""
+
+    def test_every_report_next_to_dashboard_md_is_checked(self):
+        main = self.write(page(GOOD))
+        self.write(page(GOOD + [row(number="Payments failed", source="mock API")]), name="dashboard-admin.md")
+        self.write(page([row(source="fake")]), name="notes.md")
+        code, out, err = run(main, "--json")
+        data = json.loads(out)
+        self.assertEqual((code, err), (1, ""), "the admin's report fails, so the run fails")
+        self.assertEqual([os.path.basename(item["file"]) for item in data["reports"]], ["dashboard.md", "dashboard-admin.md"])
+        self.assertEqual((data["file"], data["findings"], data["summary"]["failed"]), (main, [], False), "the first report")
+        self.assertEqual([item["rule"] for item in data["reports"][1]["findings"]], ["invented-source"])
+        self.assertIn("dashboard-admin.md:", data["reports"][1]["findings"][0]["where"])
+        code, out, _ = run(main)
+        self.assertEqual(code, 1)
+        self.assertIn("dashboard-admin.md: 4 numbers, 1 high", out)
+        self.assertIn("PASS", out.split("dashboard-admin.md")[0], "each report says its own verdict")
+
+    def test_each_report_is_held_to_the_level_on_its_own(self):
+        work = os.path.join(self.folder, "forge-work")
+        os.makedirs(work)
+        with open(os.path.join(work, "levels.json"), "w", encoding="utf-8") as handle:
+            json.dump({"dashboard": {"level": 4}}, handle)
+        for name, said in (("dashboard.md", "Level: 4 (Showpiece)\n\n"), ("dashboard-beheer.md", "Level: 3\n\n")):
+            with open(os.path.join(work, name), "w", encoding="utf-8") as handle:
+                handle.write(page(numbers(9, MOVING), before=said))
+        code, out, _ = run(os.path.join(work, "dashboard.md"), "--level", "auto", "--json")
+        data = json.loads(out)
+        self.assertEqual(code, 1)
+        self.assertEqual([[item["rule"] for item in report["findings"]] for report in data["reports"]],
+                         [[], ["level-report"]], "9 numbers each is fine: the limit is per screen")
+
+    def test_only_dashboard_md_brings_the_others_and_a_broken_one_is_exit_2(self):
+        self.write(page(GOOD))
+        other = self.write(page(GOOD), name="dashboard-admin.md")
+        self.assertEqual(len(json.loads(run(other, "--json")[1])["reports"]), 1)
+        self.write("## Numbers\n\nNo table yet.\n", name="dashboard-team.md")
+        code, out, err = run(os.path.join(self.folder, "dashboard.md"))
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("dashboard-team.md cannot be checked", err)
+
+
 def read(path):
     with open(path, encoding="utf-8") as handle:
         return handle.read()
@@ -422,7 +466,7 @@ class SkillAgrees(unittest.TestCase):
         top = "\n".join(self.steps.splitlines()[:6])
         for part in ["`/forge-design`", "`SKILL.md`", "`../forge/rules.md`", "section 9", "section 10"]:
             self.assertIn(part, top)
-        self.assertLessEqual(len(self.steps.splitlines()), 240)
+        self.assertLessEqual(len(self.steps.splitlines()), 255, "about 250 lines: reference detail goes in dashboard.md")
         for clumsy in ("forge-design design", "forge-design dashboard's", "forge-check test's"):
             self.assertNotIn(clumsy, self.steps)
 
@@ -458,7 +502,7 @@ class SkillAgrees(unittest.TestCase):
         order = ["## Step 1", "## Step 2: the level", "## Step 3", "## Step 4", "## Step 5", "## Step 6",
                  "## Step 7", "## Step 8", "## Step 9", "## Step 10", "## Output", "## Next"]
         self.assertEqual([self.steps.index(name) for name in order], sorted(self.steps.index(name) for name in order))
-        for section in ("Audience", "Numbers", "Layout", "Charts", "States", "Checks"):
+        for section in ("Audience", "Numbers", "Layout", "Charts", "States", "Built", "Checks", "Left"):
             self.assertIn("`## %s`" % section, self.steps[self.steps.index("## Output"):])
 
     def test_a_signed_in_app_of_the_users_own_can_be_walked(self):
@@ -482,7 +526,7 @@ class SkillAgrees(unittest.TestCase):
             self.assertIn(part, step7)
         step10 = steps[steps.index("## Step 10"):steps.index("## Step 11")]
         for part in ["forge-work/dashboard/motion", "-390-f[1-4].png", "the before command of Step 3.4 exactly",
-                     "signin.mjs <URL> <dashboard path>"]:
+                     "signin.mjs <URL> <dashboard path>", "DEMO_EMAIL=", "DEMO_PASSWORD=", "--scene-frames"]:
             self.assertIn(part, step10)
         self.assertNotIn("dashboard-390", steps)
         for part in ["## Built", "one plain line per check", "code block"]:
@@ -490,9 +534,66 @@ class SkillAgrees(unittest.TestCase):
         self.assertIn("map those to the app's own variables", steps)
         self.assertIn("in the user's language", steps[steps.index("## Next"):])
         for part in ["## 15. Shots of a signed-in dashboard", "context.storageState", "page.on('console'",
-                     "never a password in a file"]:
+                     "never a password in a file", "DEMO_EMAIL=.. DEMO_PASSWORD=.. node forge-work/design/signin.mjs",
+                     "BASE [PATH] [STATE]", "page.route", "never in the user's database", "A screen the server renders",
+                     "a second instance of the app", "The user's own database is never touched",
+                     "node forge-work/design/fixture.mjs", "BASE PATH OUT [ROUTE|-] [STATE|none]",
+                     "Before any row goes in, point the copy at its own database through the environment",
+                     "an absolute path that still leads to the user's own", "every command that puts the rows in"]:
             self.assertIn(part, reference)
-        self.assertNotIn("depth.js", reference + steps, "the scene kit has no depth.js")
+        self.assertIn("its reader's own `--state`", steps[steps.index("## Step 3"):steps.index("## Step 4")])
+        self.assertIn("(another reader: the path given third)", step1)
+        for name in re.findall(r"\.\./forge-design/scenes/([\w.]+)", reference + steps):  # what they name of the kit
+            self.assertTrue(os.path.isfile(os.path.join(ROOT, "forge-design", "scenes", name)), name)
+
+    def test_more_than_one_screen_more_numbers_than_the_level_and_the_data_it_loads(self):
+        steps = " ".join(self.steps.split())
+        step3 = steps[steps.index("## Step 3"):steps.index("## Step 4")]
+        for part in ["one report per screen", "`forge-work/dashboard-<screen>.md`", "the checks on `dashboard.md` read them all",
+                     "is never dropped", "under `## Left` with why", "the same routes with other parameters",
+                     "a new route or query does not", "built all the same, with a read-only query scoped like the rest",
+                     "No item of the level goes under `## Left`"]:
+            self.assertIn(part, step3)
+        self.assertIn("(never an item of the level)", steps[steps.index("## Output"):])
+        step6 = steps[steps.index("## Step 6"):steps.index("## Step 7")]
+        for part in ["`chart-seq-1` (low) to `chart-seq-5`", "on a copy of the theme file first", "`diff`"]:
+            self.assertIn(part, step6)
+        step8 = steps[steps.index("## Step 8"):steps.index("## Step 9")]
+        for part in ["at 390px with a fixture", "never \"no data\""]:
+            self.assertIn(part, step8)
+        self.assertIn("../forge-design/bars3d.css", steps[steps.index("## Step 7"):steps.index("## Step 8")])
+        self.assertIn("which state the user's own data shows", steps[steps.index("## Next"):])
+
+    def test_the_scripts_of_section_15_parse_and_take_the_state_file_they_say(self):
+        """signin.mjs and fixture.mjs are copied into the user's project as they stand: both must parse as ES
+        modules, and each takes a state file as its last argument, so a second reader never overwrites alice.json."""
+        reference = read(REFERENCE)
+        blocks = re.findall(r"```js\n(.*?)```", reference[reference.index("## 15."):], re.S)
+        self.assertEqual(len(blocks), 2)
+        self.assertIn("state = 'forge-work/design/alice.json'] = process.argv.slice(2)", blocks[0])
+        self.assertIn("pattern = '-', state = 'forge-work/design/alice.json'] = process.argv.slice(2)", blocks[1])
+        self.assertIn("page.route(pattern", blocks[1])
+        # fixture.mjs never shoots a sign-in page as the dashboard: no state file is exit 2, and a redirect away
+        # from PATH or a password field is a problem with no picture (an expired session answers 200 too)
+        for part in ["if (state !== 'none' && !existsSync(state))", "process.exit(2); }",
+                     "bare(landed) !== bare(asked.pathname)", "input[type=\"password\"]:visible",
+                     "if (!away) await page.screenshot", "a sign-in page? sign in again (signin.mjs); no picture"]:
+            self.assertIn(part, blocks[1])
+        for block in blocks:
+            self.assertNotRegex(block, r"https?://(?!localhost)|//cdn|unpkg|jsdelivr")
+            self.assertIn("waitUntil: 'load'", block)  # a live refresh over server-sent events may never go quiet
+            self.assertNotIn("waitUntil: 'networkidle'", block)
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node is not installed")
+        with tempfile.TemporaryDirectory() as folder:
+            for number, block in enumerate(blocks):
+                path = os.path.join(folder, "block%d.mjs" % number)
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write(block)
+                done = subprocess.run([node, "--check", path], timeout=60, stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE, universal_newlines=True)
+                self.assertEqual(done.returncode, 0, block[:80] + done.stderr)
 
     def test_the_reference_shows_each_level_the_hud_and_the_data_scene(self):
         reference = read(REFERENCE)

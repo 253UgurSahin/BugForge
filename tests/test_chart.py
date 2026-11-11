@@ -291,6 +291,14 @@ class Colours(ChartCase):
     def test_the_packs_own_token_file_works(self):
         self.assertEqual(self.report("--tokens", TOKENS)["colours"][0], "#3f4856")
 
+    def test_chart_1_as_a_reference_to_the_accent_is_the_accent(self):
+        """The template writes chart-1 as var(--color-accent), so it follows a rebrand and the dark theme."""
+        path = self.tokens(**{"chart-1": "var(--color-accent)", "chart-2": "#222222"})
+        self.assertEqual(self.report("--tokens", path)["colours"][:2], ["#0f766e", "#222222"])
+        for bad in ("var(--color-accent", "var(--x) ; color: red", "url(x)"):
+            code, out, err = run(self.write(self.DATA), "--type", "line", "--tokens", self.tokens(**{"chart-1": bad}))
+            self.assertEqual((code, out), (2, ""), bad)
+
     def test_bad_tokens_are_refused(self):
         for path in (self.tokens(accent=None), self.tokens(bg="white"), self.tokens(text="javascript:alert(1)"),
                      self.tokens(**{"chart-2": '"/><script>'}), self.write("[1, 2]", "list.json"),

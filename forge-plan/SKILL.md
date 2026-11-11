@@ -34,6 +34,9 @@ Read `../forge/rules.md` once per session. In short:
 Also for this skill: one app, at most one database, all in the user's compose stack (profiles.md).
 Only official public APIs with the user's own keys, never the original's private endpoints, bundles
 or OAuth clients. The levels: `../forge/levels.md`. It writes no code, so it has nothing to show on screen.
+**Auto mode** (rules.md section 7): take the core loop, the must-haves, the profile (profiles.md's default), the
+accounts and the payment answers from the request, recon.md or compare's angle; log each with why (Step 9). Stop
+only for a level not on record, two profiles that both fit, prices, and money that goes to other businesses.
 
 ## Step 1: read what there is
 
@@ -62,19 +65,18 @@ each at the start of its own line: the gate checks both. Versions and image tags
 profiles.md, following its rule on the check date. Never write a version you did not see.
 
 **The look.** `python3 ../forge/level.py get look` (and `get dashboard` when the app has data screens).
-Nothing on record (exit 1): ask the one question of rules.md section 10 with the profile questions
-(the lines of `level.py show look`, and where the examples are), then record the answer:
-`python3 ../forge/level.py set look <n> --said '<their words>'`. Write what `get` prints in the
-`Look:` line. Levels 1 to 3 add no library; 4 and 5 add Three.js, wired as the profile's "3D scene"
-line says. The concept (colours, type, the hero) is picked later, in `/forge-design design`.
+Each that exits 1 (nothing on record): ask the one question of rules.md section 10 with the profile questions
+(the lines of `level.py show look` and `show dashboard`, and where the look's examples are), then record each:
+`python3 ../forge/level.py set look <n> --said '<their words>'`, `set dashboard <n>` alike. Write what `get`
+prints in the `Look:` line. Levels 1 to 3 add no library; 4 and 5 add Three.js, wired as the profile's "3D
+scene" line says. The concept (colours, type, the hero) is picked later, in `/forge-design design`.
 
 ## Step 3: screens and flows
 
-Clone mode: they are in recon.md. Write in plan.md only the screens and flows the plan adds,
-numbered on from recon's last ID. Idea mode: plan.md is the only list, and `/forge-design`,
-`/forge-build` and `/forge-check test` work from it. Write every screen (S01, ...: route, purpose,
-key components, states) and every flow (F01, ...: the screens in order, happy-path clicks, edge
-cases), core loop first.
+Clone mode: they are in recon.md. Write in plan.md only the screens and flows the plan adds, numbered on from
+recon's last ID. Idea mode: plan.md is the only list, and `/forge-design`, `/forge-build` and `/forge-check
+test` work from it. Write every screen (S01, ...: route, purpose, key components, states) and every flow (F01,
+...: the screens in order, happy-path clicks, edge cases), core loop first.
 
 ## Step 4: the schema
 
@@ -135,8 +137,7 @@ Fill in every line of that section in the template, or "n/a" with the reason. Ea
 
 ## Step 8: build order
 
-1. **Vertical slice**: the core loop end to end, plain styling. It proves the stack, the database
-   and the compose setup.
+1. **Vertical slice**: the core loop end to end, plain styling. It proves the stack, database and compose setup.
 2. **Must-haves**: the features.csv rows with priority must, by area. A must C-ID row goes here, next
    to the feature it changes: the diff gate does not score C-ID rows (original `no`).
 3. **Should-haves**: priority should and no C-ID, by area.
@@ -148,19 +149,18 @@ Rows with `clone` = skip go under "Not building" with the reason.
 
 ## Step 9: decisions log
 
-Every choice the user made or confirmed (profile, PWA, the look level, auth, who receives the money,
-the refund rule, what was left out) gets a row: date, decision, why, what was rejected. Later skills
-read it instead of asking again.
+Every choice the user made or confirmed, or you made in auto mode (profile, PWA, the look level, auth, who
+receives the money, the refund rule, what was left out), gets a row: date, decision, why, what was rejected.
+Later skills read it instead of asking again.
 
 ## Output
 - `forge-work/plan.md`, filled in from the template, with the `Profile:` and `PWA:` lines, and the `Look:` line.
 - In idea mode, the user's features as rows in `forge-work/features.csv`.
 
 ## Checkpoint
-Show the user a short plain summary, five lines at most: the profile and PWA choice with the
-one-line why, and the look level; the number of screens, tables and routes; what the vertical slice
-is; the three riskiest parts; anything they still have to decide. Then stop and wait for the user's
-go. Change the plan when they ask, and log the change.
+Show the user a short plain summary, five lines at most: the profile and PWA choice with the one-line why, and the
+look level; the number of screens, tables and routes; what the vertical slice is; the three riskiest parts; anything
+they still have to decide. Then stop and wait for the user's go. Change the plan when they ask, and log the change.
 
 ## Next
-`/forge-design`, which starts with the three concepts. When `/forge` started this skill, go back to `/forge`.
+`/forge-design design`, which starts with the three concepts. When `/forge` started this skill, go back to `/forge`.
