@@ -68,7 +68,7 @@ class GalleryTests(unittest.TestCase):
     def test_the_levels_are_there(self):
         levels = os.path.join(EXAMPLES, "levels")
         found = sorted(name for name in os.listdir(levels) if name.isdigit())
-        self.assertEqual(found[:2], ["1", "2"])
+        self.assertEqual(found, ["1", "2", "3", "4", "5"])
         for name in found:
             with self.subTest(level=name):
                 self.assertTrue(os.path.isfile(os.path.join(levels, name, "index.html")))
@@ -78,6 +78,16 @@ class GalleryTests(unittest.TestCase):
                                if file.endswith((".html", ".js")))
                 self.assertIn("vendor/scenes/", page, "level %s mounts a scene of the kit" % name)
                 self.assertIn("data-scene-poster", page, "level %s has a poster for no WebGL" % name)
+
+    def test_the_start_page_shows_every_level_with_a_preview_and_a_still(self):
+        start = read(os.path.join(EXAMPLES, "index.html"))
+        for name in ("1", "2", "3", "4", "5"):
+            with self.subTest(level=name):
+                self.assertIn('href="levels/%s/index.html"' % name, start)
+                self.assertIn('src="previews/level-%s.webp"' % name, start)
+                self.assertIn('srcset="previews/level-%s-still.webp"' % name, start, "a still for less motion")
+                for preview in ("level-%s.webp" % name, "level-%s-still.webp" % name):
+                    self.assertTrue(os.path.isfile(os.path.join(EXAMPLES, "previews", preview)), preview)
 
 
 if __name__ == "__main__":
