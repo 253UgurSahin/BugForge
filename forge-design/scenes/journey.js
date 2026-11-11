@@ -326,7 +326,7 @@ export function mount(section, options = {}) {
 
   // 4. The moving trip.
   const follower = new Follower(0);
-  let target = 0, lastRead = -1, lastWall = 0, current = -1, trip = 0, data = null;
+  let target = 0, lastRead = -1, current = -1, trip = 0, data = null;
   function applyScene(i, u) {
     scene.setProgress(clamp(monotone(progressList, i, u), 0, 1));
     const params = blendParams(paramList, i, u);
@@ -359,14 +359,15 @@ export function mount(section, options = {}) {
       if (rendering) place(...Object.values(locate(ats[told2key[stillIndex]])), 0, 0, false);
       return;
     }
-    const now = performance.now();
     // Read the scroll; a change takes over from setProgress. After a gap with no frames (the
-    // section was off screen) while the trip sat at an end, jump: the visitor came back elsewhere.
+    // section was off screen, the tab hidden, motion paused) while the trip sat at an end, jump:
+    // the visitor came back elsewhere. The stage marks that gap itself: the first frame after it
+    // has no delta. Frames that are only slow (a weak or software-drawn GPU) still glide: a wall
+    // clock gap here made the first and last wheel steps of the trip jump on such machines.
     const read = progressOf(root, "contain");
     if (read !== lastRead) { target = read; lastRead = read; }
-    const away = now - lastWall > 300 && (trip <= 0.001 || trip >= 0.999);
+    const away = delta === 0 && (trip <= 0.001 || trip >= 0.999);
     trip = current < 0 || away ? follower.snap(target) : follower.step(target, delta, o.inertia);
-    lastWall = now;
     const { i, u } = locate(trip);
     place(i, u, time, delta, true);
     const params = applyScene(i, u);

@@ -23,7 +23,7 @@
  *     mode: "bars", onHover: (cell) => showTooltip(cell),   // { index, row, column, value } or null
  *   });
  *   scape.setData(matrix);            // springs to the new numbers, never a jump
- *   addEventListener("scroll", () => scape.setProgress(scape.stage.progressOf(section)));
+ *   scape.stage.onFrame(() => scape.setProgress(scape.stage.progressOf(section)));   // no scroll listener
  *   scape.destroy();                  // when the page or component goes away
  *
  * Options (all optional; the stage's own options, see stage.js, pass straight through):
@@ -63,10 +63,10 @@
  * setPointer(x, y), pause(), resume(), destroy(), stage: as stage.js describes.
  *
  * Poster: a child `<img data-scene-poster src="datascape.png" alt="">` shows until the first frame
- * and whenever there is no WebGL. Make the picture by mounting with { still: true } and taking a
- * screenshot; reduced motion draws that same still (every value at its height, the band resting
- * at one place, no hover, no breathing). Keep a plain table of the numbers on the page too: a
- * sculpture is not an accessible chart.
+ * and whenever there is no WebGL. Take the picture from the page itself under reduced motion, which
+ * draws this still (every value at its height, the band resting at one place, no hover, no
+ * breathing), one per theme and shape, with the page's header and text hidden: scenes.md section 5.
+ * Keep a plain table of the numbers on the page too: a sculpture is not an accessible chart.
  *
  * Cost: three draw calls (floor, reflection, bars) or two (floor, ridges), no textures. Bars are one
  * instanced box (the sample is a field of 24 by 48); ridges have 4, 6 or 10 points per column and

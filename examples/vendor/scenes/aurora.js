@@ -19,7 +19,7 @@
  *
  *   import { mount } from "./scenes/aurora.js";
  *   const sky = mount(document.querySelector(".page-sky"), { mode: "water", calm: "left" });
- *   addEventListener("scroll", () => sky.setProgress(sky.stage.progressOf(document.body)));
+ *   sky.stage.onFrame(() => sky.setProgress(sky.stage.progressOf(document.body, "contain")));
  *   sky.setData([0.2, 0.9, 0.4]);   // more energy
  *   sky.destroy();                  // when the page or component goes away
  *
@@ -52,9 +52,10 @@
  *
  * Poster: give the container a child `<img data-scene-poster src="sky.png" alt="">`, shown until
  * the first frame and again when there is no WebGL; or a background image plus the rule
- * `.page-sky[data-scene="live"] { background-image: none; }`. To make the picture, mount with
- * { still: true } at the size you need and take a screenshot. A plain gradient of --color-bg with
- * a little --color-accent also serves.
+ * `.page-sky[data-scene="live"] { background-image: none; }`. Take the picture from the page
+ * itself under reduced motion (the stage draws this still), one per theme and shape, with the
+ * page's header and text hidden: scenes.md section 5. A plain gradient of --color-bg with a little
+ * --color-accent also serves.
  *
  * Cost: one draw call, no textures, nothing moves on the processor. It draws at part of the screen
  * resolution (0.5, 0.6, 0.75 of it for low, medium, high quality: a soft picture loses nothing by

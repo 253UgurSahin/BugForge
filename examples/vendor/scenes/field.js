@@ -26,8 +26,20 @@
  *   spread     1: how far the points stray from the shape (the width of the ribbon, the strength
  *              of the current). 0.6 is tidy, 1.6 is loose.
  *   side       "right": where the mass sits on a wide screen, away from the headline: "right",
- *              "left" or "center". On a phone the field always lies low and wide under the text.
+ *              "left" or "center". On a phone the field lies low and wide under the text, unless
+ *              phone places it.
  *   intensity  1: brightness of the points. 0.6 for a busy page, 1.4 for a dark empty one.
+ *   streak     0: round points. Above 0 every point that moves is drawn as a short streak along the
+ *              way it goes, brightest at its head, and turns as its path turns: wind, rain, traffic,
+ *              a school of fish, people on their way. 1 is a streak about as long as the way the
+ *              point travels in a second, 2 twice that; a point that stands still stays round.
+ *              Round the pointer the streaks turn along the edge of the hollow. With streaks the
+ *              default count is a third (each streak covers more of the screen than a dot).
+ *   phone      { below: 600, at: [0.5, 0.75], size: 1, calmBox: [x0, y0, x1, y1] }: the place of the
+ *              field while the container is narrower than `below` CSS pixels, for the page's own
+ *              phone layout: at is about where the middle of the form sits, size its width as a part
+ *              of the container's width, calmBox the text block (all as parts of the container from
+ *              the top left). Check it at 390 wide with the page's real text over it.
  *
  * setProgress(p), 0..1: the formations, each with a soft transition where the points leave one
  *   after the other from left to right and swirl a little on the way: 0 cloud, 0.25 ring, 0.5 wave
@@ -43,19 +55,23 @@
  *
  * Poster: give the container a child `<img data-scene-poster src="field.png" alt="">` (shown until
  * the first frame, and again when there is no WebGL), or a background image plus the rule
- * `.hero-scene[data-scene="live"] { background-image: none; }`. To make the picture, mount with
- * { still: true } in the page at the size you need and take a screenshot.
+ * `.hero-scene[data-scene="live"] { background-image: none; }`. Take the picture from the page
+ * itself under reduced motion (the stage draws this still), one per theme and shape, with the
+ * page's header and text hidden: scenes.md section 5.
  *
  * Cost: one draw call. The vertex shader evaluates up to two formations and two steps of curl noise
  * (six simplex lookups) per point; in low quality one step (three lookups); none in the grid. 150 000
  * points are meant for a desktop graphics chip; a phone starts at 60 000 and the stage steps down
- * when slow. The fragment work is small round points with no textures.
+ * when slow. The fragment work is small round points with no textures. streak works out every
+ * point twice (now and a moment before) and draws larger sprites, so it starts from a third of the
+ * points.
  */
 import * as THREE from "three";
 import { createStage } from "./stage.js";
 import { stageUniforms, common, curl, pointSize, pointSprite, grain } from "./glsl.js";
 
 const FORMATIONS = ["cloud", "ring", "wave", "grid"];
+const FORM_SPAN = { cloud: [6.1, -0.65], ring: [3.9, 0.6], wave: [6.6, 0.3], grid: [5.8, 0] };   // width, middle (x)
 const COUNTS = [20000, 60000, 150000];   // low, medium, high
 const LATTICE = [36, 15];                // grid nodes across and up: 540 nodes
 const REFERENCE = 60000;                 // the count the brightness is tuned for
@@ -74,8 +90,12 @@ uniform vec2 uTrail;          // where the pointer was a moment ago (-1..1): the
 uniform vec4 uCalm;           // the headline's box on screen (-1..1): x min, x max, y min, y max
 uniform float uCalmAmount;
 uniform float uData[${DATA}];
+uniform float uStreak;        // seconds of travel a streak shows (the streak option)
 varying vec3 vColor;
 varying float vAlpha, vBlur, vSharp;
+#ifdef STREAK
+varying float vAngle, vLength, vWidth;   // the streak's heading on screen, its length and width (device px)
+#endif
 
 // More random numbers from the fourth seed, each different for k = 1, 2, 3 ...
 float rnd(vec4 s, uint k) { return hashToFloat(hashU(uint(s.w * 16777215.0) + k * 0x9e3779b9u)); }
@@ -162,9 +182,9 @@ vec3 formation(int k, vec4 s, float t, inout float fade, inout float core) {
 }
 const vec4 LOOSE = vec4(1.0, 0.35, 0.12, 0.0);   // how much each formation gives way to the current
 
-void main() {
-  vec4 s = aSeed;
-  float t = uTime * uSpeed;
+// Where a point is at flow time t, and how it looks there: its fade and core, how far into the
+// grid it is (order), and its role (dust, gas, spark), as main() uses them.
+vec3 placeAt(vec4 s, float t, out float fade, out float core, out float order, out float dust, out float gas, out float spark) {
   // Which two formations, and how far between them. Each point sets off a little later the further
   // right it is, plus a random part, and takes 45% of the way to arrive: a staggered sweep.
   float stagePos = min(uProgress * 4.0, 3.0);
@@ -177,13 +197,14 @@ void main() {
   vec3 a = formation(k, s, t, fadeA, coreA);
   vec3 b = local > 0.0 ? formation(k + 1, s, t, fadeB, coreB) : a;
   vec3 p = mix(a, b, local);
-  float fade = mix(fadeA, fadeB, local), core = mix(coreA, coreB, local);
+  fade = mix(fadeA, fadeB, local);
+  core = mix(coreA, coreB, local);
   float loose = mix(LOOSE[k], LOOSE[min(k + 1, 3)], local) + 0.8 * sin(PI * local);   // swirl in flight
   // How far into the grid: there every point joins a node, so the special roles below give way.
-  float order = k == 2 ? local : 0.0;
+  order = k == 2 ? local : 0.0;
 
   // A tenth of the points are dust: a wide, thin haze in front of and behind the shape, for depth.
-  float dust = (s.w < 0.1 ? 1.0 : 0.0) * (1.0 - order);
+  dust = (s.w < 0.1 ? 1.0 : 0.0) * (1.0 - order);
   if (dust > 0.0) {
     vec3 haze = vec3(tri(s.x, rnd(s, 3u)) * 6.0, (s.y - 0.5) * 4.0, mix(-5.0, 3.6, s.z));
     p = mix(p, haze, dust);
@@ -191,8 +212,8 @@ void main() {
   }
   // One point in sixteen is gas: eight times as wide and very faint, a soft glow (or on a light
   // page a pale wash) under the shape. One in a hundred is a spark: larger and brighter.
-  float gas = (s.w >= 0.1 && s.w < 0.1625 ? 1.0 : 0.0) * (1.0 - order);
-  float spark = (s.w > 0.988 ? 1.0 : 0.0) * (1.0 - order);
+  gas = (s.w >= 0.1 && s.w < 0.1625 ? 1.0 : 0.0) * (1.0 - order);
+  spark = (s.w > 0.988 ? 1.0 : 0.0) * (1.0 - order);
 
   // The current: move the point along a curl-noise flow that itself drifts slowly. Two steps, the
   // second finer, pull the soft shape into threads with dense and empty parts.
@@ -203,11 +224,26 @@ void main() {
     p += curlNoise(p * 1.1 + vec3(t * 0.04, 0.0, 0.0)) * 0.16 * loose * uSpread;
 #endif
   }
+  return p;
+}
+
+void main() {
+  vec4 s = aSeed;
+  float t = uTime * uSpeed;
+  float fade, core, order, dust, gas, spark;
+  vec3 p = placeAt(s, t, fade, core, order, dust, gas, spark);
 
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   float depth = -mv.z;
   gl_Position = projectionMatrix * mv;
   vec2 screen = gl_Position.xy / gl_Position.w;
+#ifdef STREAK
+  // The way the point goes on screen: where it was a quarter of a second before (at this speed).
+  float f2, c2, o2, d2, g2, s2;
+  vec4 then = projectionMatrix * modelViewMatrix * vec4(placeAt(s, t - 0.25 * uSpeed, f2, c2, o2, d2, g2, s2), 1.0);
+  vec2 moved = (screen - then.xy / then.w) * 0.5 * uView;   // CSS px in that quarter second
+  float heading = atan(moved.y, moved.x);
+#endif
 
   // The wake, on screen and in CSS pixels. The pointer drags a channel from where it was a moment
   // ago (uTrail) to where it is; round that line each point is moved outwards so that its distance
@@ -235,6 +271,12 @@ void main() {
     screen = here / halfView;
     gl_Position.xy = screen * gl_Position.w;
     rimLight = uWake * 3.2 * R2 / (r2 + 3.2 * R2);         // a soft light round the pointer, wider than the hollow
+#ifdef STREAK
+    // Near the hollow a streak turns along its edge, the way the eddy turns.
+    vec2 along = vec2(-dir.y, dir.x) * sign(uSwirl + 0.001);
+    vec2 way = mix(normalize(moved + vec2(1e-5, 0.0)), along, clamp(pull * 2.4, 0.0, 1.0) * (1.0 - dust));
+    heading = atan(way.y, way.x);
+#endif
   }
 
   // Depth of field: in front of the focus a point grows (blur) and dims by the same area, so it
@@ -256,6 +298,18 @@ void main() {
   float least = 1.6 * uPixelRatio;                      // smaller than this would flicker: draw it
   float alpha = uAlpha * fade / (grow * grow) * 1.8 * min(1.0, pow(pixels / least, 2.0));
   gl_PointSize = clamp(pixels, least, 64.0 * uPixelRatio);   // a cap: a huge disc costs much and adds nothing
+#ifdef STREAK
+  // A streak is as wide as the point would be and as long as the way it goes in uStreak seconds,
+  // under the same cap; it spreads its light along that length. Gas and dust stay round: a glow,
+  // and a haze that would read as scratches if it streaked.
+  float wide = gl_PointSize;
+  float drawn = clamp(wide + length(moved) * 4.0 * uStreak * uPixelRatio * (1.0 - gas) * (1.0 - dust), wide, 64.0 * uPixelRatio);
+  gl_PointSize = drawn;
+  alpha *= pow(wide / drawn, 0.7);
+  vAngle = heading;
+  vLength = drawn;
+  vWidth = wide;
+#endif
   alpha *= 1.0 - mix(0.5, 0.65, dark) * far;
   // On a light page a blurred near point would be a grey blot, a stain on the paper: it all but goes.
   alpha *= mix(1.0 - 0.96 * smoothstep(0.04, 0.45, blur), 1.0, dark);
@@ -297,13 +351,29 @@ ${pointSprite}
 ${grain}
 varying vec3 vColor;
 varying float vAlpha, vBlur, vSharp;
+#ifdef STREAK
+varying float vAngle, vLength, vWidth;
+#endif
 void main() {
+#ifdef STREAK
+  // A streak is a round point drawn out along its way: in its own frame (x along the way, device px
+  // from the sprite's middle) the nearest point of its middle line, as the point coordinate of a
+  // round point of its width, so its edge is the same soft edge. Brightest at its head.
+  vec2 c = (gl_PointCoord - 0.5) * vLength;
+  c.y = -c.y;
+  vec2 f = vec2(cos(vAngle) * c.x + sin(vAngle) * c.y, cos(vAngle) * c.y - sin(vAngle) * c.x);
+  vec2 coord = 0.5 + vec2(max(abs(f.x) - max(0.5 * (vLength - vWidth), 0.0), 0.0), f.y) / vWidth;
+  float head = mix(0.3, 1.0, smoothstep(-0.5 * vLength, 0.5 * vLength, f.x));
+#else
+  vec2 coord = gl_PointCoord;
+  float head = 1.0;
+#endif
   // In focus: a small dot with a firm middle. Out of focus: an even disc with a soft rim, as a lens
   // draws a light that is too near. Gas (2): only the soft falloff.
-  float r = length(gl_PointCoord - 0.5) * 2.0;
-  float disc = (1.0 - smoothstep(0.55, 1.0, r)) * 0.7 + 0.3 * softDot(gl_PointCoord);
-  float spot = mix(softDot(gl_PointCoord), softDot(gl_PointCoord, 0.35), vSharp);
-  float alpha = (vBlur > 1.5 ? softDot(gl_PointCoord) : mix(spot, disc, vBlur)) * vAlpha;
+  float r = length(coord - 0.5) * 2.0;
+  float disc = (1.0 - smoothstep(0.55, 1.0, r)) * 0.7 + 0.3 * softDot(coord);
+  float spot = mix(softDot(coord), softDot(coord, 0.35), vSharp);
+  float alpha = (vBlur > 1.5 ? softDot(coord) : mix(spot, disc, vBlur)) * vAlpha * head;
   if (alpha < 0.003) discard;
   gl_FragColor = vec4(vColor, alpha);
   #include <colorspace_fragment>
@@ -322,11 +392,14 @@ export function mount(container, options = {}) {
     spread: number(options.spread, 1, 0.2, 2.5),
     side: pick(options.side, ["right", "left", "center"], "right"),
     intensity: number(options.intensity, 1, 0, 3),
+    streak: number(options.streak, 0, 0, 4),
+    phone: options.phone && typeof options.phone === "object" ? options.phone : null,
   };
   const stage = createStage(container, {
     stillTime: 14, camera: { fov: 38, position: [0, 0.35, 7.2], lookAt: [0, 0, 0] }, ...options,
   });
   if (stage.failed) return stage.handle();
+  const defines = settings.streak > 0 ? { CURL_STEPS: 2, STREAK: 1 } : { CURL_STEPS: 2 };
 
   const dataNow = new Float32Array(DATA).fill(0.5), dataGoal = new Float32Array(DATA).fill(0.5);
   const uniforms = {
@@ -337,9 +410,10 @@ export function mount(container, options = {}) {
     uWake: { value: 0 }, uWakeRadius: { value: 64 }, uSwirl: { value: 0.9 },
     uView: { value: new THREE.Vector2(1, 1) }, uTrail: { value: new THREE.Vector2() },
     uCalm: { value: new THREE.Vector4(-1, -0.1, -0.7, 0.7) }, uCalmAmount: { value: 0.75 },
+    uStreak: { value: settings.streak },
   };
   const material = new THREE.ShaderMaterial({
-    uniforms, vertexShader, fragmentShader, defines: { CURL_STEPS: 2 },
+    uniforms, vertexShader, fragmentShader, defines,
     transparent: true, depthWrite: false, depthTest: false,
   });
   const points = new THREE.Points(new THREE.BufferGeometry(), material);
@@ -361,7 +435,7 @@ export function mount(container, options = {}) {
   }
 
   stage.onQuality((quality) => {
-    count = Math.round(settings.count || quality.pick(...COUNTS));
+    count = Math.round(settings.count || quality.pick(...COUNTS) / (settings.streak > 0 ? 3 : 1));
     const [nx, ny] = LATTICE, nodes = nx * ny;
     const seeds = new Float32Array(count * 4), slots = new Float32Array(count * 3);
     let state = 0x2f6b1d;                   // a fixed start: the field looks the same on every load
@@ -391,12 +465,26 @@ export function mount(container, options = {}) {
   });
 
   // Composition. Wide: the mass to one side, the headline's half kept calm. Phone: low and wide,
-  // under the text. In between: lower and a little smaller.
+  // under the text, or where the phone option puts it. In between: lower and a little smaller.
   stage.onResize((size) => {
     const view = stage.viewSize(7.2);
     const sign = settings.side === "left" ? -1 : 1, centred = settings.side === "center";
+    const phone = settings.phone && size.width < number(settings.phone.below, 600, 0, 10000) ? settings.phone : null;
     let scale = 1;
-    if (size.aspect >= 1.1) {
+    if (phone) {
+      // The page's own phone layout: the middle of the form shown first at `at`, its width a part
+      // of the container's, the calm on the page's text block.
+      const at = Array.isArray(phone.at) && phone.at.length === 2 ? phone.at : [0.5, 0.75];
+      const [wide, middle] = FORM_SPAN[settings.formation];
+      scale = (number(phone.size, 1, 0.1, 3) * view.width) / wide;
+      group.position.set((number(at[0], 0.5, -1, 2) - 0.5) * view.width - middle * scale,
+        (0.5 - number(at[1], 0.75, -1, 2)) * view.height, 0);
+      group.scale.setScalar(scale);
+      const calm = Array.isArray(phone.calmBox) && phone.calmBox.length === 4 ? phone.calmBox.map((v) => number(v, 0, 0, 1)) : null;
+      if (calm) uniforms.uCalm.value.set(calm[0] * 2 - 1, calm[2] * 2 - 1, 1 - calm[3] * 2, 1 - calm[1] * 2);
+      uniforms.uCalmAmount.value = calm ? 0.92 : 0;
+      uniforms.uGridShift.value = 0;
+    } else if (size.aspect >= 1.1) {
       scale = Math.min(1.12, view.width / 7.2);
       group.position.set(centred ? 0 : sign * view.width * 0.14, 0.05, 0);
       group.scale.set(centred ? scale : sign * scale, scale, scale);   // "left" mirrors the field

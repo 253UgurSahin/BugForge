@@ -26,7 +26,8 @@
  *     stage.onQuality((quality) => {             // runs now, and again when the stage steps down
  *       mesh.geometry.dispose();                 // keep the object and its material, swap the geometry
  *       mesh.geometry = new THREE.TorusKnotGeometry(1, 0.3, quality.pick(96, 180, 320), 16);
- *     });
+ *     });                                        // the knot is a stand-in: build the app's own thing here
+ *                                                // (a ledger, a book, a plate), never ship the knot
  *     stage.onTokens((tokens) => { material.blending = tokens.blending; });   // glow on dark, ink on light
  *     stage.onResize((size) => { stage.camera.position.z = size.aspect < 1 ? 7 : 5; });
  *     stage.onFrame((time, delta) => { mesh.rotation.y = time * 0.1 + stage.pointer.x * 0.3; });
@@ -67,8 +68,8 @@
  *                 (the second gives tokens.glow and uniforms.uGlow). A value that does not start
  *                 with -- is read as a CSS colour.
  *   stillTime     8. The moment, in seconds, that the one still frame shows (see "Still frames").
- *   still         false. true behaves as if the visitor asked for reduced motion: the way to make a
- *                 poster.
+ *   still         false. true behaves as if the visitor asked for reduced motion (a lab page, a test).
+ *                 A poster is taken from the page itself under reduced motion: scenes.md section 5.
  *   pointerEase   0.18, progressEase 0.25: seconds the eased pointer and progress need for most of
  *                 the way.
  *   fade          400. Milliseconds the canvas takes to fade in on its first frame; 0 shows it at once.
@@ -151,6 +152,16 @@
  *                       top, 1 as its bottom reaches the bottom. Typical use:
  *                       stage.onFrame(() => scene.setProgress(progressOf(section)));
  *
+ * THE FIRST FRAME
+ *
+ * Compiling the shaders is the heaviest part of a start, so it gets tasks of its own: at the first
+ * frame the stage compiles every material in the scene (three's compileAsync where the browser
+ * can compile beside the page, KHR_parallel_shader_compile; else compile(), and the first frame
+ * waits for the next quiet moment while the driver works), and only then draws. Build the scene
+ * in mount(); a material added later compiles at its first render. Measure the start after
+ * data-scene="live" (scenes.md section 8): no single task of the start should come near the
+ * 330 to 550 ms that mount, compile and the first frame took together in one task.
+ *
  * STILL FRAMES
  *
  * With prefers-reduced-motion: reduce the loop never runs. The stage draws one frame at stillTime
@@ -167,7 +178,11 @@
  * - Every colour comes from stage.tokens or stage.uniforms. In a ShaderMaterial end the fragment
  *   shader with `#include <colorspace_fragment>`, or the colours come out too dark.
  * - Do not paint a flat background: where there is nothing to draw, leave the pixels transparent,
- *   so the page shows through.
+ *   so the page shows through. The one exception is a framed scene, a window onto a place with an
+ *   edge of its own (a framed hero, a panel, a map card): it may fill its frame, with colours from
+ *   the tokens only (stage.scene.background = stage.tokens.bg, or a backdrop mesh with a gradient
+ *   of them), when the container's CSS background is that same colour, so the poster, the
+ *   fallback and the first frame match.
  * - Build counts from stage.quality inside onQuality, and dispose() the geometry you replace.
  * - Geometry that the vertex shader moves needs `frustumCulled = false`: three cannot know where
  *   it ends up, and would drop it at the wrong moment.
@@ -208,6 +223,17 @@ const WARM_UP = 12;      // frames left out after a start: shaders compile there
 const stages = new WeakMap(); // container -> its live stage, so a second mount replaces the first
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 const nothing = () => {};
+
+// One 1 x 1 canvas for every colour that has to be read back as sRGB, shared by every stage.
+let probeContext = null;
+function probe2d() {
+  if (!probeContext) {
+    const probe = document.createElement("canvas");
+    probe.width = probe.height = 1;
+    probeContext = probe.getContext("2d", { willReadFrequently: true });
+  }
+  return probeContext;
+}
 
 /** How far ELEMENT has travelled through the viewport, 0..1. See the top of this file. */
 export function progressOf(element, mode = "cover") {
@@ -396,9 +422,37 @@ export function createStage(element, options = {}) {
     if (!rafId) rafId = requestAnimationFrame(tick);
   }
 
+  // The shaders are compiled before the first frame, in tasks of their own (see "The first frame"
+  // at the top). With KHR_parallel_shader_compile the driver builds them while the page goes on and
+  // three only polls; without it compile() hands them to the driver, and the first frame comes at
+  // the next quiet moment, so the wait falls outside the frame and outside mount().
+  let compiled = !renderer || typeof renderer.compile !== "function", compiling = false;
+  function compileFirst() {
+    if (compiling) return;
+    compiling = true;
+    const done = () => {
+      compiled = true;
+      if (destroyed) return;
+      dirty = true;
+      update();
+    };
+    const extensions = renderer.extensions;
+    // has() asks without a console warning; compileAsync() warns where the extension is missing.
+    const parallel = extensions && typeof extensions.has === "function" && extensions.has("KHR_parallel_shader_compile");
+    if (parallel && typeof renderer.compileAsync === "function") {
+      renderer.compileAsync(stage.scene, stage.camera).catch(nothing).then(done);
+      return;
+    }
+    try { renderer.compile(stage.scene, stage.camera); } catch (error) { /* the first render says what is wrong */ }
+    try { renderer.getContext().flush(); } catch (error) { /* a lost context: the first render falls back */ }
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(done, { timeout: 400 });
+    else setTimeout(done, 120);
+  }
+
   function tick(now) {
     rafId = 0;
     if (!visible()) return;
+    if (!compiled) { compileFirst(); return; } // nothing is drawn until the shaders are there; done() asks again
     if (stage.running) {
       const gap = last === null ? 0 : now - last; // milliseconds since the last frame
       last = now;
@@ -507,7 +561,8 @@ export function createStage(element, options = {}) {
   // 4. Colours. Any CSS colour becomes [r, g, b] in 0..1, or null. The browser does the work: the
   //    canvas shows no text, so its `color` is free to use as a probe, and that resolves var(),
   //    light-dark(), color-mix() and names. What is left in a wider colour space (oklch, lab,
-  //    display-p3) is painted on a 2D canvas and read back as sRGB.
+  //    display-p3) is painted on one shared 1 x 1 canvas and read back as sRGB (probe2d: made with
+  //    willReadFrequently, so the read-back stays on the processor and never stalls the GPU).
   function resolveColor(value) {
     if (!value) return null;
     canvas.style.color = "";
@@ -519,7 +574,8 @@ export function createStage(element, options = {}) {
     const scale = /^rgba?\(/.test(computed) ? 255 : (/^color\(srgb /.test(computed) ? 1 : 0);
     if (scale && numbers.length >= 3) return numbers.slice(0, 3).map((n) => clamp(n / scale, 0, 1));
     try {
-      const context = document.createElement("canvas").getContext("2d");
+      const context = probe2d();
+      context.clearRect(0, 0, 1, 1);
       context.fillStyle = computed;
       context.fillRect(0, 0, 1, 1);
       return Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3), (n) => n / 255);

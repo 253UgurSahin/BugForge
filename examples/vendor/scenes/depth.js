@@ -22,7 +22,7 @@
  *
  *   <link rel="stylesheet" href="/scenes/depth.css">
  *   import { mount } from "./scenes/depth.js";
- *   const depth = mount(document.querySelector("main"), { tilt: 4 });
+ *   const depth = mount(document.querySelector("main"), { tilt: 7 });   // level 3: 6 degrees or more
  *   depth.destroy();          // when the page or the component goes away
  *
  * mount(root, options) finds every [data-depth] inside root (root included) at that moment. For
@@ -32,6 +32,7 @@
  * attribute on one element wins for it and is read on every frame, so a page may change it at any
  * time; a value that is not a number where a number belongs keeps the default):
  *   tilt         5     degrees a tilt card leans at its edge (never more than 8: text gets hard to read).
+ *                      Look level 3 asks 6 or more at the edge: pass 7 there.
  *   ease         0.55  seconds the eased motion needs for most of the way. Heavy and calm on purpose.
  *   lift         9     pixels each layer number rises above a hovered card (layer 3: 27 px).
  *   raise        16    pixels the whole card comes toward the eye when fully lifted.
@@ -70,9 +71,10 @@
  *                  the motion; it runs again once every reason has been resumed. stage is null.
  *
  * Manners. Reduced motion, or html[data-motion="paused"] (the switch of lazy.js motionToggle): flat
- * and still. Cards lie flat, folds are open, scene layers rest, and a stack shows its cascade as a
- * flat picture. One frame loop serves every element of a mount; it runs only while something moves,
- * on screen, in a visible tab, and sleeps after (a scene with drift moves while it is on screen).
+ * and still, with nothing taken away. Cards lie flat, folds are open, scene layers rest, and a stack
+ * shows its cascade as a flat picture. One frame loop serves every element of a mount; it runs only
+ * while something moves, on screen, in a visible tab, and sleeps after (a scene with drift moves
+ * while it is on screen). Any scroll wakes it, also one inside a scrolling element of the page.
  * Every element is marked data-depth-asleep while it is off screen or paused; depth.css then pauses
  * any CSS animation of the page's own inside it, so small live details (a line that travels, a dot
  * that breathes) stop with the rest. destroy() removes every listener and observer, the glare
@@ -531,7 +533,9 @@ export function mount(root = document.body, options = {}) {
   const gone = () => { pointer.has = false; wake(); };
   on(document.documentElement, "pointerleave", gone);
   on(window, "blur", gone);
-  on(window, "scroll", wake);
+  // Scroll events of an element do not bubble: listening in the capture phase on the document
+  // hears every scroll, the page's own and that of a main area scrolling inside a fixed frame.
+  on(document, "scroll", wake, { capture: true, passive: true });
   on(window, "resize", () => (flat() ? still() : wake()));
   on(document, "visibilitychange", () => (document.hidden ? stop() : wake()));
   on(reduced, "change", () => { asleep(); still(); });

@@ -12,19 +12,29 @@
  *   hero.setProgress(0.4);                      // safe at once: kept, and passed on when the scene is there
  *   motionToggle(document.querySelector("#motion"));
  *
- * THE POSTER. A still picture of the scene (a screenshot of it mounted with { still: true } will
- * do), given in one of two ways:
+ * THE POSTER. A still picture of the scene, taken from the page itself under reduced motion (the
+ * stage draws this still), given in one of two ways:
  *
  *   <div class="hero-scene" aria-hidden="true">
- *     <img data-scene-poster src="/img/hero-poster.webp" alt="">      a child marked data-scene-poster
+ *     <img data-scene-poster src="/img/hero-poster.jpg" alt="">       a child marked data-scene-poster
  *   </div>
  *
- *   .hero-scene { background: center / cover no-repeat url(/img/hero-poster.webp); }   or a background image
+ *   .hero-scene { background: center / cover no-repeat url(/img/hero-poster.jpg); }    or a background image
  *   .hero-scene[data-scene="live"] { background-image: none; }       ... taken away once the scene is live
+ *
+ * An app with a theme switch or a phone layout gives an empty <div data-scene-poster></div> a
+ * background per theme and shape instead, and takes each picture from the page itself, with the
+ * page's own header and text hidden: scenes.md section 5.
  *
  * The scene's stage sets data-scene="live" on the container when its first frame is on screen and
  * fades a data-scene-poster child out by itself. When WebGL is missing, or the scene cannot be
- * loaded or throws, the container gets data-scene="fallback" and the poster simply stays.
+ * loaded or throws, the container gets data-scene="fallback" and the poster simply stays. WebGL 2
+ * is tested before the loader runs, so a browser without it never downloads three.js.
+ *
+ * The start comes in steps with a pause between them, so none of them holds up the page for long:
+ * three.js and the scene arrive and are evaluated; at the next quiet moment mount() builds the
+ * renderer and the geometry; the stage then compiles the shaders, and draws the first frame only
+ * after that (see stage.js, "The first frame").
  *
  * lazyScene(container, loader, options) -> handle
  *   loader     () => import("./scenes/form.js"): anything that returns a promise of a module with
@@ -34,6 +44,7 @@
  *                              screen above and below). Any CSS length or percentage.
  *                lazy.timeout  2000: the longest wait for a quiet moment, in milliseconds. A scene at
  *                              the top of the page that must be there fast can pass 300, or call load().
+ *                lazy.webgl    true: test for WebGL 2 first. false for a loader that needs no WebGL.
  *   handle     setProgress(p), setData(values), setPointer(x, y): passed on to the scene. Before it
  *              has loaded, the last call of each is kept and passed on then.
  *              pause(reason), resume(reason): the same, with the reasons a stage knows.
@@ -51,6 +62,9 @@
  *   while motion is paused (so keep its text the same in both states), the choice is kept in
  *   localStorage and holds on the next page, and <html> carries data-motion="paused" so CSS can
  *   follow: html[data-motion="paused"] .marquee { animation-play-state: paused; }
+ *   When motion is switched on again, data-motion becomes "on"; it is never removed, so the
+ *   html[data-motion] of a motion runtime (motion.md: its reveals wait for it) keeps working on a
+ *   page with a scene. A page that never paused keeps whatever data-motion it had, or none.
  *   A paused scene shows a still frame, never an empty box. Visitors who asked their system for
  *   reduced motion get that still frame whatever the button says, so hide it for them:
  *   @media (prefers-reduced-motion: reduce) { #motion { display: none; } }
@@ -90,12 +104,47 @@ export function setMotionPaused(value) {
   }
 }
 
-// Show the choice where the page can see it: on the buttons and on <html>.
+// Show the choice where the page can see it: on the buttons and on <html>. Motion on again turns
+// "paused" into "on" and leaves any other value alone: removing the attribute would also take away
+// the "on" a motion runtime set, and its reveals would stop (lazyScene() calls this on every mount).
 function reflect() {
   const now = motionPaused();
+  const root = document.documentElement;
   for (const button of buttons) button.setAttribute("aria-pressed", String(now));
-  if (now) document.documentElement.setAttribute("data-motion", "paused");
-  else document.documentElement.removeAttribute("data-motion");
+  if (now) root.setAttribute("data-motion", "paused");
+  else if (root.getAttribute("data-motion") === "paused") root.setAttribute("data-motion", "on");
+}
+
+// Can this browser make a WebGL 2 context at all? Asked once per page, just before the first
+// scene would load: without WebGL the stage ends in its fallback anyway, so three.js (about 140 KB
+// gzipped) is not worth fetching. The test context is handed back at once (WEBGL_lose_context), so
+// it never counts against the browser's limit of live contexts.
+let webgl2 = null;   // null: not tested yet
+function webglAvailable() {
+  if (webgl2 === null) {
+    webgl2 = false;
+    try {
+      const gl = document.createElement("canvas").getContext("webgl2");
+      if (gl) {
+        webgl2 = true;
+        const lose = gl.getExtension("WEBGL_lose_context");
+        if (lose) lose.loseContext();
+      }
+    } catch (error) {
+      webgl2 = false; // a browser that throws here has no WebGL to give
+    }
+  }
+  return webgl2;
+}
+
+// A pause between two heavy steps, so each is a task of its own and the page can answer clicks and
+// draw in between: the next quiet moment (at most 300 ms away), or the next task without
+// requestIdleCallback.
+function breather() {
+  return new Promise((resolve) => {
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(() => resolve(), { timeout: 300 });
+    else setTimeout(resolve, 0);
+  });
 }
 
 export function motionToggle(button) {
@@ -116,6 +165,7 @@ export function lazyScene(container, loader, options = {}) {
   const { lazy = {}, ...sceneOptions } = options;
   const margin = lazy.margin === undefined ? "50%" : lazy.margin;
   const timeout = lazy.timeout === undefined ? 2000 : lazy.timeout;
+  const needsWebgl = lazy.webgl !== false;
   const calls = new Map();  // method name -> the arguments of its last call, for when the scene is there
   const pauses = new Set(); // reasons given to pause() and not resumed yet
   const waits = [];         // functions that cancel whatever is still waiting
@@ -133,13 +183,28 @@ export function lazyScene(container, loader, options = {}) {
   };
   const stopWaiting = () => { for (const cancel of waits.splice(0)) cancel(); };
 
+  // The poster stays: the same sign a stage gives. quiet: an expected end (no WebGL), not an error.
+  function fail(error, quiet) {
+    state = "failed";
+    handle.error = error;
+    markedFallback = true;
+    container.setAttribute("data-scene", "fallback");
+    if (!quiet) console.error("lazyScene: the scene could not be loaded, so the poster stays.", error);
+    settle(null);
+  }
+
   function load() {
     if (started || state === "destroyed" || state === "failed") return ready;
     started = true;
     stopWaiting();
+    if (needsWebgl && !webglAvailable()) {
+      fail(new Error("lazyScene: this browser has no WebGL 2, so the poster stays and the scene is not loaded"), true);
+      return ready;
+    }
     state = "loading";
     Promise.resolve()
       .then(loader)
+      .then((module) => breather().then(() => module)) // evaluating three and mounting: two tasks, not one
       .then((module) => {
         const mount = module && (module.mount || (module.default && module.default.mount));
         if (typeof mount !== "function") throw new TypeError("lazyScene: the loaded module has no mount()");
@@ -159,13 +224,7 @@ export function lazyScene(container, loader, options = {}) {
         settle(scene);
       })
       .catch((error) => {
-        if (state === "destroyed") return;
-        state = "failed";
-        handle.error = error;
-        markedFallback = true;
-        container.setAttribute("data-scene", "fallback"); // the same sign a stage gives: the poster stays
-        console.error("lazyScene: the scene could not be loaded, so the poster stays.", error);
-        settle(null);
+        if (state !== "destroyed") fail(error, false);
       });
     return ready;
   }

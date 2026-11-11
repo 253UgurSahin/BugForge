@@ -49,9 +49,10 @@
  * setPointer(x, y)  -1..1, y up: lean toward that point as the real pointer would.
  * pause(), resume(), destroy(), stage: as stage.js describes.
  *
- * Poster: put <img data-scene-poster src="form-poster.webp" alt=""> in the container; it shows
- * until the first frame and again when WebGL is missing. Make it by mounting with { still: true }
- * at the size of the hero and taking a screenshot: that is the reduced-motion frame.
+ * Poster: put <img data-scene-poster src="form-poster.jpg" alt=""> in the container; it shows
+ * until the first frame and again when WebGL is missing. Take it from the page itself under reduced
+ * motion (the stage draws this still), one per theme and shape, with the page's header and text
+ * hidden: scenes.md section 5.
  *
  * Cost: one draw call of camera-facing strips and one of 10, 12 or 14 points (low, medium, high).
  * High: 160 strands x 460 segments (about 150k vertices, each reading 3D simplex noise twice) with

@@ -9,9 +9,12 @@ because scene authors work from that comment. The folder also has to pass motion
 
 stage.js and lazy.js are also run, in Node with a make-believe browser and a stand-in for
 three.js (the kit ships without three; only the gallery has a copy): the loop, pausing, reduced motion, the theme, the
-pointer, quality, the fallback and destroy(), and for lazy.js that nothing loads too early.
-Those tests need Node and are skipped without it. What only a real browser can show (real WebGL,
-real pixels) is proved by hand with Playwright when the kit changes, not here."""
+pointer, quality, the fallback and destroy(), and for lazy.js that nothing loads too early. So
+are depth.js in a panel that scrolls inside a fixed frame, contour.js's outline work (GeoJSON and
+point lists, the trail cut to fit, the place beside the text, label places, the phone's calm) and
+field.js's phone and streak options. Those tests need Node and are skipped without it. What only
+a real browser can show (real WebGL, real pixels) is proved by hand with Playwright when the kit
+changes, not here."""
 
 import json
 import os
@@ -47,6 +50,8 @@ export class Color {
 export class Vector2 {
   constructor(x = 0, y = 0) { this.x = x; this.y = y; }
   set(x, y) { this.x = x; this.y = y; return this; }
+  copy(v) { return this.set(v.x, v.y); }
+  lerp(v, t) { return this.set(this.x + (v.x - this.x) * t, this.y + (v.y - this.y) * t); }
 }
 class Node3 {
   constructor() { this.children = []; this.parent = null; }
@@ -57,12 +62,14 @@ class Node3 {
 }
 export class Scene extends Node3 {}
 export class Mesh extends Node3 { // a geometry, a material and a texture in a uniform: all three must be freed
-  constructor(name) {
+  constructor(name, material) {
     super();
     const freed = (part) => () => calls.disposed.push(name + "." + part);
     this.geometry = { dispose: freed("geometry") };
     this.material = { uniforms: { uMap: { value: { isTexture: true, dispose: freed("texture") } } },
                       dispose: freed("material") };
+    if (name && typeof name === "object") this.geometry = name;   // new Mesh(geometry, material), as a scene makes it
+    if (material) this.material = material;
   }
 }
 export class PerspectiveCamera {
@@ -86,6 +93,36 @@ export class WebGLRenderer {
   dispose() { calls.dispose += 1; }
   forceContextLoss() { calls.contextLoss += 1; }
 }
+// What contour.js and field.js add, as plain holders: enough to mount them flat and read their
+// uniforms and placement. Nothing is drawn.
+export class Vector3 {
+  constructor(x = 0, y = 0, z = 0) { this.set(x, y, z); }
+  set(x, y, z) { Object.assign(this, { x, y, z }); return this; }
+  copy(v) { return this.set(v.x, v.y, v.z); }
+}
+export class Vector4 {
+  constructor(x = 0, y = 0, z = 0, w = 0) { this.set(x, y, z, w); }
+  set(x, y, z, w) { Object.assign(this, { x, y, z, w }); return this; }
+}
+export class ShaderMaterial { constructor(params) { Object.assign(this, params); } dispose() {} }
+export class BufferGeometry {
+  constructor() { this.attributes = {}; this.drawRange = { start: 0, count: Infinity }; }
+  setAttribute(name, attribute) { this.attributes[name] = attribute; return this; }
+  setDrawRange(start, count) { this.drawRange = { start, count }; }
+  dispose() {}
+}
+export class PlaneGeometry extends BufferGeometry { rotateX() { return this; } }
+export class BufferAttribute { constructor(array, itemSize) { Object.assign(this, { array, itemSize }); } }
+const triple = (v) => ({ x: v, y: v, z: v, set(x, y, z) { Object.assign(this, { x, y, z }); return this; },
+                         setScalar(s) { return this.set(s, s, s); } });
+export class Group extends Node3 {
+  constructor() { super(); Object.assign(this, { position: triple(0), scale: triple(1), rotation: triple(0) }); }
+}
+export class Points extends Group { constructor(geometry, material) { super(); Object.assign(this, { geometry, material }); } }
+export class Raycaster { constructor() { this.ray = { intersectPlane: () => null }; } setFromCamera() {} }
+export class Plane { constructor(normal, constant) { Object.assign(this, { normal, constant }); } }
+export const MathUtils = { degToRad: (degrees) => (degrees * Math.PI) / 180,
+                           damp: (x, y, lambda, dt) => x + (y - x) * (1 - Math.exp(-lambda * dt)) };
 """
 
 # A make-believe browser: enough of window, document and the observers for stage.js and lazy.js,
@@ -97,7 +134,9 @@ export function makeBrowser({ reduced = false, webgl = true, saveData = false, i
                                                  "--color-accent": "#3fd0bb" } };
   const target = (name) => ({
     name,
-    addEventListener(type, fn, how) { b.listeners.push({ name, type, fn, passive: Boolean(how && how.passive) }); },
+    addEventListener(type, fn, how) {
+      b.listeners.push({ name, type, fn, passive: Boolean(how && how.passive), capture: how === true || Boolean(how && how.capture) });
+    },
     removeEventListener(type, fn) {
       const at = b.listeners.findIndex((l) => l.name === name && l.type === type && l.fn === fn);
       if (at !== -1) b.listeners.splice(at, 1);
@@ -401,6 +440,30 @@ if (mode === "broken") {
   out.attrAfterDestroy = attr();
 }
 
+if (mode === "compiling") { // a renderer that compiles ahead: the shaders get tasks of their own, then the first frame
+  const count = (name) => function () { THREE.calls[name] = (THREE.calls[name] || 0) + 1; };
+  THREE.WebGLRenderer.prototype.compile = count("compiled");
+  THREE.WebGLRenderer.prototype.getContext = () => ({ flush: count("flushed") });
+  const stage = createStage(b.container, { quality: "high", fade: 0 });
+  b.see(true);
+  out.first = [b.step(), THREE.calls.render, THREE.calls.compiled, THREE.calls.flushed, attr(), b.idle.length];
+  b.runIdle(); b.step();
+  out.after = [THREE.calls.render, attr(), THREE.calls.compiled];
+  stage.destroy();
+  // With KHR_parallel_shader_compile: compileAsync, and the first frame once it has settled.
+  THREE.WebGLRenderer.prototype.compileAsync = function () { count("compiledAsync")(); return Promise.resolve(); };
+  Object.defineProperty(THREE.WebGLRenderer.prototype, "extensions",
+    { configurable: true, get: () => ({ has: (name) => name === "KHR_parallel_shader_compile" }) });
+  const before = THREE.calls.render;
+  const parallel = createStage(b.container, { quality: "high", fade: 0 });
+  b.see(true); b.step();
+  out.async = [THREE.calls.render - before, THREE.calls.compiledAsync, attr()];
+  await new Promise((resolve) => setImmediate(resolve));
+  b.step();
+  out.asyncAfter = [THREE.calls.render - before, attr()];
+  parallel.destroy();
+}
+
 if (mode === "auto") { // a strong device by its numbers; then frames 16, 30 and 60 ms apart
   out.runs = {};
   for (const [name, gap, count] of [["fast", 16, 250], ["slow", 30, 250], ["verySlow", 60, 60]]) {
@@ -425,7 +488,8 @@ console.log(JSON.stringify(out));
 LAZY_RUN = r"""
 import { makeBrowser } from "./browser.mjs";
 const mode = process.argv[2];
-const b = makeBrowser({ saveData: mode === "savedata", idle: mode !== "noidle", storage: mode !== "nostorage" });
+const b = makeBrowser({ saveData: mode === "savedata", idle: mode !== "noidle", storage: mode !== "nostorage",
+                       webgl: mode !== "nowebgl" });
 if (mode === "remembered") b.store.set("forge-scenes-motion", "paused");
 const logged = [];
 console.error = (...args) => logged.push(String(args[0]));
@@ -449,7 +513,8 @@ const loader = () => {
     return fakeScene();
   } });
 };
-const near = async () => { b.see(true); b.runIdle(); await settle(); };
+// Near, and every quiet moment it asks for: the one before the load, the one between module and mount.
+const near = async () => { b.see(true); for (let i = 0; i < 3; i++) { b.runIdle(); await settle(); } };
 const makeButton = () => {
   const button = { attrs: {}, fns: [], setAttribute(key, value) { button.attrs[key] = value; },
                    addEventListener(type, fn) { button.fns.push(fn); },
@@ -468,6 +533,8 @@ if (mode === "normal") {
   out.notNear = [loads, b.idle.length];
   b.see(true); await settle();
   out.nearNotIdle = [loads, b.idle.length, handle.state, b.active("intersection")];
+  b.runIdle(); await settle();
+  out.breathing = [loads, handle.state, b.idle.length, made.length];   // loaded, and mount() waits for a quiet moment
   b.runIdle(); await settle();
   const scene = made[0];
   out.loaded = { loads, state: handle.state, scene: handle.scene === scene, ready: (await handle.ready) === scene,
@@ -494,7 +561,9 @@ if (mode === "savedata") {
   await near();
   out.kept = [handle.state, loads, b.observers.length, b.idle.length];
   handle.setProgress(0.3);
-  const scene = await handle.load();
+  const loading = handle.load();
+  await settle(); b.runIdle();
+  const scene = await loading;
   out.forced = [handle.state, loads, scene.calls];
 }
 
@@ -503,7 +572,35 @@ if (mode === "noidle") { // no requestIdleCallback (Safari): a short timer inste
   b.see(true); await settle();
   out.timer = [loads, b.timers.map((timer) => timer.ms)];
   b.timers[0].fn(); await settle();
+  out.between = [loads, handle.state, b.timers.map((timer) => timer.ms)];   // the pause before mount(): a task
+  b.timers[1].fn(); await settle();
   out.after = [loads, handle.state];
+}
+
+if (mode === "nowebgl") { // no WebGL 2: three is never fetched, the poster stays, quietly
+  const handle = lazyScene(b.container, loader, {});
+  await near();
+  out.noWebgl = [handle.state, loads, attr(), await handle.ready, /WebGL/.test(String(handle.error)), logged.length];
+  const plain = lazyScene(b.container, loader, { lazy: { webgl: false } });   // a loader that needs no WebGL
+  await near();
+  out.optedOut = [plain.state, loads];
+}
+
+if (mode === "runtime") { // a motion runtime set "on" before the kit came: the kit keeps it
+  const html = document.documentElement, button = makeButton();
+  html.setAttribute("data-motion", "on");
+  const handle = lazyScene(b.container, loader, {});
+  motionToggle(button);
+  await near();
+  out.kept = html.getAttribute("data-motion");
+  button.click();
+  out.paused = html.getAttribute("data-motion");
+  button.click();
+  out.back = html.getAttribute("data-motion");
+  html.setAttribute("data-motion", "reveal");   // a value of the page's own is left alone
+  setMotionPaused(false);
+  out.other = html.getAttribute("data-motion");
+  handle.destroy();
 }
 
 if (mode === "failing") {
@@ -555,6 +652,161 @@ if (mode === "toggle" || mode === "nostorage" || mode === "remembered") {
   setMotionPaused(true); setMotionPaused(false);
   out.destroyedHandlesLeftAlone = scene.calls.length;
 }
+console.log(JSON.stringify(out));
+"""
+
+# depth.js in an app whose main area scrolls inside a fixed frame. An element's own scroll event
+# does not bubble: only capture listeners on the window and the document hear it. The page's own
+# scroll is fired at the document and bubbles to the window.
+DEPTH_RUN = r"""
+import { makeBrowser } from "./browser.mjs";
+const b = makeBrowser();
+window.requestAnimationFrame = requestAnimationFrame;
+window.cancelAnimationFrame = cancelAnimationFrame;
+const computed = getComputedStyle;
+globalThis.getComputedStyle = (node) => (node.box ? { position: "static", perspective: "1500px", perspectiveOrigin: "300px 0px" }
+                                                  : computed(node));
+const has = (node, selector) => selector.split(",").some((one) => /^\[[\w-]+\]$/.test(one.trim())
+  && one.trim().slice(1, -1) in (node.attrs || {}));
+const node = (attrs = {}, children = [], box = { top: 0, height: 300 }) => {
+  const n = {
+    nodeType: 1, attrs: { ...attrs }, children: [], parentElement: null, box,
+    offsetWidth: 600, offsetHeight: box.height, offsetLeft: 0, offsetTop: 0, offsetParent: null,
+    clientWidth: 600, clientLeft: 0, clientTop: 0,
+    style: { props: {}, getPropertyValue(p) { return this.props[p] || ""; }, setProperty(p, v) { this.props[p] = String(v); },
+             removeProperty(p) { delete this.props[p]; } },
+    getAttribute: (key) => (key in n.attrs ? n.attrs[key] : null),
+    setAttribute: (key, value) => { n.attrs[key] = String(value); },
+    removeAttribute: (key) => { delete n.attrs[key]; },
+    hasAttribute: (key) => key in n.attrs,
+    toggleAttribute: (key, on) => { if (on) n.attrs[key] = ""; else delete n.attrs[key]; return Boolean(on); },
+    matches: (selector) => has(n, selector),
+    closest: (selector) => { for (let e = n; e; e = e.parentElement) if (has(e, selector)) return e; return null; },
+    querySelectorAll: (selector) => {
+      const found = [], walk = (e) => { for (const c of e.children || []) { if (has(c, selector)) found.push(c); walk(c); } };
+      walk(n);
+      return found;
+    },
+    appendChild: (child) => { n.children.push(child); child.parentElement = n; child.parent = n; return child; },
+    getBoundingClientRect: () => ({ left: 0, width: 600, right: 600, top: n.box.top, height: n.box.height,
+                                    bottom: n.box.top + n.box.height }),
+  };
+  for (const child of children) n.appendChild(child);
+  return n;
+};
+const panels = [node(), node(), node()];
+const stack = node({ "data-depth": "stack" }, panels, { top: 700, height: 300 });
+const card = node({ "data-depth": "tilt" }, [], { top: 700, height: 200 });
+const { mount } = await import("./scenes/depth.js");
+const depth = mount(node({}, [card, stack]), { tilt: 7 });
+b.observers.find((o) => o.kind === "intersection" && o.on)
+  .callback([card, stack].map((target) => ({ target, isIntersecting: true })));
+const settle = () => { let frames = 0; while (b.step(16) && frames < 3000) frames += 1; return frames; };
+const drawn = () => [panels[1].style.props.transform || "", card.style.props.transform || ""];
+const scroll = (where) => {
+  const heard = b.listeners.filter((l) => l.type === "scroll" && (l.name === "window" || l.name === "document")
+    && (where === "page" || l.capture));
+  for (const l of heard) l.fn({});
+  return heard.length;
+};
+const out = {};
+out.first = settle();
+out.resting = [b.frames.size, ...drawn()];
+stack.box.top = 300; card.box.top = 300;                 // the panel scrolled 400 px: both rose on the screen
+out.panel = [scroll("panel"), b.frames.size];
+out.second = settle();
+out.after = [b.frames.size, ...drawn()];
+stack.box.top = 900;                                     // the page itself scrolled back
+out.page = [scroll("page"), b.frames.size];
+settle();
+depth.destroy();
+out.left = b.listeners.filter((l) => l.type === "scroll").length;
+console.log(JSON.stringify(out));
+"""
+
+# contour.js's outline work, sliced out of the file with the constants it needs (see ContourTests).
+CONTOUR_HELPERS_RUN = r"""
+const { calmBox, readOutline, routeOf, openBox, CALM, NARROW, BREAK, ROUTE } = await import("./contour.helpers.mjs");
+const square = (lon, lat, d) => [[lon, lat], [lon + d, lat], [lon + d, lat + d], [lon, lat + d], [lon, lat]];
+const counts = (shape) => [shape.areas.length, shape.lines.length];
+const round = (list) => list.map((v) => Math.round(v * 1000) / 1000);
+const out = {};
+const lake = readOutline({ type: "Polygon", coordinates: [square(5, 52, 0.1)] });
+out.lake = [...counts(lake), ...round(lake.size)];
+out.island = counts(readOutline({ type: "Feature", geometry: { type: "Polygon",
+  coordinates: [square(5, 52, 0.1), square(5.03, 52.03, 0.02)] } }));
+out.collection = counts(readOutline({ type: "FeatureCollection", features: [
+  { type: "Feature", geometry: { type: "MultiPolygon", coordinates: [[square(0, 0, 1)], [square(2, 0, 1)]] } },
+  { type: "Feature", geometry: { type: "LineString", coordinates: [[0, 2], [3, 2]] } }] }));
+out.points = [counts(readOutline([[0, 0], [1, 0], [1, 1]])), counts(readOutline([[0, 0], [1, 0], [1, 1], [0, 0]])),
+              counts(readOutline([[[0, 0], [2, 0]], [[0, 1], [1, 1], [1, 2], [0, 1]]]))];
+out.nothing = [readOutline(null), readOutline([]), readOutline({ type: "Point", coordinates: [5, 52] }),
+               readOutline([[0, 0], [0, 0]])];
+const wiggle = (from, n) => Array.from({ length: n }, (_, i) => [from + i / n, Math.sin(i / 7) * 0.2]);
+const trail = routeOf([wiggle(0, 1000), wiggle(2, 1000)]);
+out.trail = [trail.points.length, ROUTE, trail.points.filter((p) => p === BREAK).length,
+             trail.middle.length === 2 && trail.middle.every(Number.isFinite)];
+out.open = [round(openBox(CALM.left, 1.6, 1)), round(openBox(CALM.top, 1.6, 4)), round(openBox(null, 1, 1))];
+out.calm = [calmBox({ calm: "none" }, 1.6), calmBox({ calm: "left" }, 0.5), calmBox({ calm: "wobbly" }, 1.6),
+            calmBox({ calm: "none", calmBox: [0.9, 0.6, 0.1, 0.95] }, 0.5), calmBox({ calm: "left", calmBox: [1, 2] }, 1.6)];
+out.named = [CALM.left, NARROW];
+console.log(JSON.stringify(out));
+"""
+
+# contour.js mounted flat with a trail: label places for the page, and the phone's own calm.
+CONTOUR_RUN = r"""
+import { makeBrowser } from "./browser.mjs";
+const b = makeBrowser();
+const { mount } = await import("./scenes/contour.js");
+const told = [];
+const trail = [[[0, 0], [1, 0.2], [2, 0.1], [3, 0.6]], [[3, 1], [4, 1.4]]];   // two lines, y up
+const chart = mount(b.container, { outline: trail, calm: "none", labels: ["middle", [0, 0], "nowhere"],
+  onLabels: (points) => { told.push(points); throw new Error("a page error"); },
+  phone: { below: 600, calmBox: [0.05, 0.6, 0.95, 0.95] } });
+const errors = [];
+console.error = (...args) => errors.push(String(args[0]));
+const u = chart.stage.scene.children[0].material.uniforms;
+const calm = () => [u.uCalmBox.value.x, u.uCalmBox.value.y, u.uCalmBox.value.z, u.uCalmBox.value.w, u.uCalm.value.x];
+const out = { wide: calm(), route: u.uRouteCount.value, defines: Object.keys(chart.stage.scene.children[0].material.defines).sort() };
+b.see(true); b.step(); b.step(); b.step();
+out.labels = told.map((points) => points.map((p) => Object.keys(p).sort().join(",")));
+out.first = told[0];
+out.quiet = told.length;                     // nothing moved after the first frame: no call
+out.errors = errors.length;
+b.resize(390, 844); b.step();
+out.phone = calm();
+out.afterResize = told.length;
+out.data = (chart.setData([0.2, 0.9]), u.uRidgeHeight.value);   // the chart is the outline's
+chart.destroy();
+console.log(JSON.stringify(out));
+"""
+
+# field.js: where the phone option puts the form and its calm, and what streak changes.
+FIELD_RUN = r"""
+import { makeBrowser } from "./browser.mjs";
+const b = makeBrowser();
+const { mount } = await import("./scenes/field.js");
+const round = (v) => Math.round(v * 1000) / 1000;
+const look = (scene) => {
+  const group = scene.stage.scene.children[0], points = group.children[0], u = points.material.uniforms;
+  return { calm: [u.uCalm.value.x, u.uCalm.value.y, u.uCalm.value.z, u.uCalm.value.w].map(round), amount: u.uCalmAmount.value,
+           position: [round(group.position.x), round(group.position.y)], scale: round(group.scale.x),
+           width: round(scene.stage.viewSize(7.2).width), height: round(scene.stage.viewSize(7.2).height),
+           streak: [u.uStreak.value, points.material.defines.STREAK || 0], count: points.geometry.drawRange.count };
+};
+const out = {};
+b.resize(390, 844);
+let field = mount(b.container, { phone: { below: 600, at: [0.5, 0.3], size: 0.8, calmBox: [0.1, 0.55, 0.9, 0.95] } });
+out.phone = look(field);
+b.resize(1440, 800);
+out.wide = look(field);
+field.destroy();
+field = mount(b.container, { streak: 1 });
+out.streak = look(field);
+field.destroy();
+field = mount(b.container, {});
+out.round = look(field);
+field.destroy();
 console.log(JSON.stringify(out));
 """
 
@@ -621,6 +873,15 @@ def header_of(name):
     """The comment at the top of a file: what a developer reads instead of the code."""
     source = read(os.path.join(SCENES, name))
     return source[:source.index("*/")]
+
+
+def contour_helpers():
+    """contour.js's own outline helpers as a module of their own: its constants (CALM up to the
+    shaders) and its functions (num up to mount), which need neither three nor a browser."""
+    source = read(os.path.join(SCENES, "contour.js"))
+    part = (source[source.index("const CALM = {"):source.index("// The rectangle covers the screen")]
+            + source[source.index("const num ="):source.index("export function mount")])
+    return part + "\nexport { calmBox, readOutline, routeOf, openBox, CALM, NARROW, BREAK, ROUTE };\n"
 
 
 class KitTests(unittest.TestCase):
@@ -744,7 +1005,9 @@ class Sandbox(unittest.TestCase):
         three = os.path.join(cls.folder, "node_modules", "three")
         os.makedirs(three)
         files = {"package.json": '{"type": "module"}', "browser.mjs": BROWSER, "stage.run.mjs": STAGE_RUN,
-                 "lazy.run.mjs": LAZY_RUN, os.path.join(three, "index.js"): THREE,
+                 "lazy.run.mjs": LAZY_RUN, "depth.run.mjs": DEPTH_RUN, "contour.run.mjs": CONTOUR_RUN,
+                 "field.run.mjs": FIELD_RUN, "contour.helpers.run.mjs": CONTOUR_HELPERS_RUN,
+                 "contour.helpers.mjs": contour_helpers(), os.path.join(three, "index.js"): THREE,
                  os.path.join(three, "package.json"): '{"name": "three", "type": "module", "main": "index.js"}'}
         for name, text in files.items():
             with open(os.path.join(cls.folder, name), "w", encoding="utf-8") as handle:
@@ -874,6 +1137,14 @@ class StageTests(Sandbox):
         self.assertEqual(out["threw"], ["error", "fallback", False, 0, ["Error: boom"]])
         self.assertIsNone(out["attrAfterDestroy"])
 
+    def test_shaders_compile_in_tasks_of_their_own_before_the_first_frame(self):
+        out = self.play("stage.run.mjs", "compiling")
+        # first frame: compile and hand over (flush), draw nothing, wait for a quiet moment
+        self.assertEqual(out["first"], [True, 0, 1, 1, None, 1])
+        self.assertEqual(out["after"], [1, "live", 1])  # then the first frame, compiled once
+        self.assertEqual(out["async"], [0, 1, None])  # compileAsync where the browser compiles beside the page
+        self.assertEqual(out["asyncAfter"], [1, "live"])
+
     def test_auto_quality_starts_from_the_device_and_steps_down(self):
         out = self.play("stage.run.mjs", "auto")
         self.assertEqual(out["runs"], {"fast": ["high@0"], "slow": ["high@0", "medium@103", "low@205"],
@@ -887,6 +1158,7 @@ class LazyTests(Sandbox):
         self.assertEqual(out["waiting"], ["waiting", 0, 0, None])
         self.assertEqual(out["notNear"], [0, 0])
         self.assertEqual(out["nearNotIdle"], [0, 1, "waiting", 0])  # near: one idle callback asked for, no load yet
+        self.assertEqual(out["breathing"], [1, "loading", 1, 0])  # loaded; mount() waits for the next quiet moment
         loaded = out["loaded"]
         self.assertEqual((loaded["loads"], loaded["state"], loaded["scene"], loaded["ready"]), (1, "ready", True, True))
         self.assertEqual(loaded["mountedWith"], [True, {"quality": "low"}])  # options.lazy stays behind
@@ -905,6 +1177,12 @@ class LazyTests(Sandbox):
     def test_without_requestidlecallback_a_timer_does_it(self):
         out = self.play("lazy.run.mjs", "noidle")
         self.assertEqual((out["timer"], out["after"]), ([0, [200]], [1, "ready"]))
+        self.assertEqual(out["between"], [1, "loading", [200, 0]])  # module and mount(): two tasks
+
+    def test_without_webgl_three_is_never_loaded(self):
+        out = self.play("lazy.run.mjs", "nowebgl")
+        self.assertEqual(out["noWebgl"], ["failed", 0, "fallback", None, True, 0])  # no download, no console error
+        self.assertEqual(out["optedOut"], ["ready", 1])  # lazy.webgl false: a loader that needs no WebGL
 
     def test_a_scene_that_cannot_load_leaves_the_poster(self):
         out = self.play("lazy.run.mjs", "failing")
@@ -924,14 +1202,99 @@ class LazyTests(Sandbox):
                 self.assertEqual(out["wired"], [["false", "false"], None])
                 self.assertEqual(out["clicked"], [["true", "true"], "paused", stored, pause, True])
                 self.assertEqual(out["mountedLater"], pause)  # a scene that arrives while motion is off starts paused
-                self.assertEqual(out["clickedAgain"], [["false", "false"], None, None, resume, resume])
+                # motion on again: "on", never removed (a runtime's reveals wait for html[data-motion])
+                self.assertEqual(out["clickedAgain"], [["false", "false"], "on", None, resume, resume])
                 self.assertEqual(out["unwired"], [0, True])
                 self.assertEqual(out["destroyedHandlesLeftAlone"], 0)
         out = self.play("lazy.run.mjs", "remembered")  # switched off on an earlier page
         self.assertEqual((out["start"], out["mounted"]), (True, pause))
         self.assertEqual(out["wired"], [["true", "true"], "paused"])
-        self.assertEqual(out["clicked"], [["false", "false"], None, None, resume, False])
+        self.assertEqual(out["clicked"], [["false", "false"], "on", None, resume, False])
         self.assertEqual(out["clickedAgain"], [["true", "true"], "paused", "paused", pause, pause])
+
+    def test_a_scene_keeps_the_motion_runtimes_on(self):
+        """motion.md's runtime sets data-motion="on" and its reveals hide only under it: a mount or a
+        wired button must not take it away, or no reveal plays on a page with a scene."""
+        out = self.play("lazy.run.mjs", "runtime")
+        self.assertEqual((out["kept"], out["paused"], out["back"], out["other"]), ("on", "paused", "on", "reveal"))
+
+
+class DepthTests(Sandbox):
+    def test_a_scroll_inside_a_scrolling_panel_moves_the_depth(self):
+        """An app whose main area scrolls inside a fixed frame fires no window scroll event: depth.js
+        must still hear it, or a stack stays where it came into view and a touch tilt never changes."""
+        out = json.loads(self.run_node("depth.run.mjs"))
+        self.assertGreater(out["first"], 10)
+        waiting, panel, card = out["resting"]
+        self.assertEqual(waiting, 0)  # settled: the loop sleeps
+        self.assertIn("rotateX(12.58deg)", panel)  # a third of the way in: the panel still stands tipped back
+        self.assertIn("rotateX(2.45deg)", card)  # low on the screen: the card leans back (touch, tilt 7)
+        self.assertEqual(out["panel"], [1, 1])  # the panel's own scroll is heard, and a frame is asked for
+        waiting, panel, card = out["after"]
+        self.assertGreater(out["second"], 10)
+        self.assertEqual(waiting, 0)
+        self.assertTrue(panel.endswith("translate3d(0, -56px, -80px)"), panel)  # stepped forward into the cascade
+        self.assertIn("rotateX(-0.35deg)", card)  # now above the middle: it leans the other way
+        self.assertEqual(out["page"], [1, 1])  # the page's own scroll still wakes it
+        self.assertEqual(out["left"], 0)  # destroy() takes the listener away
+
+
+class ContourTests(Sandbox):
+    """contour.js's own work on an outline, which only a browser check would show otherwise."""
+
+    def test_outlines_are_read_into_rings_and_lines(self):
+        out = json.loads(self.run_node("contour.helpers.run.mjs"))
+        self.assertEqual(out["lake"], [1, 0, 0.615, 1])  # 0.1 degrees at 52N: cos(52.05) as wide as it is high
+        self.assertEqual(out["island"], [2, 0])  # a hole is a ring of its own
+        self.assertEqual(out["collection"], [2, 1])  # every polygon of every feature, and the line
+        self.assertEqual(out["points"], [[0, 1], [1, 0], [1, 1]])  # open: a line; closed: an area; both
+        self.assertEqual(out["nothing"], [None, None, None, None])  # nothing to draw, a point, a dot
+        points, most, breaks, middle = out["trail"]
+        self.assertLessEqual(points, most)  # 2000 points cut to what the shader reads
+        self.assertGreater(points, 20)
+        self.assertEqual((most, breaks, middle), (64, 1, True))  # a break between its two lines
+
+    def test_the_outline_goes_beside_the_text(self):
+        out = json.loads(self.run_node("contour.helpers.run.mjs"))
+        left_calm, narrow = out["named"]
+        beside, below, whole = out["open"]
+        self.assertGreater(beside[0], left_calm[2])  # right of a calm on the left
+        self.assertEqual(beside, [0.41, 0.04, 0.96, 0.96])
+        self.assertEqual(below, [0.04, 0.34, 0.96, 0.96])  # a wide outline under a calm band at the top
+        self.assertEqual(whole, [0.04, 0.04, 0.96, 0.96])  # no calm: all of it
+        self.assertEqual(out["calm"], [None, narrow, left_calm, [0.1, 0.6, 0.9, 0.95], left_calm])
+
+    def test_a_trail_gives_the_page_its_label_places_and_the_phone_its_calm(self):
+        out = json.loads(self.run_node("contour.run.mjs"))
+        self.assertEqual(out["route"], 7)  # 4 points, a break, 2 points
+        self.assertEqual(out["defines"], ["HAS_ROUTE", "HAS_SHAPE", "OCTAVES"])
+        self.assertEqual(out["wide"], [0, 0, 0, 0, 0])  # calm "none": no calm on the wide screen
+        self.assertEqual(out["labels"], [["visible,x,y"] * 3])
+        middle, start, nowhere = out["first"]
+        self.assertTrue(middle["visible"] and start["visible"])
+        self.assertTrue(0 < start["x"] < middle["x"] < 800 and 0 < middle["y"] < 400, out["first"])
+        self.assertEqual(nowhere, {"x": 0, "y": 0, "visible": False})  # an entry it cannot place
+        self.assertEqual((out["quiet"], out["errors"]), (1, 1))  # no call while nothing moves; the page's error is logged
+        self.assertEqual(out["phone"], [0.05, 0.6, 0.95, 0.95, 1])  # the phone's calmBox, although calm is "none"
+        self.assertEqual(out["afterResize"], 2)  # the labels move with the new size
+        self.assertEqual(out["data"], 0)  # setData raises no hills next to a real place
+
+
+class FieldTests(Sandbox):
+    def test_the_phone_option_places_the_form_and_its_calm(self):
+        out = json.loads(self.run_node("field.run.mjs"))
+        phone, wide = out["phone"], out["wide"]
+        self.assertEqual(phone["calm"], [-0.8, 0.8, -0.9, -0.1])  # calmBox [0.1, 0.55, 0.9, 0.95] in -1..1
+        self.assertEqual(phone["amount"], 0.92)
+        self.assertAlmostEqual(phone["scale"] * 6.1 / phone["width"], 0.8, places=2)  # size 0.8 of the width
+        self.assertAlmostEqual(phone["position"][1], 0.2 * phone["height"], places=2)  # its middle at 30% from the top
+        self.assertAlmostEqual(phone["position"][0], 0.65 * phone["scale"], places=2)  # the cloud's middle centred
+        self.assertEqual((wide["calm"], wide["amount"]), ([-1, 0, -0.7, 0.7], 0.94))  # wider than 600: the usual side
+
+    def test_streak_draws_a_third_of_the_points_as_streaks(self):
+        out = json.loads(self.run_node("field.run.mjs"))
+        self.assertEqual((out["round"]["streak"], out["round"]["count"]), ([0, 0], 150000))  # the default: round
+        self.assertEqual((out["streak"]["streak"], out["streak"]["count"]), ([1, 1], 50000))
 
 
 class RuleTests(unittest.TestCase):
