@@ -43,16 +43,22 @@ Rules.md section 9, before the first change:
    switch -c forge/brand`, then run it again.
 3. **Before shots** of every screen that shows the name or the colours (at least the home page, the
    sign-in page, the main screen and an error page), from that URL, into `forge-work/brand/shots/before`.
-   The shots script is `forge-work/design/shots.mjs`; when it is not there, copy it once as section 1
-   of `../forge-design/review.md` says. For example: `node forge-work/design/shots.mjs
-   http://localhost:8080 forge-work/brand/shots/before / /login /dashboard`.
+   The shots script is `forge-work/design/shots.mjs`: copy it now as section 1 of
+   `../forge-design/review.md` says, also when an older copy is there (an old one reads the new
+   flags wrongly). Shoot the window only (`--viewport-only`): a new name alone can stay under
+   changed.py's 2 percent bar on a whole page, and these shots cannot be taken again once the
+   rename is in. For example: `node forge-work/design/shots.mjs http://localhost:8080
+   forge-work/brand/shots/before --viewport-only / /login --state <file> /dashboard` (signed-in
+   screens after their state file, section 1 of review.md). A service worker: also make the kept
+   profile of review.md section 5, item 2 now, before the first change.
 4. **Say what will happen**, in order: five names and their checks, the user's pick, the palette,
    the logo brief, the voice, the rename and sweep, the app showing it. Then one line per step.
 
 ## Step 1: the name
 
-Ask first: does the app carry a name the user already has (their own business, a salon's booking page)?
-Then keep it: no candidates, only the Step 2 checks they want, their own colours and logo in Steps 3 and 4.
+A name the user already has (their own business, a salon's booking page: plan.md or their words say
+so) stays: no candidates, only the Step 2 checks they want, their own colours and logo in Steps 3 and
+4. Cannot tell: do not stop to ask now; Step 2's one checkpoint offers it next to the five.
 
 Otherwise read the angle in compare.md, the plan and the concept in the brief. Write 20 candidates
 across five styles: descriptive (Booklink), compound (Slotwise), invented (Calvo), metaphor (Harbor),
@@ -82,7 +88,8 @@ have a browser tool, otherwise give the user the list. Search variants and missp
 Screening only, not legal advice: before money goes into the name, a trademark attorney should run
 a full search. Registering a domain or a trademark is the user's step; forge never buys anything.
 
-Checkpoint: show the five with their check results and wait for the user to pick one. This stop
+Checkpoint: show the five with their check results and wait for the user to pick one, in the same
+message as "your own name, or one of these five?" when the app may have a name of its own. This stop
 holds in auto mode: the app's name is the user's (rules.md section 7).
 
 ## Step 3: the palette
@@ -96,18 +103,21 @@ The token roles the design part set up keep their names; only values change, and
   warm name). Never a colour family the concept did not have: the palette follows the concept.
 - **The user's own colours**, which they like: keep them. Read them exactly off the before shots
   with `python3 ../forge-design/eyedropper.py forge-work/brand/shots/before/home-1440-light.png`
-  (`--box x,y,w,h` for one area, `x,y` for one pixel), never by eye.
+  (or `-dark.png` when the app shows only dark; `--box x,y,w,h` for one area, `x,y` for one
+  pixel), never by eye.
 
 Note the old values under `## Palette` in brand.md and write the new palette in tokens.json. Run
 `python3 ../forge-design/contrast.py forge-work/design/tokens.json` and fix the tokens until it exits 0
 (exit 1 names the failing pair and the nearest colour that passes). Write the theme file again with
 the `Command:` line under `## Theme` in components.md (`../forge-design/theme.py` writes it from
-tokens.json), then put the new values in every other copy of the old ones: the icons, and with `PWA:
-yes` the manifest's colours, the `theme-color` meta tag and `public/offline.css`, which repeats the
-theme's colours. Then `python3 ../forge-design/sweep.py . --colors "<old value>,<old value>"`, with
-each old value gone from tokens.json, must exit 0 (it skips forge-work/ and cannot read PNG files:
-Step 4 draws the icons again). No value changed: say so under `## Palette`, and there is no old
-colour to sweep for.
+tokens.json), then put the new values in every other copy of the old ones: the icons; the scene
+posters (`data-scene-poster` stills of a 3D scene, made in the motion phase: take them again from the
+page as `../forge-design/motion.md` section 9 says, or they keep the old colours wherever the scene
+does not run); and with `PWA: yes` the manifest's colours, the `theme-color` meta tag and
+`public/offline.css`, which repeats the theme's colours. Then `python3 ../forge-design/sweep.py .
+--colors "<old value>,<old value>"`, with each old value gone from tokens.json, must exit 0 (it
+skips forge-work/ and cannot read images: Step 4 draws the icons again, and the posters are taken
+again above). No value changed: say so under `## Palette`, and there is no old colour to sweep for.
 
 ## Step 4: the logo brief
 
@@ -176,18 +186,23 @@ that fight it. In clone mode, list the runs of 4 or more words they share with t
 Rules.md section 9, after Step 6. The user must see their own name and colours on their local app.
 
 1. **Make it show.** Say which branch the work is on. Containers or a built app were rebuilt in Step
-   6.4; a worktree or copy: start the app from your folder on a free port and give that address, or
-   give the one command that switches their folder to the branch. A service worker keeps the old
-   icons, colours and `offline.css`: raise its version (`const VERSION = "v1"` to `"v2"` in
-   `public/sw.js`, made from `../forge-plan/sw.example.js`), rebuild, and reload twice. Then load the
-   URL yourself and check the title in the tab.
-2. **After shots and proof.** The same command, paths and flags as the before shots, into
+   6.4; a worktree or copy: start the app from yours on a free port (install from the lockfile and
+   copy .env first), or commit and move the branch to their folder with rules.md section 9's
+   commands (a plain git switch there fails). A service worker keeps the old icons, colours and
+   `offline.css`: raise its version (`const VERSION = "v1"` to `"v2"` in `public/sw.js`, made from
+   `../forge-plan/sw.example.js`), rebuild, and check it in the profile kept from before the first
+   change, never in a fresh one, as `../forge-design/review.md` section 5, item 2 says. Then load
+   the URL yourself and check the title in the tab.
+2. **After shots and proof.** The same command, paths and flags as the before shots (each state file
+   made again first: a screen that lands on a sign-in page fails), into
    `forge-work/brand/shots/after`. Then `python3 ../forge-design/changed.py forge-work/brand/shots/before
    forge-work/brand/shots/after` must exit 0 (VISIBLE CHANGE). Exit 1: find which reason of rules.md
    section 9 it is (another branch or folder, not rebuilt, a cache), fix it, shoot again. Only the
-   name changed and the user's colours stayed: the change can be under the 2 percent bar, so compare
-   `--viewport-only` shots of the screens where the name is largest; never lower `--min`. Exit 2 is
-   never a pass. Results under `## Proof` in brand.md. Nothing new moves here: no frames, no clip.
+   name changed and the user's colours stayed: the pairs of the screens where the name is largest
+   carry the change (that is why the shots are of the window); never lower `--min`. Never compare a
+   whole-page shot with a window one: changed.py counts the part only one has as changed, so an
+   unchanged page passes. Exit 2 is never a pass. Results under `## Proof` in brand.md. Nothing new
+   moves here: no frames, no clip.
 3. **Hand it over** in plain words: the branch; the address that shows the new name and colours now;
    where to look first (the tab title, the header, the sign-in page, then the favicon, which a browser
    keeps for a while: a new private window shows the new one); the paths of the before and after
@@ -197,8 +212,9 @@ Rules.md section 9, after Step 6. The user must see their own name and colours o
 
 `forge-work/brand.json` and `forge-work/brand.md`, as below. The gate checks the name and avoid list in
 brand.json, a line of text under each of brand.md's five ## headings (Name checks, Palette, Logo brief,
-Voice, Sweep), that contrast.py, the sweep and, in clone mode, the copy check exit 0, and that the app
-carries the name. `## How it runs` and `## Proof` hold rule 9's lines.
+Voice, Sweep), that contrast.py, the sweep and, in clone mode, the copy check exit 0, that the app
+carries the name, and that changed.py finds a visible change between forge-work/brand/shots/before
+and after. `## How it runs` and `## Proof` hold rule 9's lines.
 
 ```json
 {"name": "Slotwise", "avoid": ["Calendly", "Calendly LLC"], "domains": ["calendly.com"],

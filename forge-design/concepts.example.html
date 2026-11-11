@@ -8,17 +8,22 @@
   The concept board of forge-design (../forge-design/concepts.md). Copy this file to
   forge-work/design/concepts/index.html, replace the JSON block below with this app's three concepts,
   and build each preview as forge-work/design/concepts/a/index.html, b/index.html and c/index.html.
-  It opens straight from the folder (double click): no server, no request to any other host.
+  Levels 1 to 3: it opens straight from the folder (double click). From level 4, or when a preview
+  loads a kit file, serve the folder on 127.0.0.1 (../forge-design/concepts.md, section 3): a browser
+  refuses three and the kit from a double-clicked file, so the 3D stays blank. Never a request to any
+  other host. "lang" is the language of the labels; each concept's "theme" is the theme it opens in.
   Keys: 1, 2, 3 open a concept large; Escape closes it; D and P switch desktop and phone; R replays.
 -->
 <script type="application/json" id="board">
 {
   "app": "Tidewatch",
+  "lang": "en",
   "level": 4,
   "levelName": "Showpiece",
   "labels": {
     "title": "Three directions for",
-    "intro": "Each one comes from what this app is about. Look at them move, then say which one you want: A, B or C, or a mix (for example: A with the colours of C).",
+    "intro": "Each one comes from what this app is about. Click one to open it large and move your pointer over it. Then say which one you want: A, B or C, or a mix (for example: A with the colours of C).",
+    "note": "The other screens and the dashboards follow the one you pick.",
     "first": "You notice first",
     "open": "Open full size",
     "desktop": "Desktop",
@@ -31,13 +36,13 @@
   "concepts": [
     { "id": "a", "name": "Chart table", "idea": "A paper sea chart under a lamp: soundings, contour lines and a pencil course.",
       "first": "Depth contours that drift like a tide behind the headline.", "colors": ["#f4efe4", "#1c2b33", "#0f6b7a", "#c9772b", "#8b949a"],
-      "display": "Fraunces", "text": "Inter", "src": "a/index.html" },
+      "display": "Fraunces", "text": "Inter", "src": "a/index.html", "theme": "light" },
     { "id": "b", "name": "Bridge at night", "idea": "The instruments of a ship's bridge in the dark: thin lit lines, exact numbers.",
       "first": "A slow form of light that turns with your cursor.", "colors": ["#070b0e", "#e9f0ee", "#3fd0bb", "#ff9d4d", "#22303a"],
-      "display": "Space Grotesk", "text": "IBM Plex Sans", "src": "b/index.html" },
+      "display": "Space Grotesk", "text": "IBM Plex Sans", "src": "b/index.html", "theme": "dark" },
     { "id": "c", "name": "Harbour morning", "idea": "Flat calm water at first light: wide, quiet, a single warm line on the horizon.",
       "first": "Water that ripples where you touch it.", "colors": ["#eef3f4", "#16252b", "#2f7f93", "#e58f5a", "#a9bcc2"],
-      "display": "Instrument Serif", "text": "Inter", "src": "c/index.html" }
+      "display": "Instrument Serif", "text": "Inter", "src": "c/index.html", "theme": "light" }
   ]
 }
 </script>
@@ -91,6 +96,7 @@
   <div>
     <h1><small id="title"></small><span id="app"></span></h1>
     <p class="intro" id="intro"></p>
+    <p class="intro" id="note"></p>
   </div>
   <div class="tools" role="group" aria-label="View">
     <button type="button" id="desktop" aria-pressed="true"></button>
@@ -105,21 +111,24 @@
 (() => {
   const board = JSON.parse(document.getElementById('board').textContent);
   const label = board.labels;
-  const SIZE = { desktop: [1280, 800], phone: [390, 760] };
+  const SIZE = { desktop: [1440, 900], phone: [390, 844] }; // the widths and windows of the shots
   let view = 'desktop';
-  let theme = '';
+  let theme = ''; // the theme the user picked on the board; none: each concept's own
   const text = (id, value) => { document.getElementById(id).textContent = value; };
+  if (board.lang) document.documentElement.lang = board.lang;
   text('title', label.title); text('app', board.app);
   text('intro', `${label.intro} ${label.level} ${board.level}: ${board.levelName}.`);
+  text('note', label.note || '');
   for (const id of ['desktop', 'phone', 'light', 'dark', 'replay']) text(id, label[id]);
   document.title = `${label.title} ${board.app}`;
 
   const cards = document.getElementById('cards');
-  const src = (concept) => concept.src + (theme ? `?theme=${theme}` : '');
+  const themeOf = (concept) => theme || concept.theme || '';
+  const src = (concept) => concept.src + (themeOf(concept) ? `?theme=${themeOf(concept)}` : '');
   for (const [index, concept] of board.concepts.entries()) {
     const card = document.createElement('article');
     card.innerHTML = `
-      <div class="stage" tabindex="0" role="button"><iframe title="" loading="lazy"></iframe></div>
+      <div class="stage" tabindex="0" role="button"><iframe title=""></iframe></div>
       <div class="meta">
         <div class="name"><span class="letter"></span><h2></h2></div>
         <p class="idea"></p>
@@ -174,9 +183,23 @@
       card.querySelector('.open').href = src(card.concept);
     }
   }
+  // A theme switch without a reload: a served board reaches into each preview (the same origin) and
+  // sets data-theme on its <html>, so a scene keeps running. A double-clicked board cannot: it reloads.
+  function retheme() {
+    for (const card of cards.children) {
+      card.querySelector('.open').href = src(card.concept);
+      try {
+        const root = card.querySelector('iframe').contentDocument.documentElement;
+        if (!themeOf(card.concept)) throw new Error('back to the system setting: only a reload does that');
+        root.setAttribute('data-theme', themeOf(card.concept));
+      } catch (error) {
+        card.querySelector('iframe').src = src(card.concept);
+      }
+    }
+  }
   function press(id, on) { document.getElementById(id).setAttribute('aria-pressed', String(on)); }
   function setView(next) { view = next; press('desktop', view === 'desktop'); press('phone', view === 'phone'); fit(); }
-  function setTheme(next) { theme = theme === next ? '' : next; press('light', theme === 'light'); press('dark', theme === 'dark'); load(); }
+  function setTheme(next) { theme = theme === next ? '' : next; press('light', theme === 'light'); press('dark', theme === 'dark'); retheme(); }
 
   document.getElementById('desktop').addEventListener('click', () => setView('desktop'));
   document.getElementById('phone').addEventListener('click', () => setView('phone'));

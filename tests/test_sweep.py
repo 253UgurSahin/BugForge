@@ -345,6 +345,19 @@ class Output(Project):
         self.assertEqual(done.returncode, 1, done.stderr)
         self.assertTrue(json.loads(done.stdout)["findings"])
 
+    def test_a_reader_that_stops_early_is_no_crash(self):
+        """`sweep.py . | head`: a report bigger than the pipe holds meets a closed pipe. No traceback, same exit."""
+        for number in range(400):
+            put(self.root, "src/pages/page%d.ts" % number, "// calendly\n" * 5)
+        done = subprocess.Popen([sys.executable, SCRIPT, ".", "--avoid", "Calendly"], cwd=self.root,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        done.stdout.read(200)
+        done.stdout.close()  # what head does once it has its lines
+        err = done.stderr.read().decode("utf-8", "replace")
+        done.stderr.close()
+        self.assertEqual(done.wait(timeout=120), 1, err)
+        self.assertNotIn("Traceback", err)
+
 
 class ReviewMatching(unittest.TestCase):
     """Regression tests for what was matched, or not, before the review fixes."""

@@ -1,35 +1,30 @@
 #!/usr/bin/env python3
 """Would a person see the change? Counts the pixels that differ between screenshots of one screen.
 
-A skill that changes an app must show the result on the user's own screen. This is the proof:
-screenshots from before and after the work must differ where a person can see it, and frames taken
-a moment apart must differ when something is meant to move.
+A skill that changes an app must show the result on the user's own screen: shots from before and after
+the work must differ where a person sees it, and frames a moment apart must differ when it should move.
 
 Usage:
     python3 changed.py BEFORE AFTER [--min PERCENT] [--json]
     python3 changed.py --moves FRAME FRAME [FRAME ...] [--min PERCENT] [--json]
+    python3 changed.py --two-up OUT BEFORE AFTER
 
-BEFORE and AFTER are two PNG files, or two folders: then each PNG directly in BEFORE is compared with
-the PNG of the same name in AFTER, and names only one folder has are listed. Links and hidden files
-in a folder are left out. --moves takes frames of one screen in the order they were taken and
-compares each with the next.
+BEFORE and AFTER are two PNG files, or two folders: then each PNG directly in BEFORE (not a link or
+a hidden file) is compared with the PNG of the same name in AFTER, and names only one has are listed.
+--moves compares each frame of one screen with the next, in the order they were taken. --two-up
+writes one PNG, OUT: BEFORE on the left and AFTER on the right, tops aligned. It compares nothing.
 
-A pixel counts as changed when its red, green or blue differs by more than 8 on the scale of 0 to
-255: smaller steps are what font smoothing and image compression give, and a person does not see
-them. See-through pixels are laid over white. Where the sizes differ (the page got longer), the part
-both have is compared and the rest counts as changed. Each pair gets the share of its pixels that
-changed, where on the screen they are (the box around them, in plain words), and a verdict: VISIBLE
-CHANGE when the share reaches --min (default: 2 percent, with --moves 0.2), else NO VISIBLE CHANGE.
-Reads 8-bit PNGs without interlacing (what browsers and Playwright save), up to 64 MB and 30 million
-pixels. Every pixel is compared: a 1440 x 900 pair takes about a second. --json adds the box in pixels.
+A pixel counts as changed when its red, green or blue differs by more than 8 on the scale of 0 to 255
+(smaller steps are font smoothing and compression, which nobody sees); see-through pixels are laid over
+white. Where the sizes differ (the page got longer), the part both have is compared and the rest counts
+as changed. Each pair gets the share of its pixels that changed, where they are in plain words (--json
+adds the box), and VISIBLE CHANGE when that reaches --min (default: 2 percent, with --moves 0.2), else
+NO VISIBLE CHANGE. Reads 8-bit PNGs without interlacing, up to 64 MB and 30 million pixels, in a second.
 
 Exit codes:
-    0  at least one pair changed visibly; with --moves: something moves
-    1  no pair did; with --moves: nothing moves on this screen in the frames taken. For before and
-       after that usually means: the work is on another branch or folder than the one the local app
-       serves, the app was not rebuilt or restarted, a service worker or a cache serves the old
-       files, or the change is too small to see
-    2  could not compare: bad usage, no pair to compare, or a file that is missing or cannot be
+    0  at least one pair changed visibly; with --moves: something moves; with --two-up: OUT written
+    1  no pair did; with --moves: nothing moves in the frames taken (the output says what that means)
+    2  could not compare, or write OUT: bad usage, no pair, or a file that is missing or cannot be
        read (the output names it and says what to do). Never a pass
 """
 
@@ -54,8 +49,7 @@ CAUSES = ("the work is on another branch or folder than the one the local app se
 
 
 def masks(size):
-    """Two whole numbers of SIZE bytes: every byte 127, and every byte 128. Python does sums on numbers
-    of any length at once, far quicker than a loop over bytes; these keep each byte's sum in its byte."""
+    """Numbers of SIZE bytes, every byte 127 and every byte 128: they keep each byte's sum in its byte."""
     return int.from_bytes(b"\x7f" * size, "big"), int.from_bytes(b"\x80" * size, "big")
 
 
@@ -88,9 +82,8 @@ def unfilter(kind, line, prev, bpp):
 
 
 def read_png(path):
-    """(width, height, rows, data) of a PNG file. rows() decodes it, once: each row as bytes, 3 per
-    pixel (red, green, blue), see-through pixels laid over white. data is the file as it is: two files
-    with the same bytes need no decoding. Raises ValueError, with what to do, for a file it cannot read."""
+    """(width, height, rows, data) of a PNG file. rows() decodes it once: red, green, blue bytes per row,
+    see-through laid over white. data: the file (the same bytes need no decoding). ValueError: what to do."""
     with open(path, "rb") as handle:
         data = handle.read(MAX_FILE + 1)
     if data[:8] != b"\x89PNG\r\n\x1a\n":
@@ -145,8 +138,7 @@ def read_png(path):
 
 
 def changed_pixels(one, two):
-    """A byte per pixel: 1 where red, green or blue differs by more than TOLERANCE between two rows of
-    3 bytes per pixel. Each row is one big number, so this never loops over the pixels."""
+    """A byte per pixel: 1 where red, green or blue differs by more than TOLERANCE. No loop: a row is a number."""
     (low, high), x, y = masks(len(one)), int.from_bytes(one, "big"), int.from_bytes(two, "big")
     x_wins = ((x & ~y) | (~(x ^ y) & ((x | high) - (y & low)))) & high  # the top bit of each byte: is x >= y there
     swap = (x ^ y) & ((x_wins >> 7) * 255)
@@ -157,13 +149,10 @@ def changed_pixels(one, two):
 
 def where(box, width, height):
     """The box (left, top, right, bottom) in plain words, such as 'the top third of the screen'."""
-    words = []
-    for start, end, size, names in ((box[0], box[2], width, ("left", "centre", "right")),
-                                    (box[1], box[3], height, ("top", "middle", "bottom"))):
-        fits = [name.format(*names) for low, high, name in PARTS  # the named parts that hold it, with 2% of slack
-                if start * 6 >= (low - 0.12) * size and end * 6 <= (high + 0.12) * size]
-        words.append(fits[0] if fits else "")  # the smallest of them
-    across, down = words
+    across, down = (next((name.format(*names) for low, high, name in PARTS  # the smallest named part that holds
+                          if start * 6 >= (low - 0.12) * size and end * 6 <= (high + 0.12) * size), "")  # it (2% slack)
+                    for start, end, size, names in ((box[0], box[2], width, ("left", "centre", "right")),
+                                                    (box[1], box[3], height, ("top", "middle", "bottom"))))
     if across and down:
         return ("the %s %s of the screen" % (down.split()[0], across.split()[0])).replace("middle centre", "centre")
     if across or down:
@@ -174,8 +163,7 @@ def where(box, width, height):
 
 
 def compare(before, after):
-    """Compare two pictures, each as read_png() gives it. Returns how many pixels changed and of how
-    many, that as a percentage (rounded down), and the box around them."""
+    """Two pictures as read_png() gives them: pixels changed, of how many, percent (rounded down), the box."""
     (width_a, height_a, rows_a, file_a), (width_b, height_b, rows_b, file_b) = before, after
     width, height = min(width_a, width_b), min(height_a, height_b)  # the part both have
     full_width, full_height = max(width_a, width_b), max(height_a, height_b)
@@ -200,11 +188,17 @@ def compare(before, after):
             "before_size": [width_a, height_a], "after_size": [width_b, height_b]}
 
 
-def shots(folder):
-    """{file name: path} of the PNG files directly in FOLDER. Links and hidden files are left out."""
-    with os.scandir(folder) as entries:
-        return {entry.name: entry.path for entry in entries if entry.is_file(follow_symlinks=False)
-                and entry.name.lower().endswith(".png") and not entry.name.startswith(".")}
+def two_up(out, before, after, gap=24):
+    """BEFORE left and AFTER right in one 8-bit PNG at OUT, tops aligned, light grey around them. Its line."""
+    (width_a, height_a, rows_a, _), (width_b, height_b, rows_b, _) = read_png(before), read_png(after)
+    width, height, grey = width_a + gap + width_b, max(height_a, height_b), b"\xdd\xdd\xdd"
+    rows = zip(rows_a() + [grey * width_a] * (height - height_a), rows_b() + [grey * width_b] * (height - height_b))
+    raw = zlib.compress(b"".join(b"\0" + a + grey * gap + b for a, b in rows), 6)  # each row: filter 0, the pixels
+    parts = [b"IHDR" + struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0), b"IDAT" + raw, b"IEND"]
+    with open(out, "wb") as handle:  # each chunk: the length of its body, its type and body, their checksum
+        handle.write(b"\x89PNG\r\n\x1a\n" + b"".join(
+            struct.pack(">I", len(part) - 4) + part + struct.pack(">I", zlib.crc32(part)) for part in parts))
+    return "%s: %s on the left, %s on the right (%d x %d)" % (out, before, after, width, height)
 
 
 def sentence(item):
@@ -229,22 +223,30 @@ def main(argv=None):
     parser.add_argument("--moves", action="store_true", help="the PNGs are frames of one screen: does anything move?")
     parser.add_argument("--min", type=float, metavar="PERCENT",
                         help="the share of the pixels that must change (default: 2 percent, with --moves 0.2)")
+    parser.add_argument("--two-up", metavar="OUT", help="write BEFORE and AFTER side by side into OUT, a PNG")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     args = parser.parse_args(argv)
     minimum, only = args.min if args.min is not None else 0.2 if args.moves else 2.0, [[], []]
     try:
+        if args.two_up:  # one picture for a person to look at: nothing is compared
+            if args.moves or len(args.images) != 2 or os.path.abspath(args.two_up) in map(os.path.abspath, args.images):
+                raise ValueError("--two-up takes OUT, then BEFORE and AFTER: two PNG files, neither of them OUT")
+            print(two_up(args.two_up, *args.images))
+            return 0
         if not 0 < minimum <= 100:
             raise ValueError("--min is a percentage: more than 0, at most 100")
         if len(args.images) < 2 or (len(args.images) > 2 and not args.moves):
             raise ValueError("give BEFORE and AFTER (two PNGs or two folders), or --moves and two or more frames")
-        if not args.moves and all(map(os.path.isdir, args.images)):
-            old, new = shots(args.images[0]), shots(args.images[1])
+        if not args.moves and all(map(os.path.isdir, args.images)):  # the PNGs directly in each, not a link or hidden
+            old, new = ({e.name: e.path for e in os.scandir(folder) if e.is_file(follow_symlinks=False)
+                         and e.name.lower().endswith(".png") and not e.name.startswith(".")} for folder in args.images)
             pairs = [(name, old[name], new[name]) for name in sorted(set(old) & set(new))]
             only = [sorted(set(old) - set(new)), sorted(set(new) - set(old))]
-            if not pairs:
-                raise ValueError("no PNG has the same name in %s and in %s: nothing to compare" % tuple(args.images))
+            if not pairs:  # -light stills before, -dark after: the app keeps a theme now that the shots missed
+                raise ValueError("no PNG has the same name in %s and in %s: nothing to compare (only -light in one and "
+                                 "-dark in the other? ../forge-design/review.md section 1)" % tuple(args.images))
         else:
-            missing = [path for path in args.images if not os.path.isfile(path)]
+            missing = sorted((path for path in args.images if not os.path.isfile(path)), key=os.path.exists)
             if missing:
                 raise ValueError("%s is not a file that exists: give PNG files, or two folders of them" % missing[0])
             short = [os.path.basename(path) for path in args.images]  # file names, when they tell the files apart

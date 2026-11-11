@@ -541,6 +541,14 @@ class CliTests(TempFolder):
         self.assertEqual((data["summary"]["pairs"], data["summary"]["visible"]), (2, 1))
         self.assertEqual(self.run_main(before, before)[0], 1)
 
+    def test_stills_in_another_theme_only_say_where_to_look(self):
+        """A light app that now keeps a dark theme: the after run named its stills -dark, so no name matches."""
+        self.save("light/home-1440-light.png", canvas(20, 20))
+        self.save("dark/home-1440-dark.png", canvas(20, 20, INK))
+        code, out, err = self.run_main(self.path("light"), self.path("dark"))
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("only -light in one and -dark in the other? ../forge-design/review.md section 1", err)
+
     def test_links_in_a_folder_are_not_followed(self):
         self.save("b/home.png", canvas(20, 20))
         self.save("a/home.png", canvas(20, 20, SEA))
@@ -560,6 +568,7 @@ class CliTests(TempFolder):
                  ([self.before, self.folder], "is not a file that exists: give PNG files, or two folders"),
                  ([self.folder, self.after], "is not a file that exists"),
                  ([self.folder, empty, "--moves"], "is not a file that exists"),
+                 ([self.folder, self.path("after")], "after is not a file that exists"),  # the one that is missing
                  ([empty, self.folder], "no PNG has the same name in"),
                  ([self.before, self.after, "--min", "0"], "--min is a percentage"),
                  ([self.before, self.after, "--min", "-1"], "more than 0"),
@@ -706,6 +715,64 @@ class MovesTests(TempFolder):
         self.assertEqual(code, 2)
         self.assertEqual(out.count("cut.png: the image data is broken or cut short"), 2)
         self.assertIn("INCOMPLETE, so not a pass: 2 of 3 pair(s) could not be compared.", out)
+
+
+class TwoUpTests(TempFolder):
+    GREY = (0xDD, 0xDD, 0xDD)
+
+    def pixel(self, rows, x, y):
+        return tuple(rows[y][3 * x:3 * x + 3])
+
+    def test_before_left_after_right_tops_aligned_grey_around(self):
+        before = self.save("before.png", paint(canvas(30, 20), 0, 0, 30, 5, INK))  # a short page
+        after = self.save("after.png", paint(canvas(40, 50, SEA), 0, 45, 40, 5, INK))  # a longer, wider one
+        out = self.path("side.png")
+        code, text, err = self.run_main("--two-up", out, before, after)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(text, "%s: %s on the left, %s on the right (94 x 50)\n" % (out, before, after))
+        width, height, rows, _ = changed.read_png(out)  # what it writes, changed.py reads: a plain 8-bit PNG
+        rows = rows()
+        self.assertEqual((width, height), (30 + 24 + 40, 50))
+        self.assertEqual(self.pixel(rows, 0, 0), INK)  # before, top left
+        self.assertEqual(self.pixel(rows, 29, 10), WHITE)
+        self.assertEqual(self.pixel(rows, 29, 20), self.GREY)  # below the shorter one
+        self.assertEqual(self.pixel(rows, 30, 0), self.GREY)  # the gap
+        self.assertEqual(self.pixel(rows, 53, 49), self.GREY)
+        self.assertEqual(self.pixel(rows, 54, 0), SEA)  # after starts at the top too
+        self.assertEqual(self.pixel(rows, 93, 49), INK)
+        self.assertEqual(self.run_main(before, before)[0], 1)  # nothing was written over BEFORE
+
+    def test_any_png_it_reads_can_go_in(self):
+        grey_alpha = encode(self.path("ga.png"), [bytes([0, 0] * 4)] * 3, colour=4)  # black, fully see-through
+        palette = encode(self.path("p.png"), [bytes([0, 1, 1, 0])] * 2, colour=3, palette=[INK, SEA])
+        out = self.path("side.png")
+        self.assertEqual(self.run_main("--two-up", out, grey_alpha, palette)[0], 0)
+        width, height, rows, _ = changed.read_png(out)
+        self.assertEqual((width, height), (4 + 24 + 4, 3))
+        self.assertEqual(self.pixel(rows(), 0, 0), WHITE)  # see-through laid over white, as the compare does
+        self.assertEqual(self.pixel(rows(), 29, 1), SEA)
+        self.assertEqual(self.pixel(rows(), 28, 2), self.GREY)
+
+    def test_wrong_use_is_exit_2_and_never_overwrites_a_picture(self):
+        before, after = self.save("b.png", canvas(10, 10)), self.save("a.png", canvas(10, 10, SEA))
+        original = content(before)
+        cases = [(["--two-up", before, before, after], "neither of them OUT"),
+                 (["--two-up", self.path("o.png"), before], "two PNG files"),
+                 (["--two-up", self.path("o.png"), before, after, after], "two PNG files"),
+                 (["--two-up", self.path("o.png"), "--moves", before, after], "--two-up takes OUT"),
+                 (["--two-up", self.path("o.png"), before, self.path("none.png")], "No such file")]
+        for args, words in cases:
+            with self.subTest(args=args):
+                code, out, err = self.run_main(*args)
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn(words, err)
+        self.assertEqual(content(before), original)
+        with open(self.path("bad.png"), "wb") as handle:
+            handle.write(b"GIF89a")
+        code, _, err = self.run_main("--two-up", self.path("o2.png"), before, self.path("bad.png"))
+        self.assertEqual(code, 2)
+        self.assertIn("is not a PNG file", err)
+        self.assertFalse(os.path.exists(self.path("o2.png")))
 
 
 if __name__ == "__main__":

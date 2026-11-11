@@ -289,10 +289,11 @@ def main(argv=None):
     text = (json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
             else format_human(findings, summary))
     encoding = getattr(sys.stdout, "encoding", None) or "utf-8"  # an ASCII pipe, or a file name that
-    print(text.encode(encoding, "backslashreplace").decode(encoding))  # is not UTF-8: escape, no crash
-    if summary["incomplete"]:
-        return 2  # part of the project was never read, so the result cannot be trusted
-    return 1 if findings else 0
+    try:  # is not UTF-8: escape, no crash. A reader that stops early (| head) is fine too
+        print(text.encode(encoding, "backslashreplace").decode(encoding), flush=True)
+    except OSError:  # the pipe closed: quiet now, and at exit, when Python flushes again
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    return 2 if summary["incomplete"] else 1 if findings else 0  # incomplete: part was never read, so no verdict
 
 
 if __name__ == "__main__":
