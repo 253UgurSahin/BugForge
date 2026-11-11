@@ -763,6 +763,9 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
   .trip__marks { display: none; }
   .trip__bar-in { justify-content: flex-end; }
   .tool { padding: 0 var(--space-3); }
+    /* the last look over the whole sheet needs less scroll on a phone: at 90svh it left a long band of bare
+       paper between the trip and the day's readings */
+    .trip__end { height: 55vh; height: 55svh; }
 }
 
 /* ---------------------------------------------------------------- movement (level 5) */

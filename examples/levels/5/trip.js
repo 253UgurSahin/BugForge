@@ -99,7 +99,9 @@ const orbit = (v) => {
   /* (the lens shift lifts the sheet so Breskens and the cartouche stand clear above the slip, and the camera
      stands a little further back so the sheet's far corner is not cut by the top of the window) */
 const HERO = { target: [1.15, 0, 0.3], dist: 17.4, el: 45, az: 6, fov: 30, shift: [0.43, 0.3] };
-const HERO_PHONE = { target: [0, 0, 0.15], dist: 50, el: 50, az: 0, fov: 30, shift: [0, -0.55], flight: [0, -0.34] };
+  /* (el 36, not 50: seen lower, the sheet is shorter on the screen, so all of it fits between the buttons and the
+     strip instead of running on past the fold) */
+const HERO_PHONE = { target: [0, 0, 0.15], dist: 50, el: 36, az: 0, fov: 30, shift: [0, -0.55], flight: [0, -0.34] };
 // a phone (or a narrow tablet) has the words over the top of the screen: the sheet lies under the buttons as
 // wide as the screen, as level 4's does, and runs on under the strip of tools and past the fold (fitted into
 // the band between the buttons and the strip it was a strip 200 px high, smaller than level 4's)
@@ -142,7 +144,9 @@ const STORY = [
 // camera keyframes, world units: the sheet is 10 x 9 round the middle, x east, z south, y up
 const CHAPTERS = [
   { camera: orbit(HERO), phone: orbit(HERO_PHONE),                                       // the hero
-    still: { position: [0.2, 9.4, 10.2], target: [0.1, -0.5, 0.35], fov: 33 }, progress: 0, hour: HOURS[0] },
+      /* (the reduced-motion still of the hero: seen steeper and closer, the sheet fills its frame as level 4's
+         does; from further back and lower it was a small wide strip) */
+    still: { position: [0.15, 12.2, 7.6], target: [0.15, -0.2, 0.35], fov: 33 }, progress: 0, hour: HOURS[0] },
   { via: true, camera: { position: [3.4, 5.2, 5.6], target: [1.4, 0, -0.2], fov: 34 },  // down behind the pier head
     phone: { position: [3.2, 6.2, 5.2], target: [1.7, 0, -0.3], fov: 48 }, progress: 0.12, hour: NOW + (OFF - NOW) * 0.6 },
   { camera: { position: [3.1, 1.75, 2.1], target: [1.75, 0, -0.25], fov: 36 },          // off the pier head
@@ -163,7 +167,9 @@ const CHAPTERS = [
     phone: orbit({ target: [-6.9, 0, 4.6], dist: 10.5, el: 60, az: 36, fov: 50 }),
     still: orbit({ target: [-6.6, 0, 4.3], dist: 7.2, el: 46, az: 62, fov: 40 }), progress: 0.85, hour: HOURS[4] },
   { at: 1, camera: { position: [0.0, 12.6, 11.2], target: [0.1, 0, 0.5], fov: 34 },       // the whole sheet, in the room light again
-    phone: { position: [0.0, 19, 17], target: [0.1, 0, 0.6], fov: 40 }, progress: 1, hour: HOURS[4] },
+    /* (on a phone the whole sheet lies in the middle of the screen, not at its top over half a screen of bare
+       paper: the view aims further north, so the sheet sits lower) */
+    phone: { position: [0.0, 19, 15.2], target: [0.1, 0, -1.5], fov: 40 }, progress: 1, hour: HOURS[4] },
 ].map((c) => ({ ...c, params: { hour: c.hour, data: dataAt(c.hour) } }));
 
 /* ---- callouts: buoys and fixes, named as the camera passes them ------------------------------ */
@@ -506,7 +512,7 @@ if (section && steps.length) {
     drift: 0.005,
     focus: [0.4, 0, 0.6],
     stillWidth: 880,
-    stillRatio: 0.6,
+    stillRatio: 0.8,      // taller stills: the sheet seen from above is nearly square (at 0.6 it was a strip)
     onUpdate: ({ params, progress }) => {
       // also called before each still is drawn: the stage only follows the live trip
       if (section.getAttribute("data-journey") !== "live") return;
