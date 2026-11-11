@@ -24,7 +24,9 @@
    pieces with a breath between them, so the page never waits long for it.
 
    mount(container, options) -> Promise of { stage, setData, setProgress, setPointer, pause, resume,
-   destroy }. setData([level]): the water, 0..1 of 6 m above chart datum. setProgress(p): how far the hero
+   destroy }. setData([level, banks]): the water, 0..1 of 6 m above chart datum; banks 1 while the page
+   shows an hour other than now: the lamp then leaves the hand and hangs over the banks that flood and dry
+   (Spijkerplaat and Hooge Platen), so the tide is lit wherever the hand is (on the slip's own controls). setProgress(p): how far the hero
    has scrolled away, 0..1. The container gets the event "tablebuilt" when the opening is over, and the
    custom properties --gauge-x and --gauge-y: where the tide gauge at Vlissingen is on screen, in pixels
    of the container, for the page's label of the hour. */
@@ -98,7 +100,6 @@ uniform vec3 uInkNight;
 uniform vec3 uInkGlow;
 uniform vec4 uHinge;
 uniform float uFlap;
-uniform float uDebug;
 varying vec2 vUv;
 varying vec3 vPos;
 ${simplex2D}
@@ -147,7 +148,7 @@ void main() {
   vec3 L = normalize(toLamp);
   float r = length(P.xz - uLampPos.xz) / uPoolR;
   float pool = 1.0 - smoothstep(uPoolEdge, 1.0, r);
-  float face = min(max(dot(n, L), 0.0) / max(L.y, 0.2), 1.7);
+  float face = min(max(dot(n, L), 0.0) / max(L.y, 0.2), 1.4);
   float sh = pool > 0.01 ? shadowAt(P + n * 0.003, L) : 1.0;
   /* the corner that turned up lies over the chart near its hinge: its shade */
   float inSide = -dot(P.xz - uHinge.xy, uHinge.zw);
@@ -179,7 +180,7 @@ void main() {
     float sheen = 0.5 + 0.5 * sin(dot(P.xz, vec2(0.55, -0.9)) * 1.6 - uTime * 0.45 + g.x * 0.6);
     vec3 waterLight = uRoom + uLampColor * uLampPower * pool * 0.65;
     vec3 water = mix(col, uShoal * waterLight, a);
-    water += uLampColor * uLampPower * pool * 0.08 * sheen * sheen * sheen * (1.0 - onBank * 0.7);
+    water += uLampColor * uLampPower * pool * 0.14 * sheen * sheen * sheen * (1.0 - onBank * 0.7) * (1.0 - 0.6 * uNight);
     vec3 H = normalize(normalize(uLampPos - P) + V);
     float hv = clamp(dot(wn, H), 0.0, 1.0);
     float glint = (pow(hv, 420.0) * 3.2 + pow(hv, 70.0) * 0.35) * pool * sh * (1.0 - 0.8 * uNight);
@@ -187,10 +188,10 @@ void main() {
     col = mix(col, water, wet);
   }
   /* where the water meets the bank: a fine bright line, and the wet sand a little darker above it */
-  float edge = clamp(1.0 - abs(depth) / (fwidth(depth) * 1.25 + 0.0005), 0.0, 1.0) * uWater * step(0.0, 0.5 - abs(bed.g) * 0.06);
+  float edge = clamp(1.0 - abs(depth) / (fwidth(depth) * 0.9 + 0.0005), 0.0, 1.0) * uWater * step(0.0, 0.5 - abs(bed.g) * 0.06);
   float damp = (1.0 - smoothstep(0.0, 0.22, -depth)) * step(depth, 0.0) * uWater;
   col *= 1.0 - 0.08 * damp;
-  col = mix(col, uLine * (uRoom + uLampColor * uLampPower * pool), edge * 0.85);
+  col = mix(col, uLine * (uRoom + uLampColor * uLampPower * pool), edge * 0.6);
 
   /* the ink, on top of everything: by day as printed, by night dark on the red inside the pool and a dim
      red print in the gloom outside it */
@@ -201,9 +202,6 @@ void main() {
   col = col * (1.0 - ink.a) + mix(dayInk, nightInk, uNight);
 
   gl_FragColor = vec4(col, 1.0);
-  if (uDebug > 0.5 && uDebug < 1.5) gl_FragColor = vec4(vec3(1.0 - ink.a), 1.0);   // DEBUG-REMOVE
-  if (uDebug > 1.5 && uDebug < 2.5) gl_FragColor = vec4(dayPaper, 1.0);   // DEBUG-REMOVE
-  if (uDebug > 2.5) gl_FragColor = vec4(vec3(0.5 + bed.g * 0.05), 1.0);   // DEBUG-REMOVE
   #include <colorspace_fragment>
   gl_FragColor.rgb += dither(gl_FragCoord.xy);
 }`;
@@ -447,10 +445,9 @@ export async function mount(container, options = {}) {
     uLampPower: { value: 0.35 }, uPoolR: { value: 2.6 }, uPoolEdge: { value: 0.3 }, uRoom: { value: new THREE.Color() },
     uHill: { value: 0.6 }, uShoal: { value: new THREE.Color() }, uLine: { value: new THREE.Color() }, uGlint: { value: new THREE.Color() },
     uInkNight: { value: new THREE.Color() }, uInkGlow: { value: new THREE.Color() },
-    uHinge: { value: new THREE.Vector4(hingeMid.x, hingeMid.z, out.x, out.y) }, uFlap: { value: 0 }, uDebug: { value: 0 },
+    uHinge: { value: new THREE.Vector4(hingeMid.x, hingeMid.z, out.x, out.y) }, uFlap: { value: 0 },
   };
   if (firstTheme === "day") uniforms.uBaseNight.value = bases.day; else uniforms.uBase.value = bases.night;
-  if (window.__l4debug) window.__l4debug.u = uniforms;   // DEBUG-REMOVE
   const sheetMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader: sheetVertex, fragmentShader: sheetFragment });
   const sheetGeometry = new THREE.PlaneGeometry(SW, SD, 172, 180).rotateX(-Math.PI / 2);
   const sheet = new THREE.Mesh(sheetGeometry, sheetMaterial);
@@ -570,7 +567,7 @@ export async function mount(container, options = {}) {
       tableUniforms.uShade.value.setRGB(0, 0, 0);
       tableUniforms.uShadeA.value = 0.6;
     } else {
-      uniforms.uRoom.value.setRGB(0.81, 0.77, 0.69);   // the room beyond the lamp: a warm shade
+      uniforms.uRoom.value.setRGB(0.78, 0.74, 0.66);   // the room beyond the lamp: a warm shade
       uniforms.uLampColor.value.copy(tokens.lamp).lerp(new THREE.Color(1, 0.84, 0.56), 0.7);   // a warm bulb
       uniforms.uShoal.value.copy(tokens.shoal);
       uniforms.uLine.value.setRGB(1, 0.99, 0.95);
@@ -619,7 +616,7 @@ export async function mount(container, options = {}) {
   stage.onResize(() => { pose = cssPose(container, sheetEl); });
 
   /* 5. the lamp on its cable */
-  const restAt = toWorld(700, 470);
+  const restAt = toWorld(700, 470), bankAt = toWorld(820, 585);   // over the river; over the banks that dry
   const lamp = { x: restAt.x, z: restAt.z, vx: 0, vz: 0 };
   const ray = new THREE.Vector3();
   function pointerOnTable() {
@@ -637,7 +634,7 @@ export async function mount(container, options = {}) {
   /* 6. the frame. The opening and the easing run on the clock of the wall, not on the stage's clock
      (which stands still while paused and takes at most a tenth of a second a frame), so a slow device
      sees the same moments, only fewer of them. */
-  let level = 1.0, levelShown = level, progress = 0, opened = null, built = false, last = 0, flapTurn = 0;
+  let level = 1.0, levelShown = level, progress = 0, opened = null, built = false, last = 0, flapTurn = 0, banks = 0;
   const view = { x: 0, y: 0 };
   const ease = (dt, seconds) => (dt ? 1 - Math.exp(-dt / seconds) : 1);
   const clockNow = () => ((document.timeline && document.timeline.currentTime != null) ? document.timeline.currentTime : performance.now()) / 1000;
@@ -706,12 +703,13 @@ export async function mount(container, options = {}) {
 
     /* the lamp: to the hand, or to its place over the river (down the pencil line as the hero leaves);
        a lamp on a cable, so it swings after the hand and settles */
-    const hand = built ? pointerOnTable() : null;
+    const hand = built && !banks ? pointerOnTable() : null;
     let tx, tz;
     if (hand) { tx = hand.x; tz = hand.z; } else {
       const b = toWorld(524, 594), walk = Math.min(1, leave * 1.2);
-      tx = restAt.x + (b.x - restAt.x) * walk + (live ? Math.sin(now * 0.61) * 0.32 + Math.sin(now * 0.23) * 0.18 : 0);
-      tz = restAt.z + (b.z - restAt.z) * walk + (live ? Math.cos(now * 0.47) * 0.2 + Math.sin(now * 0.31) * 0.1 : 0);
+      const home = banks ? bankAt : restAt, sway = banks ? 0.5 : 1;
+      tx = home.x + (b.x - home.x) * walk + (live ? (Math.sin(now * 0.43) * 0.42 + Math.sin(now * 0.17) * 0.2) * sway : 0);
+      tz = home.z + (b.z - home.z) * walk + (live ? (Math.cos(now * 0.37) * 0.26 + Math.sin(now * 0.23) * 0.12) * sway : 0);
     }
     if (!dt) { lamp.x = tx; lamp.z = tz; lamp.vx = lamp.vz = 0; } else {
       const w = 5.4, z = 0.6, steps = Math.ceil(dt / (1 / 60)), h = dt / steps;
@@ -723,8 +721,8 @@ export async function mount(container, options = {}) {
       }
     }
     uniforms.uLampPos.value.set(lamp.x, LAMP_HEIGHT, lamp.z);
-    uniforms.uLampPower.value = night > 0.5 ? 2.3 : 0.18;
-    uniforms.uPoolR.value = night > 0.5 ? 2.45 : 2.35;
+    uniforms.uLampPower.value = night > 0.5 ? 2.3 : 0.24;
+    uniforms.uPoolR.value = night > 0.5 ? 2.45 : 2.15;
     if (live) uniforms.uTime.value = now % 1000;
     if (built && !idle && stage.running && now > activeUntil && !hand && Math.abs(level - levelShown) < 0.004
       && Math.abs(stage.progress - progress) < 0.002 && Math.hypot(tx - lamp.x, tz - lamp.z) < 0.12) goIdle();
@@ -744,9 +742,10 @@ export async function mount(container, options = {}) {
     setData(values) {
       const v = Array.isArray(values) ? Number(values[0]) : Number(values);
       if (!Number.isFinite(v)) return;
-      const next = clamp01(v) * WATER_MAX;
-      if (next !== level) wake(1.8);
+      const next = clamp01(v) * WATER_MAX, nextBanks = Array.isArray(values) && Number(values[1]) > 0 ? 1 : 0;
+      if (next !== level || nextBanks !== banks) wake(1.8);
       level = next;
+      banks = nextBanks;
       if (stage.still || userPauses.size) levelShown = level;
       stage.invalidate();
     },

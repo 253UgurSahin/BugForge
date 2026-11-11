@@ -1,18 +1,22 @@
 /* Tidewatch, level 4: Showpiece. Loaded after ../shared/tokens.css, ../shared/base.css and the scene kit's
    ../../vendor/scenes/depth.css. Level 4 keeps everything of level 3, which keeps everything of level 2: the
-   first part of this file is level 2's (the reveal switch is html[data-reveal] here, as the scene kit's
-   motion button owns html[data-motion]), the second part, "level 3: Expressive", is level 3's, and the last
-   part, "level 4: Showpiece", adds what goes with the 3D chart table (hero.js and table.js):
-   - the drawn chart and its lamp step aside once the scene is live (.hero.is-3d); without WebGL they stay;
-   - the water of the hour on the slip (and on a phone in the chart's corner), with its gauge; the slip's
-     window lights while the time-lapse is inside it; the corner holds "Next 12 hours" and "Pause motion";
-   - 3D in the screens: the week lies back on the table with its safe windows raised as magenta bands, the
-     day under the lamp is a small model of its tide with the window standing up out of the water, and the
-     passage slips carry their tide strip as a little relief.
-   Level 3, in short: the chart as a sheet on the table in plates, the lamp that follows the hand, the week
-   told as you scroll, the passage slips that lean to the lamp with its glare, the notes dealt as a pile.
+   first part of this file is level 2's (its reveal switch is html[data-reveal], as html[data-motion] belongs to
+   the motion switch), the second part, "level 3: Expressive", is level 3's: today's readings as traces, the
+   week told as you scroll on a sheet of chart paper (the heading stays, the lamp rides the cursor, a scale of
+   the seven days fills), the passage slips and notes that lean to the hand, the dialog under a dimmed lamp.
+   Its drawn hero sheet is level 4's own: it is the poster of the 3D table and lies in the very pose the
+   table's camera is taken from. The last part, "level 4: Showpiece", adds what goes with the 3D chart table
+   (hero.js and table.js):
+   - the drawn sheet (whole, with its neat line, its fold and its turned-up corner) as the poster, which stays
+     whole under the canvas until the canvas is whole, and then steps aside; without WebGL it stays, with its lamp;
+   - the label at the tide gauge on the chart, the slip's tide staff, the reader's hour (a play button and a
+     scale of the next twelve hours) and one switch for all motion, as real, bordered controls;
+   - the phone: the whole sheet under the words and the slip as one bar under it;
+   - 3D in the screens: the seven days of tide as a stack of day sheets under the week.
    Reduced motion: base.css stops every CSS animation, level.js runs no spring and no loop, depth.js lays
-   everything flat, the story is a plain list, the 3D scene is one still frame, the controls are not shown. */
+   everything flat, the story is a plain list, the 3D scene is one still frame, the play button is not shown. */
+
+
 
 /* ---------------------------------------------------------------- level-2 tokens */
 :root {
@@ -283,12 +287,334 @@
   ::view-transition-new(root) { animation-duration: var(--duration-base); }
 }
 
+
 /* ================================================================ level 3: Expressive */
 :root {
-  --l3-tilt: 14deg;                             /* the sheet lies on the table, seen at a slight angle */
-  --l3-perspective: 1500px;
-  --l3-edge: 2.5rem;                            /* table round the sheet, for its shadow */
-  --l3-sheet-scale: 1.06;
+  /* the sheet on the table, seen from the reader's chair */
+  --l3-lay: 27deg;                              /* how far the sheet lies back */
+  --l3-turn: -1.4deg;                           /* and how it lies turned: a sheet is never quite square */
+  --l3-sink: -28px;                             /* a little under the screen, so no part of it ever comes nearer */
+  --l3-eye: 1450px;                             /* how far the eye is from the screen */
+  --l3-eye-at: 26% -46%;                        /* and where it is: left of the sheet, above the table */
+  --l3-curl: 5.5rem;                            /* the corner that has turned up */
+  --l3-k: 2;                                    /* the plates are laid out at twice their size: sharp in perspective, and the
+                                                   browser never needs to draw them again while the sheet moves */
+  --l3-paper: #fdfaf2;                          /* the sheet: whiter than the table it lies on */
+  /* the lamp. The sheet is multiplied by one light: warm cream in the pool, and outside it a step down to
+     about the table's own brightness, so the sheet stays the lightest paper on the table; the middle of the
+     pool is warmed (soft light), never bleached. By night: a dim, deep red pool, the rest faintly readable */
+  --l3-lit: #fff1d9;
+  --l3-rim: #fcefdc;
+  --l3-dim: #f0ebe2;
+  --l3-glow: rgba(255, 176, 84, 0.5);
+  --l3-table: rgba(255, 252, 244, 0.78);        /* the same lamp on the table round the sheet */
+  --l3-room: rgba(110, 84, 40, 0.16);           /* and the room outside its reach */
+  --l3-cast: rgba(56, 38, 10, 0.3);             /* the sheet's shadow on the table */
+  --l3-contact: rgba(56, 38, 10, 0.26);         /* where it touches the table */
+  --l3-cut: #d6c8ab;                            /* the cut edge of the paper, towards the reader */
+  --l3-back: #ece2cd;                           /* the back of the paper, on the turned-up corner */
+  --l3-crease-dark: rgba(92, 66, 22, 0.12);     /* the fold: one side turned from the light */
+  --l3-crease-light: rgba(255, 255, 255, 0.5);  /* and one side towards it */
+  --l3-ink-2: #263b49;                          /* small print on paper: darker than --color-text-muted, so 12 px reads */
+  --l3-pool-c: rgba(255, 186, 96, 0.36);        /* the lamp over the hour the tide story reads */
+  --l3-glint: rgba(255, 186, 96, 0.5);          /* the lamp caught by a card under the hand */
+  --l3-sheet: #fbf8f0;                          /* the tide sheet laid on the table */
+  --l3-dusk: rgba(48, 30, 8, 0.34);             /* the dialog: the lamp turned down */
+  --l3-dusk-2: rgba(36, 22, 4, 0.62);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --l3-paper: #84260f; --l3-lit: #ffffff; --l3-rim: #d09c8b; --l3-dim: #5e4740; --l3-glow: rgba(255, 92, 52, 0.42);
+    --l3-table: rgba(150, 38, 14, 0.62); --l3-room: rgba(0, 0, 0, 0.32); --l3-cast: rgba(0, 0, 0, 0.62); --l3-contact: rgba(0, 0, 0, 0.7);
+    --l3-cut: #2a0d07; --l3-back: #3b150c; --l3-crease-dark: rgba(0, 0, 0, 0.2); --l3-crease-light: rgba(255, 150, 110, 0.06);
+    --l3-ink-2: #e2cdbf; --l3-pool-c: rgba(166, 45, 23, 0.5); --l3-glint: rgba(255, 106, 77, 0.16); --l3-sheet: #1a110e;
+    --l3-dusk: rgba(6, 2, 1, 0.66); --l3-dusk-2: rgba(2, 1, 0, 0.86);
+  }
+}
+:root[data-theme="dark"] {
+  --l3-paper: #84260f; --l3-lit: #ffffff; --l3-rim: #d09c8b; --l3-dim: #5e4740; --l3-glow: rgba(255, 92, 52, 0.42);
+  --l3-table: rgba(150, 38, 14, 0.62); --l3-room: rgba(0, 0, 0, 0.32); --l3-cast: rgba(0, 0, 0, 0.62); --l3-contact: rgba(0, 0, 0, 0.7);
+  --l3-cut: #2a0d07; --l3-back: #3b150c; --l3-crease-dark: rgba(0, 0, 0, 0.2); --l3-crease-light: rgba(255, 150, 110, 0.06);
+  --l3-ink-2: #e2cdbf; --l3-pool-c: rgba(166, 45, 23, 0.5); --l3-glint: rgba(255, 106, 77, 0.16); --l3-sheet: #1a110e;
+  --l3-dusk: rgba(6, 2, 1, 0.66); --l3-dusk-2: rgba(2, 1, 0, 0.86);
+}
+
+/* ---- the slip lies on the sheet, flat and sharp: its words in full ink, its shadow on the chart ---- */
+.hero__slip { box-shadow: 0 1px 0 rgba(14, 42, 59, 0.06), 7px 16px 26px -12px var(--l3-cast), 1px 3px 5px -2px var(--l3-contact); }
+.hero__slip-label { font-size: 0.75rem; color: var(--l3-ink-2); }
+.hero__slip-note { color: var(--l3-ink-2); }
+/* a faint print of the chart on the table under the words, as level 2 has it (narrow screens only) */
+.hero__print { display: none; }
+/* on a phone the words are shorter and keep one button (the header has the other). The page marks a phone
+   as html.is-narrow (before the first paint, and again when the width changes), because a width rule here
+   is also matched for a moment while Chromium takes a full-page picture, which then lost the second button */
+html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
+
+/* ---- the lamp switch says what it is, also where its words are hidden ---- */
+.lamp__icon { display: none; flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.lamp__shade { fill: var(--color-surface); }
+.lamp[aria-checked="true"] .lamp__bulb { fill: var(--color-accent); stroke: var(--color-accent); }
+
+/* ---- today: each reading keeps its day as a trace across the width of its column, its "now" a pencil fix ---- */
+.stat__trend { flex-direction: column; align-items: stretch; gap: var(--space-3); margin-top: var(--space-4); }
+.spark__box { position: relative; display: block; height: 2.75rem; }
+.spark__box .spark { width: 100%; height: 100%; overflow: visible; }
+.spark__box .spark path { vector-effect: non-scaling-stroke; }
+.spark__box .spark__line { stroke-width: 1.75; }
+.spark__now { display: none; }
+.spark__fix {
+  position: absolute; left: calc(var(--x) * 1%); top: calc(var(--y) * 1%); width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px;
+  border: 1.5px solid var(--color-chart-pencil); border-radius: 50%;
+  background: radial-gradient(circle, var(--color-chart-pencil) 0 1.6px, transparent 2.1px);
+}
+:root[data-theme="dark"] .spark__fix { border-color: var(--color-text); background: radial-gradient(circle, var(--color-text) 0 1.6px, transparent 2.1px); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .spark__fix { border-color: var(--color-text); background: radial-gradient(circle, var(--color-text) 0 1.6px, transparent 2.1px); } }
+.trend { color: var(--l3-ink-2); }
+.stat__label { font-size: 0.75rem; color: var(--l3-ink-2); }
+
+/* ---- the week, told as you scroll. level.js marks the story .is-live (motion on, script running, the table
+   closed), pins its stage, walks a cursor through the week and writes which day is current; without it the
+   steps are a list. The heading, the note and the table button stay with the week while it is pinned. ---- */
+:root { --color-veil: rgba(251, 248, 240, 0.78); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --color-veil: rgba(13, 7, 6, 0.8); } }
+:root[data-theme="dark"] { --color-veil: rgba(13, 7, 6, 0.8); }
+
+.tt { margin: 0 0 var(--space-7); }
+/* the week is a sheet of chart paper on the table: a neat line, a soft shadow, the lamp over the hour */
+.story .tide {
+  position: relative; padding: var(--space-4) var(--space-5) var(--space-3) var(--space-3); background: var(--l3-sheet);
+  border: var(--size-border) solid color-mix(in oklab, var(--color-rule) 38%, transparent);
+  box-shadow: inset 0 0 0 4px var(--l3-sheet), inset 0 0 0 5px color-mix(in oklab, var(--color-rule) 70%, transparent),
+    0 1px 0 rgba(14, 42, 59, 0.05), 0 26px 48px -30px var(--l3-cast);
+}
+.story .tide__legend { margin-top: var(--space-3); }
+.story__now, .story__rule { display: none; }
+.story__day { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); margin: var(--space-7) 0 0 var(--tide-gutter, var(--space-6)); }
+.story__steps { display: grid; margin: 0; padding: 0; list-style: none; }
+.step { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-4); padding-block: var(--space-3); border-top: var(--size-border) solid var(--color-border); }
+.step__day { font: 500 0.75rem/1.4 var(--font-mono); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--l3-ink-2); }
+.step__day b { display: block; font: 400 var(--text-xl)/1.1 var(--font-display); letter-spacing: -0.01em; text-transform: none; color: var(--color-text); }
+.step__line { max-width: 38em; color: var(--color-text-muted); }
+.step--none .step__day b { font-style: italic; }
+.tide__veil, .tide__cursor, .dayc { display: none; }
+
+.story.is-live { height: calc(100vh + 7 * 40vh); height: calc(100svh + 7 * 40svh); }
+.story.is-live .story__stage {
+  position: sticky; top: 0; display: grid; align-content: center; height: 100vh; height: 100svh; padding-block: var(--space-4);
+}
+.story.is-live .section__head { margin-bottom: var(--space-4); padding-top: var(--space-4); }
+.story.is-live .tides__bar { align-items: center; margin-bottom: var(--space-5); }
+.story.is-live .tides__note { flex: 1 1 24rem; font-size: var(--text-sm); color: var(--l3-ink-2); }
+.story.is-live .story__now { display: flex; align-items: baseline; gap: var(--space-3); margin-left: auto; white-space: nowrap; }
+.story__now b { font: 400 var(--text-xl)/1 var(--font-display); letter-spacing: -0.01em; }
+.story__now span { font: 500 0.75rem/1 var(--font-mono); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--l3-ink-2); }
+.story.is-live .tide__plot { height: clamp(9rem, 30vh, 21rem); height: clamp(9rem, 30svh, 21rem); }
+.story.is-live .story__day { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: end; gap: var(--space-5) var(--space-8); margin-top: var(--space-5); }
+.story.is-live .story__steps > .step { grid-area: 1 / 1; display: block; padding: 0; border: 0; opacity: 0; }
+.story.is-live .story__steps > .step[data-current] { opacity: 1; }
+.story.is-live .step__day b { display: inline; margin-right: var(--space-3); font-size: var(--text-3xl); font-weight: 300; line-height: 1; }
+.story.is-live .step__line { margin-top: var(--space-3); max-width: 30em; color: var(--color-text); }
+/* a scale of the seven days closes the stage, ruled as the footer's is and filled as the week goes by */
+.story.is-live .story__rule {
+  position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); height: var(--space-2);
+  margin: var(--space-5) 0 0 calc(var(--tide-gutter, var(--space-6)) + var(--space-3)); border: var(--size-border) solid var(--color-rule);
+}
+.story__rule i + i { border-left: var(--size-border) solid var(--color-rule); }
+.story__fill { position: absolute; inset: 0; background: var(--color-rule); transform-origin: left; transform: scaleX(0); }
+
+/* over the week: the future lies under a veil, the lamp hangs over the hour the cursor reads, the windows are
+   hatched in as it passes */
+.story.is-live .tide__veil { display: block; position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.tide__shade, .tide__pool { position: absolute; top: 0; bottom: 0; left: 0; will-change: transform; }
+.tide__shade { width: 200%; background: linear-gradient(to right, transparent 0 50%, var(--color-veil) 53%, var(--color-veil)); }
+.tide__pool { width: 34%; margin-left: -17%; background: radial-gradient(closest-side, var(--l3-pool-c), color-mix(in oklab, var(--l3-pool-c), transparent 62%) 52%, transparent); }
+.tide__read.is-flipped { left: auto; right: var(--space-1); }
+.story.is-live .tide__days span[data-current] { font-weight: 700; }
+.story.is-live .tide__cursor { display: block; position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-left: var(--size-border) solid var(--color-text); pointer-events: none; will-change: transform; }
+.tide__dot { position: absolute; top: 0; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: var(--color-text); box-shadow: 0 0 0 2px var(--l3-sheet); }
+.tide__read { position: absolute; bottom: var(--space-2); left: var(--space-1); padding: 3px var(--space-1); background: var(--color-text); color: var(--color-bg); font: 500 var(--text-xs)/1 var(--font-mono); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.story.is-live .tide__window { border-top-color: transparent; background: none; }
+.story.is-live .tide__window::before,
+.story.is-live .tide__window::after { content: ""; position: absolute; inset: 0; }
+.story.is-live .tide__window::before { border-top: var(--size-border) dashed var(--color-hatch); opacity: 0.7; }
+.story.is-live .tide__window::after {
+  border-top: var(--size-bar) solid var(--color-accent);
+  background: repeating-linear-gradient(-45deg, var(--color-hatch) 0 var(--size-border), transparent var(--size-border) var(--size-hatch));
+  clip-path: inset(0 calc(100% - var(--lit, 1) * 100%) 0 0);
+}
+.story.is-live .tide__days span[data-current], .story.is-live .tide__times > span[data-current] { color: var(--color-text); }
+.story.is-live .tide__times > span[data-current] { box-shadow: inset 0 var(--size-bar) 0 var(--color-text); }
+
+/* the day under the lamp: one day's curve, which flows into the next one as the week goes by */
+.story.is-live .dayc { display: block; margin: 0; }
+.dayc__plot { position: relative; height: clamp(6rem, 13vh, 9rem); height: clamp(6rem, 13svh, 9rem); border-block: var(--size-border) solid var(--color-rule); background: var(--color-sunk); overflow: hidden; }
+.dayc__svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dayc__svg path { fill: none; vector-effect: non-scaling-stroke; }
+.dayc__svg .dayc__area { fill: var(--color-water); }
+.dayc__curve { stroke: var(--color-text); stroke-width: 1.75; stroke-linejoin: round; }
+.dayc__need { stroke: var(--color-text); stroke-opacity: 0.6; stroke-width: 1; stroke-dasharray: 5 4; }
+.dayc__day, .dayc__win { position: absolute; inset: 0; clip-path: inset(0 100% 0 0); }
+.dayc__day { background: var(--color-day); }
+.dayc__win { border-top: var(--size-bar) solid var(--color-accent); background: repeating-linear-gradient(-45deg, var(--color-hatch) 0 var(--size-border), transparent var(--size-border) var(--size-hatch)); }
+.dayc__dot { position: absolute; top: 0; left: -4px; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--color-text); box-shadow: 0 0 0 2px var(--color-sunk); }
+.dayc__hours { display: flex; justify-content: space-between; margin-top: var(--space-2); font: 500 var(--text-xs)/1 var(--font-mono); color: var(--l3-ink-2); }
+
+/* ---- the passage slips: paper that leans toward the hand (depth.js tilt), rises and throws its shadow. The
+   words stay in full ink: the kit's pale glare is off, and the lamp's glint is painted on the paper itself,
+   under the words, where the hand is (depth.js writes --depth-gx, --depth-gy and --depth-lift) ---- */
+.pass { overflow: visible; isolation: auto; cursor: pointer; --depth-ink-strength: 1.7; }
+.pass::before { display: none; }              /* level 2's shadow layer: depth.css lays the shadow here */
+.pass:hover, .pass:active { transform: none; box-shadow: var(--depth-shadow); }
+.pass .strip { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+:is(.pass, .note) > .depth-glare::before { display: none; }
+.pass, .notes > .note {
+  background:
+    radial-gradient(circle at calc(50% + var(--depth-gx, 0) * 42%) calc(42% + var(--depth-gy, 0) * 42%),
+      color-mix(in oklab, var(--l3-glint), transparent calc(100% - var(--depth-lift, 0) * 100%)), transparent 58%),
+    var(--color-surface);
+}
+:is(.pass__grade, .pass__facts dt, .pass__window-label) { font-size: 0.75rem; color: var(--l3-ink-2); }
+
+/* ---- three notes in the margin: index cards on the table, flat and sharp at rest; they are dealt in with a
+   real tilt (level.js) and lean towards the hand (depth.js tilt) ---- */
+.notes > .note { padding: var(--space-5) var(--space-5) var(--space-6); border: var(--size-border) solid var(--color-border); border-radius: var(--radius-sm); --depth-ink-strength: 1.5; }
+.notes .fig { font-size: 0.75rem; }
+.notes :is(.ov__names, .ov__hours, .lim__name, .log span:first-child) { color: var(--l3-ink-2); }
+.notes .log span:nth-child(2) { color: var(--color-text); }
+.note p { color: var(--color-text-muted); }
+
+/* ---- the plan dialog: the lamp is turned down over the table, and the slip is laid on the chart ---- */
+.plan::backdrop { background: radial-gradient(ellipse 75% 70% at 50% 45%, var(--l3-dusk), var(--l3-dusk-2)); }
+.plan { box-shadow: 0 1px 0 rgba(14, 42, 59, 0.06), 0 2px 6px -2px var(--l3-contact), 0 34px 70px -30px var(--l3-cast); }
+
+/* ---- level 3 movement: what follows the scroll, what draws, what is dealt ---- */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes l3-wipe { from { clip-path: inset(0 100% 0 0); } }
+  @keyframes l3-ink { from { clip-path: inset(-30% 102% -30% -2%); } to { clip-path: inset(-30% -2% -30% -2%); } }
+  @keyframes l3-swell { from { opacity: 0; transform: translateY(40%); } }
+  @keyframes l3-fix { from { opacity: 0; scale: 0.2; } }
+  @keyframes l3-rule { from { transform: scaleX(0); } }
+  @keyframes l3-in { from { opacity: 0; } }
+
+  /* the opening: the sheet fades in while level.js lays it on the table; the slip lands (level.js), only its
+     fade is CSS */
+  [data-enter="chart"] { animation-name: l2-fade; }
+  [data-enter="slip"] { animation: l2-fade var(--duration-slow) var(--ease-standard) var(--m-slip) backwards; }
+  /* the pencil's lettering, laid over the pencil plate as HTML, comes in as level 2's does */
+  .chart-text--pencil :is(.x-time, .x-crs, .x-pencil-note) { animation: l2-fade var(--duration-slow) var(--ease-standard) backwards; }
+  .chart-text--pencil .x-time1 { animation-delay: var(--m-course); }
+  .chart-text--pencil .x-time2 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.38); }
+  .chart-text--pencil .x-time3 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.59); }
+  .chart-text--pencil .x-crs1 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.22); }
+  .chart-text--pencil .x-crs2 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.5); }
+  .chart-text--pencil .x-pencil-note { animation-delay: var(--m-notes); animation-duration: var(--duration-slower); }
+  .motion { transition: color var(--duration-fast) var(--ease-standard); }
+  .motion:active { transform: scale(var(--m-press)); }
+  [data-enter="slip"] ~ .motion { animation: l2-fade var(--duration-slower) var(--ease-standard) calc(var(--m-slip) + var(--duration-slow)) backwards; }
+
+  /* today: the trace is inked in from the left, then the fix is set on "now" */
+  html[data-reveal] .stat .spark__box .spark__line { stroke-dasharray: none; }
+  html[data-reveal] .stat:not(.is-visible) :is(.spark__box .spark__line, .spark__fix) { opacity: 0; }
+  html[data-reveal] .stat.is-visible .spark__box .spark__line { animation: l3-ink var(--duration-draw) var(--ease-pencil) calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
+  html[data-reveal] .stat.is-visible .spark__fix { animation: l3-fix var(--duration-slow) var(--ease-spring) calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-draw) * 0.4) backwards; }
+
+  /* the days of the story: the day the cursor is in shows at once, in full, the moment it is reached */
+  .story.is-live .tide__days span { transition: color var(--duration-base) var(--ease-standard); }
+
+  /* the passage slips: dealt in (level.js); they rise to the hand; then their strip inks the day's tide */
+  html[data-reveal] .pass.arrive.is-visible, html[data-reveal] .notes > .note.arrive.is-visible { animation: none; }
+  html[data-reveal] .notes > .note.arrive:not(.is-visible) { opacity: 0; }
+  .pass, .notes > .note {
+    transition: border-color var(--duration-fast) var(--ease-standard), outline-offset var(--duration-base) var(--ease-standard),
+                translate var(--duration-slow) var(--ease-standard);
+  }
+  .pass:hover, .notes > .note:hover { translate: 0 -5px; }
+  html[data-reveal] .pass .strip__curve { stroke-dasharray: none; }
+  html[data-reveal] .pass:not(.is-visible) .strip__curve { clip-path: inset(-30% 102% -30% -2%); }
+  html[data-reveal] .pass:not(.is-visible) :is(.strip__area, .strip__window, .strip__day) { opacity: 0; }
+  html[data-reveal] .pass.is-visible .strip__area { transform-origin: bottom; animation: l3-swell var(--duration-slower) var(--ease-standard) calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
+  html[data-reveal] .pass.is-visible .strip__curve { animation: l3-ink var(--duration-draw) var(--ease-pencil) calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
+  html[data-reveal] .pass.is-visible .strip__day { animation: l2-fade var(--duration-slower) linear calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
+  html[data-reveal] .pass.is-visible .strip__window { animation: l3-wipe var(--duration-slower) var(--ease-move) calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-draw) * 0.6) backwards; }
+
+  /* the lamp switch: the knob is thrown with a spring (level.js), so it has no transition of its own */
+  .lamp__thumb { transition: background-color var(--duration-base) var(--ease-standard); }
+  .lamp__bulb { transition: fill var(--duration-base) var(--ease-standard), stroke var(--duration-base) var(--ease-standard); }
+
+  /* the dialog comes down from the lamp, as a slip laid on the chart, and settles flat; the room dims */
+  .plan[open] { transition: opacity var(--duration-base) var(--ease-standard), transform 420ms cubic-bezier(0.16, 0.84, 0.3, 1),
+                overlay var(--duration-slow) allow-discrete, display var(--duration-slow) allow-discrete; }
+  .plan[open]::backdrop { transition: opacity 420ms var(--ease-standard), overlay var(--duration-slow) allow-discrete, display var(--duration-slow) allow-discrete; }
+  @starting-style {
+    .plan[open] { opacity: 0; transform: translateY(-36px) rotate(-1.4deg) scale(1.035); }
+  }
+
+  /* the scale bar at the foot is ruled as the page arrives at it */
+  @supports (animation-timeline: view()) {
+    .scalebar__bar { transform-origin: left; animation: l3-rule linear both; animation-timeline: view(); animation-range: entry 10% cover 30%; }
+  }
+}
+
+/* ---- narrower screens: the sheet lies below the words, seen low across the table; the slip lies on it ---- */
+@media (max-width: 60rem) {
+  :root { --l3-lay: 44deg; --l3-turn: -2deg; --l3-eye: 820px; --l3-eye-at: 58% -10%; --l3-curl: 3rem; --l3-sink: -14px; --l3-reveal: 25rem; }
+  /* the sheet lies in the room the words leave under them */
+  .hero__text { padding-bottom: var(--l3-reveal); }
+  .hero__scene { inset: auto 0 0 0; height: var(--l3-reveal); --l3-height: 31rem; --l3-right: max(var(--size-gutter), 50% - 16rem); --l3-bottom: var(--space-4); }
+  .hero__slip { display: block; left: max(var(--size-gutter), 50% - 18rem); bottom: var(--space-7); width: 13.75rem; padding: var(--space-3) var(--space-4) var(--space-4); }
+  .hero__slip-time { font-size: var(--text-md); gap: var(--space-2); }
+  .hero__slip-note { display: none; }
+  .hero__print {
+    display: block; position: absolute; left: 0; top: 0; z-index: 0; width: 100%; height: calc(100% - var(--l3-reveal) + var(--space-7)); pointer-events: none;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 6%, #000 34%, #000 62%, transparent 96%); mask-image: linear-gradient(to bottom, transparent 6%, #000 34%, #000 62%, transparent 96%);
+  }
+  .hero__print use { fill: none; stroke: var(--color-chart-contour); stroke-width: 1; stroke-opacity: 0.22; vector-effect: non-scaling-stroke; }
+  .hero__print use:first-child { fill: var(--color-chart-land); fill-opacity: 0.35; stroke: var(--color-chart-ink); stroke-opacity: 0.18; }
+  .lamp__icon { display: block; }
+  .motion { right: calc(var(--space-2) * -1); bottom: calc(var(--space-1) * -1); }
+  .story.is-live .story__day { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+  .story.is-live .tides__bar { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .story.is-live .story__now { margin-left: 0; }
+  /* the folded tide table: its caption runs across the full width, above the days */
+  .tt caption { display: block; padding: var(--space-3) 0 var(--space-4); border-bottom: var(--size-border) solid var(--color-border); }
+}
+@media (max-width: 44rem) {
+  /* a phone: the words are shorter (one button; the header has the other), so the whole sheet, its turned
+     corner, the lamp and the pencil line lie in the first screen; the slip is tucked at its lower right */
+  :root { --l3-lay: 42deg; --l3-eye: 760px; --l3-eye-at: 50% -18%; --l3-reveal: 25.5rem; }
+  /* the bar keeps one row: the lamp's icon and switch sit close, as one control */
+  .topbar__actions { gap: var(--space-3); }
+  .lamp { gap: var(--space-1); padding-inline: 0; }
+  .hero__in { padding-top: var(--space-5); }
+  .hero h1 { margin-top: var(--space-4); }
+  .lead { margin-top: var(--space-4); }
+  .hero__actions { margin-top: var(--space-5); }
+  .hero__scene { --l3-height: 27rem; --l3-right: calc(var(--size-gutter) + var(--space-1)); --l3-bottom: var(--space-6); }
+  .hero__slip { left: auto; right: var(--space-2); bottom: var(--space-5); width: 12rem; padding: var(--space-2) var(--space-3) var(--space-3); }
+  .hero__slip-label { font-size: 0.6875rem; }
+  .hero__slip-time { font-size: var(--text-base); }
+  .motion { right: auto; left: calc(var(--space-3) * -1); }
+  .story__day { margin-left: var(--tide-gutter, var(--space-5)); }
+  .step { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .story .tide { padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4); }
+  .story.is-live .section__head { margin-bottom: var(--space-3); }
+  .story.is-live .section__meta, .story.is-live .tides__note { display: none; }
+  .story.is-live .tides__bar { margin-bottom: var(--space-3); }
+  .story.is-live .story__now b { font-size: var(--text-lg); }
+  .story.is-live .tide__legend { gap: var(--space-1) var(--space-4); font-size: 0.75rem; }
+  .story.is-live .step__day b { font-size: var(--text-2xl); }
+  .story.is-live .step__line { margin-top: var(--space-2); font-size: var(--text-sm); }
+  .story.is-live .story__rule { margin-top: var(--space-4); }
+}
+
+/* ---- reduced motion: the page stands still. The sheet lies on the table as it is, the lamp over the
+   pencil line; depth.js lays every card flat; the story is a plain list; nothing needs pausing ---- */
+@media (prefers-reduced-motion: reduce) {
+  .motion { display: none; }
+}
+
+/* ---- level 4's drawn sheet, the poster of the 3D table: its plates' colours and the lamp over it (level.js) ---- */
+:root {
   --shadow-table: 0 1px 1px rgba(48, 34, 10, 0.18), 0 10px 18px -8px rgba(48, 34, 10, 0.36), 4px 16px 26px -14px rgba(48, 34, 10, 0.3);   /* stays inside --l3-edge */
   --size-pool: clamp(34rem, 60vw, 62rem);       /* the pool of lamp light on the chart */
   --color-relief: rgba(74, 52, 14, 0.5);        /* the shadow the raised land throws on the sea */
@@ -351,162 +677,13 @@
 .hero__lamp, .hero__shade, .plate--shadow { will-change: transform; }
 @media (hover: hover) and (pointer: fine) { .plate, .hero__slip { will-change: transform; } }
 .story.is-live :is(.tide__cursor, .tide__shade, .tide__pool, .dayc__dot) { will-change: transform; }
-
-/* ---- the week, told as you scroll. level.js marks the story .is-live (motion on, script running), pins its
-   stage, walks a cursor through the week and writes which day is current; without it the steps are a list. ---- */
-:root { --color-veil: rgba(242, 235, 221, 0.8); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --color-veil: rgba(13, 7, 6, 0.8); } }
-:root[data-theme="dark"] { --color-veil: rgba(13, 7, 6, 0.8); }
-
-.tt { margin: 0 0 var(--space-7); }
-.story__day { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); margin: var(--space-7) 0 0 var(--tide-gutter, var(--space-6)); }
-.story__steps { display: grid; margin: 0; padding: 0; list-style: none; }
-.step { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-4); padding-block: var(--space-3); border-top: var(--size-border) solid var(--color-border); }
-.step__day { font: 500 var(--text-xs)/1.4 var(--font-mono); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--color-text-muted); }
-.step__day b { display: block; font: 400 var(--text-xl)/1.1 var(--font-display); letter-spacing: -0.01em; text-transform: none; color: var(--color-text); }
-.step__line { max-width: 38em; color: var(--color-text-muted); }
-.step--none .step__day b { font-style: italic; }
-.tide__veil, .tide__cursor, .dayc { display: none; }
-
-.story.is-live { height: calc(100vh + 7 * 44vh); height: calc(100svh + 7 * 44svh); }
-.story.is-live .story__stage { position: sticky; top: 0; display: grid; align-content: center; height: 100vh; height: 100svh; }
-.story.is-live .tide__plot { height: min(var(--size-plot), 36vh); }
-.story.is-live .story__day { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: end; gap: var(--space-5) var(--space-8); margin-top: var(--space-6); }
-.story.is-live .story__steps > .step { grid-area: 1 / 1; display: block; padding: 0; border: 0; opacity: 0; translate: 0 var(--size-shift); }
-.story.is-live .story__steps > .step[data-current] { opacity: 1; translate: none; }
-.story.is-live .story__steps > .step[data-past] { translate: 0 calc(var(--size-shift) * -1); }
-.story.is-live .step__day b { display: inline; margin-right: var(--space-3); font-size: var(--text-3xl); font-weight: 300; line-height: 1; }
-.story.is-live .step__line { margin-top: var(--space-3); max-width: 30em; color: var(--color-text); }
-
-/* over the week: the future lies under a veil, the cursor rides the curve, the windows are hatched as it passes */
-.story.is-live .tide__veil { display: block; position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.tide__shade, .tide__pool { position: absolute; top: 0; bottom: 0; left: 0; }
-.tide__shade { width: 200%; background: linear-gradient(to right, transparent 0 50%, var(--color-veil) 53%, var(--color-veil)); }
-/* at night the lamp hangs over the hour the cursor reads: a red pool that lights the curve under it */
-.tide__pool { display: none; width: 34%; margin-left: -17%; background: radial-gradient(closest-side, var(--color-lamp-mid), transparent); mix-blend-mode: screen; }
-:root[data-theme="dark"] .tide__pool { display: block; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tide__pool { display: block; } }
-.tide__read.is-flipped { left: auto; right: var(--space-1); }
-.story.is-live .tide__days span[data-current] { font-weight: 700; }
-.story.is-live .tide__cursor { display: block; position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-left: var(--size-border) solid var(--color-text); pointer-events: none; }
-.tide__dot { position: absolute; top: 0; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: var(--color-text); box-shadow: 0 0 0 2px var(--color-sunk); }
-.tide__read { position: absolute; bottom: var(--space-2); left: var(--space-1); padding: 3px var(--space-1); background: var(--color-text); color: var(--color-bg); font: 500 var(--text-xs)/1 var(--font-mono); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.story.is-live .tide__window { border-top-color: transparent; background: none; }
-.story.is-live .tide__window::before,
-.story.is-live .tide__window::after { content: ""; position: absolute; inset: 0; }
-.story.is-live .tide__window::before { border-top: var(--size-border) dashed var(--color-hatch); opacity: 0.7; }
-.story.is-live .tide__window::after {
-  border-top: var(--size-bar) solid var(--color-accent);
-  background: repeating-linear-gradient(-45deg, var(--color-hatch) 0 var(--size-border), transparent var(--size-border) var(--size-hatch));
-  clip-path: inset(0 calc(100% - var(--lit, 1) * 100%) 0 0);
-}
-.story.is-live .tide__days span[data-current], .story.is-live .tide__times > span[data-current] { color: var(--color-text); }
-.story.is-live .tide__times > span[data-current] { box-shadow: inset 0 var(--size-bar) 0 var(--color-text); }
-
-/* the day under the lamp: one day's curve, which flows into the next one as the week goes by */
-.story.is-live .dayc { display: block; margin: 0; }
-.dayc__plot { position: relative; height: clamp(6.5rem, 10vw, 9rem); border-block: var(--size-border) solid var(--color-rule); background: var(--color-sunk); overflow: hidden; }
-.dayc__svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.dayc__svg path { fill: none; vector-effect: non-scaling-stroke; }
-.dayc__svg .dayc__area { fill: var(--color-water); }
-.dayc__curve { stroke: var(--color-text); stroke-width: 1.75; stroke-linejoin: round; }
-.dayc__need { stroke: var(--color-text); stroke-opacity: 0.6; stroke-width: 1; stroke-dasharray: 5 4; }
-.dayc__day, .dayc__win { position: absolute; inset: 0; clip-path: inset(0 100% 0 0); }
-.dayc__day { background: var(--color-day); }
-.dayc__win { border-top: var(--size-bar) solid var(--color-accent); background: repeating-linear-gradient(-45deg, var(--color-hatch) 0 var(--size-border), transparent var(--size-border) var(--size-hatch)); }
-.dayc__dot { position: absolute; top: 0; left: -4px; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--color-text); box-shadow: 0 0 0 2px var(--color-sunk); }
-.dayc__hours { display: flex; justify-content: space-between; margin-top: var(--space-2); font: 500 var(--text-xs)/1 var(--font-mono); color: var(--color-text-muted); }
-
-/* ---- the passage slips: paper that leans toward the lamp (depth.js tilt), with the lamp's glare on it ---- */
-.pass { overflow: visible; isolation: auto; cursor: pointer; }
-.pass::before { display: none; }              /* level 2's shadow layer: depth.css lays the shadow here */
-.pass:hover, .pass:active { transform: none; box-shadow: var(--depth-shadow); }
-.pass .strip { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
-/* on paper by day the lamp's glare is warm, not white: a faint warm tint multiplied in, so the ink stays as
-   dark as printed (a pale spot over the letters would only lower their contrast) */
-.pass[data-depth-tone="light"] > .depth-glare::before { display: block; mix-blend-mode: multiply; background: radial-gradient(closest-side, rgba(255, 226, 170, 0.55), rgba(255, 226, 170, 0)) center / 70% 70% no-repeat; }
-:root[data-theme="dark"] .pass > .depth-glare::before { background: radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 9%, transparent), transparent) center / 64% 64% no-repeat; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .pass > .depth-glare::before { background: radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 9%, transparent), transparent) center / 64% 64% no-repeat; }
-}
-
-/* ---- three notes in the margin: index cards that rise off the table as one pile, deal out into a row
-   and step forward (depth.js stack; the deal follows the scroll where the browser can) ---- */
-.notes[data-depth="stack"] { padding-top: var(--space-5); }
-.notes[data-depth="stack"] > .note { padding: var(--space-5) var(--space-5) var(--space-6); border: var(--size-border) solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
-.notes[data-depth="stack"] > :nth-child(2) { translate: calc(100% + var(--space-7)) 0 44px; }
-.notes[data-depth="stack"] > :nth-child(3) { translate: calc(200% + var(--space-7) * 2) 0 88px; }
-.notes[data-depth="stack"] > *::after { opacity: calc(var(--depth-dim, 0) * 0.3); }
-html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
-
-/* ---- level 3 movement: what follows the scroll, what draws, what is dealt ---- */
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes l3-wipe { from { clip-path: inset(0 100% 0 0); } }
-  @keyframes l3-swell { from { opacity: 0; transform: translateY(40%); } }
-  @keyframes l3-deal { from { translate: 0 0 0; } }
-  @keyframes l3-rule { from { transform: scaleX(0); } }
-
-  /* the lamp comes on; the slip lands with a spring (level.js), only its fade is CSS */
-  .hero__lamp { animation: l2-fade var(--duration-draw) var(--ease-move) var(--duration-fast) backwards; }
-  [data-enter="slip"] { animation: l2-fade var(--duration-slow) var(--ease-standard) var(--m-slip) backwards; }
-
-  /* the days of the story come and go */
-  .story.is-live .story__steps > .step { transition: opacity var(--duration-slow) var(--ease-standard), translate var(--duration-slow) var(--ease-standard); }
-  .story.is-live .tide__days span { transition: color var(--duration-base) var(--ease-standard); }
-
-  /* the passage slips: dealt with a spring (level.js); then their strip draws the day's tide */
-  html[data-reveal] .pass.arrive.is-visible { animation: none; }
-  .pass { transition: border-color var(--duration-fast) var(--ease-standard), outline-offset var(--duration-base) var(--ease-standard); }
-  html[data-reveal] .pass .strip__curve { stroke-dasharray: 1; }
-  html[data-reveal] .pass:not(.is-visible) .strip__curve { stroke-dashoffset: 1; }
-  html[data-reveal] .pass:not(.is-visible) :is(.strip__area, .strip__window, .strip__day) { opacity: 0; }
-  html[data-reveal] .pass.is-visible .strip__area { transform-origin: bottom; animation: l3-swell var(--duration-slower) var(--ease-standard) calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
-  html[data-reveal] .pass.is-visible .strip__curve { animation: l2-draw var(--duration-draw) var(--ease-pencil) calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
-  html[data-reveal] .pass.is-visible .strip__day { animation: l2-fade var(--duration-slower) linear calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
-  html[data-reveal] .pass.is-visible .strip__window { animation: l3-wipe var(--duration-slower) var(--ease-move) calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-draw) * 0.6) backwards; }
-
-  /* the lamp switch: the knob is thrown with a spring (level.js), so it has no transition of its own */
-  .lamp__thumb { transition: background-color var(--duration-base) var(--ease-standard); }
-
-  /* the notes rise as one pile and deal out into a row, following the scroll where the browser can */
-  @supports (animation-timeline: view()) {
-    .notes[data-depth="stack"] { view-timeline-name: --notes; }
-    .notes[data-depth="stack"] > :nth-child(n + 2) { animation: l3-deal linear both; animation-timeline: --notes; animation-range: entry 0% cover 42%; }
-    /* the scale bar at the foot is ruled as the page arrives at it */
-    .scalebar__bar { transform-origin: left; animation: l3-rule linear both; animation-timeline: view(); animation-range: entry 10% cover 30%; }
-  }
-}
-
-/* ---- narrower screens ---- */
 @media (max-width: 60rem) {
   /* the chart shows below the words: a wider pool, so the whole strip of it is lit as in level 2 */
   :root { --size-pool: 50rem; }
   :root[data-theme="dark"] { --color-pool-shade: rgba(4, 1, 0, 0.24); }
-  /* the notes: one column; each card still steps forward in turn as the pile scrolls in */
-  .notes[data-depth="stack"] > * { grid-area: auto; }
-  .notes[data-depth="stack"] > :nth-child(2) { translate: 0 0 44px; }
-  .notes[data-depth="stack"] > :nth-child(3) { translate: 0 0 88px; }
-  .story.is-live .story__day { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
 }
 @media (max-width: 60rem) and (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) { --color-pool-shade: rgba(4, 1, 0, 0.24); }
-}
-@media (max-width: 44rem) {
-  .story__day { margin-left: var(--tide-gutter, var(--space-5)); }
-  .step { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
-  .story.is-live .step__line { font-size: var(--text-sm); }
-}
-
-/* ---- reduced motion: the page stands still, and the notes lie in a plain row (depth.js lays everything
-   flat; the row needs no step back to read, so its offsets go too) ---- */
-@media (prefers-reduced-motion: reduce) {
-  .notes[data-depth="stack"] > * { transform: none !important; translate: none !important; }
-  .notes[data-depth="stack"] > *::after { opacity: 0; }
-  .notes[data-depth="stack"] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .notes[data-depth="stack"] > * { grid-area: auto; }
-}
-@media (prefers-reduced-motion: reduce) and (max-width: 60rem) {
-  .notes[data-depth="stack"] { grid-template-columns: minmax(0, 1fr); }
 }
 /* without the script the lamp hangs where level 2 has it: over the middle of the chart */
 @media (max-width: 60rem) {
@@ -692,9 +869,9 @@ html:not(.js) :is(.tool, .tideclock) { display: none; }
      the next twelve hours to play, the motion switch. The water's figures are the label on the chart (and
      stay on the slip for screen readers). */
   :root { --l4-lay: 50deg; --l4-turn: -3deg; --l4-eye: 640px; --l4-eye-at: 52% -60%; }
-  .hero__text { padding-bottom: 17.5rem; }
-  .hero__scene { height: 17.5rem; }
-  .sheet { --l4-height: 15.25rem; --l4-right: 3rem; --l4-bottom: 4.4rem; }
+  .hero__text { padding-bottom: 25.5rem; }
+  .hero__scene { height: 25.5rem; }
+  .sheet { --l4-height: 21.5rem; --l4-right: 1.75rem; --l4-bottom: 4.6rem; }
   .hero__slip {
     left: 0; right: 0; bottom: var(--space-2); width: auto; rotate: 0deg;
     display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2);
@@ -715,11 +892,11 @@ html:not(.js) :is(.tool, .tideclock) { display: none; }
    the lamp in front, the days to come stacked behind it, each with its own tide and its windows hatched ---- */
 .dstack { display: none; }
 @media (prefers-reduced-motion: no-preference) {
-  .story.is-live .dayc { position: relative; margin-top: var(--space-6); }
+  .story.is-live .dayc { position: relative; margin-top: var(--space-5); }
   .story.is-live .dayc__plot { background: transparent; border-color: transparent; overflow: visible; }
   .story.is-live .dayc__plot > :not(.dayc__dot) { visibility: hidden; }
   .story.is-live .dstack {
-    display: block; position: absolute; left: 0; right: 0; top: 0; height: clamp(6.5rem, 10vw, 9rem);
+    display: block; position: absolute; left: 0; right: 0; top: 0; height: clamp(6rem, 13vh, 9rem); height: clamp(6rem, 13svh, 9rem);
     perspective: 900px; perspective-origin: 60% -160%; transform-style: preserve-3d; pointer-events: none;
   }
   .story.is-live .dayc__dot { z-index: 20; }
@@ -741,8 +918,3 @@ html:not(.js) :is(.tool, .tideclock) { display: none; }
   font: 600 0.6875rem/1 var(--font-mono); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--color-text);
 }
 .dstack__day.is-none .dstack__name::after { content: " · no window"; font-weight: 500; color: var(--color-text-muted); }
-
-/* the lamp over the week by day too: a warm pool where the cursor reads the hour */
-.story.is-live .tide__pool { display: block; background: radial-gradient(closest-side, rgba(255, 246, 214, 0.55), transparent); mix-blend-mode: normal; }
-:root[data-theme="dark"] .story.is-live .tide__pool { background: radial-gradient(closest-side, var(--color-lamp-mid), transparent); mix-blend-mode: screen; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .story.is-live .tide__pool { background: radial-gradient(closest-side, var(--color-lamp-mid), transparent); mix-blend-mode: screen; } }

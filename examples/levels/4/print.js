@@ -131,7 +131,7 @@ export function chartPrint(hero, { width = 2048 } = {}) {
       const canvas = document.createElement("canvas");
       canvas.width = w;
       canvas.height = h;
-      const g = canvas.getContext("2d");
+      const g = canvas.getContext("2d", { willReadFrequently: true });   // kept in memory, so WebGL takes it without reading the GPU back
       if (fill) { g.fillStyle = fill; g.fillRect(0, 0, w, h); }
       const bands = Math.max(1, Math.ceil(h / 384));
       for (let i = 0; i < bands; i++) {

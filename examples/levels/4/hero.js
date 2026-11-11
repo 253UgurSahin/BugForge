@@ -88,7 +88,7 @@ function say(minutes) {
     range.style.setProperty("--at", (minutes / SPAN).toFixed(4));
   }
   if (slip) slip.classList.toggle("is-open", lapse && tide.safe(hour));
-  if (scene) scene.setData([metres / 6]);
+  if (scene) scene.setData([metres / 6, lapse ? 1 : 0]);   /* another hour: the lamp lights the banks */
 }
 
 /* the safe window on the scale: where daylight, wind and tide hold together in the next twelve hours */

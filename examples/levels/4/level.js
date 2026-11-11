@@ -1,20 +1,20 @@
-/* Tidewatch, level 4: the scripts of levels 2 and 3, kept whole; level 4 itself is hero.js and table.js.
-   Two changes only: the reveal switch is html[data-reveal] (the scene kit's motion button owns
-   html[data-motion]), and the dot of the day under the lamp stands a little above its ribbon (--dot-z).
-   Level 3: Expressive. ../shared/app.js does the work (the lamp switch, the dialog, the table);
-   this file shapes how it looks while it happens. Its first part is level 2's, unchanged: sections arrive
-   once, figures count up, the night lamp spreads from its switch as a View Transition, the tide table and
-   the plan note leave with a fade. Its second part, "level 3: Expressive", adds:
-   - the lamp over the chart: it follows the hand on a damped cable, moves its pool and the shade on the
-     tilted sheet (the CSS perspective undone, so both meet), and the shadows of the land and the slip;
-     nobody pointing, it hangs over the river and walks down the pencil line as the hero scrolls away;
-   - the opening: the sheet is laid on the table, its plates come down, the slip lands, all with springs;
-   - the week told as you scroll: the tide curve pinned, a cursor through the days (fast at night, slow over
-     daylight), each safe window hatched in as it passes, and the day's own curve flowing into the next;
-   - springs (the Web Animations API with a CSS linear() curve): the slip, the passage slips, the lamp switch;
-   - the kit's depth.js (../../vendor/scenes/depth.js), loaded with import(): the hero's plates, the passage
-     slips and the notes. Without it, or without this script, the page is the flat level-2 page.
-   Every loop runs only while something moves on screen; with reduced motion nothing here moves at all. */
+/* Tidewatch, level 4: the scripts of levels 2 and 3, kept whole, with the drawn sheet of level 4; the 3D chart
+   table itself is hero.js and table.js. ../shared/app.js does the work (the lamp switch, the dialog, the table);
+   this file shapes how it looks while it happens. Its first part is level 2's: sections arrive once, figures
+   count up, the night lamp spreads from its switch as a View Transition (with the 3D table on the screen the
+   colours change at once and the lamp's light spreads over them, so the switch never waits for the scene),
+   the tide table and the plan note leave with a fade. Its second part is level 3's:
+   - the drawn sheet's lamp (the 3D table's poster, and the whole hero without WebGL): it follows the hand on
+     a damped cable over the sheet, which lies in CSS 3D, and rests over the river, walking down the pencil
+     line as the hero scrolls away; the opening lays the sheet on the table and the slip on the sheet;
+   - the week told as you scroll: the tide curve pinned under its heading, the lamp over a cursor through the
+     days, each safe window hatched in as it passes, the day's own curve flowing into the next, a scale of the
+     seven days; at level 4 the days also stand as a stack of day sheets, the day under the lamp in front;
+   - springs for small things (the switch, the vane); the passage slips and the notes dealt onto the table;
+   - the kit's depth.js (../../vendor/scenes/depth.js), loaded with import(): the slips and the notes lean.
+   The one "Pause motion" switch is hero.js's (the scene kit's lazy.js keeps the choice, which depth.js and the
+   rest follow through html[data-motion]). Every loop runs only while something moves on screen; with
+   reduced motion nothing here moves at all. */
 (function () {
   "use strict";
   var root = document.documentElement;
@@ -36,8 +36,9 @@
     }
     return value.toFixed(figure.decimals).padStart(figure.pad, "0");
   }
-  function countUp(el, delay) {
-    var text = el.textContent.trim();
+  function measure(el) { return { el: el, width: el.getBoundingClientRect().width }; }
+  function countUp(seen, delay) {
+    var el = seen.el, text = el.textContent.trim();
     var time = /^(\d+):(\d\d)$/.exec(text);
     var figure = {
       time: Boolean(time),
@@ -55,7 +56,7 @@
     el.setAttribute("aria-hidden", "true");
     /* a fixed width, set from the final figure, so nothing beside it moves while it counts */
     el.style.display = "inline-block";
-    el.style.minWidth = el.getBoundingClientRect().width + "px";
+    el.style.minWidth = seen.width + "px";
     el.style.textAlign = "right";
     el.textContent = format(0, figure);
     var start = null;
@@ -74,7 +75,7 @@
 
   /* ---- sections arrive once ----------------------------------------------------------------- */
   if ("IntersectionObserver" in window) {
-    root.setAttribute("data-reveal", "on");               /* from here on, level.css may hide what arrives */
+    root.setAttribute("data-reveal", "");                 /* from here on, level.css may hide what arrives */
     var targets = [];
     document.querySelectorAll("[data-arrive]").forEach(function (el) {
       var kind = el.getAttribute("data-arrive");
@@ -94,16 +95,21 @@
       var batch = entries.filter(function (entry) { return entry.isIntersecting; })
         .map(function (entry) { return entry.target; })
         .sort(function (a, b) { return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1; });
-      batch.forEach(function (el, index) {
+      var counts = [];
+      batch.forEach(function (el, index) {                  /* first every reading of the page ... */
         arrive.unobserve(el);                               /* once: scrolling back does not replay it */
         var delay = Math.min(index, 7) * stagger * 2;       /* at most eight steps, then together */
-        el.style.setProperty("--m-delay", delay + "ms");
-        el.classList.add("is-visible");
-        if (still()) return;                                /* reduced: the figures simply stand there */
-        el.querySelectorAll("[data-count]").forEach(function (figure, n) {
-          countUp(figure, delay + ms("--duration-fast") + n * stagger);
+        if (!still()) el.querySelectorAll("[data-count]").forEach(function (figure, n) {
+          counts.push([measure(figure), delay + ms("--duration-fast") + n * stagger]);
         });
+        el.dataset.delay = delay;
       });
+      batch.forEach(function (el) {                         /* ... then every change */
+        el.style.setProperty("--m-delay", el.dataset.delay + "ms");
+        el.removeAttribute("data-delay");
+        el.classList.add("is-visible");
+      });
+      counts.forEach(function (c) { countUp(c[0], c[1]); }); /* reduced: the figures simply stand there */
     }, { threshold: 0.15 });
     targets.forEach(function (el) { arrive.observe(el); });
   }
@@ -200,14 +206,17 @@
 /* ================================================================ level 3: Expressive */
 (function () {
   "use strict";
+  var root = document.documentElement;
   var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
   var fine = window.matchMedia("(hover: hover) and (pointer: fine)");
-  var style = getComputedStyle(document.documentElement);
+  var style = getComputedStyle(root);
   function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
   function token(name) { return style.getPropertyValue(name).trim(); }
   function ms(name) { var value = token(name); return /ms$/.test(value) ? parseFloat(value) : parseFloat(value) * 1000; }
   function moving() { return !reduce.matches && Boolean(Element.prototype.animate); }
-  /* a real spring for element.animate(): a CSS linear() curve from a duration and a bounce (0.05 to 0.6) */
+  function paused() { return root.getAttribute("data-motion") === "paused"; }
+  /* a real spring for small things (the switch's knob, the wind vane): a CSS linear() curve from a duration
+     and a bounce (0.05 to 0.6). Paper never bounces: it settles on PAPER, fast and then soft. */
   function spring(duration, bounce) {
     var zeta = 1 - clamp(bounce, 0.05, 0.6), w = (2 * Math.PI) / (duration / 1000), wd = w * Math.sqrt(1 - zeta * zeta);
     var at = function (t) { return 1 - Math.exp(-zeta * w * t) * (Math.cos(wd * t) + ((zeta * w) / wd) * Math.sin(wd * t)); };
@@ -217,8 +226,16 @@
     var ok = window.CSS && CSS.supports && CSS.supports("transition-timing-function", easing);
     return { duration: Math.round(settle * 1000), easing: ok ? easing : token("--ease-spring") };
   }
+  var PAPER = "cubic-bezier(0.16, 0.84, 0.3, 1)";
   /* the opening, in the times level 2 uses: the pencil sets down, draws for --duration-draw, the slip lands */
   var COURSE = ms("--duration-slower") + ms("--duration-fast"), SLIP = COURSE + ms("--duration-draw") - ms("--duration-fast");
+
+  var onPause = [];                                        /* the pause switch is hero.js's: the scene kit's lazy.js */
+
+  /* ---- a phone: the hero keeps one button and the lead's first sentence (html.is-narrow, first set in the
+     head before the first paint; level.css hides the rest) ---- */
+  var narrow = window.matchMedia("(max-width: 44rem)");
+  narrow.addEventListener("change", function () { root.classList.toggle("is-narrow", narrow.matches); });
 
   /* ---- the lamp: it hangs over the chart and follows the hand -------------------------------- */
   var hero = document.querySelector(".hero");
@@ -335,19 +352,26 @@
       { duration: fall.duration, easing: fall.easing, delay: SLIP, fill: "backwards" });
   })();
 
-  /* ---- the passage slips are dealt onto the table, each settling with a little give ---------------- */
-  var cards = document.querySelectorAll(".pass");
-  if (cards.length && moving() && "IntersectionObserver" in window) (function () {
-    var deal = spring(ms("--duration-slower") * 1.25, 0.3), gap = ms("--duration-stagger") * 2;
+  /* ---- the passage slips and the notes are dealt onto the table: the slips settle into the row, the notes
+     come in with a real tilt and lie down flat (their lean afterwards is depth.js's) ------------------- */
+  var deck = document.querySelectorAll(".pass, .notes > .note");
+  if (deck.length && moving() && "IntersectionObserver" in window) (function () {
+    var gap = ms("--duration-stagger") * 2;
     var seen = new IntersectionObserver(function (entries) {
       entries.filter(function (e) { return e.isIntersecting; }).forEach(function (entry, n) {
-        var card = entry.target, i = Array.prototype.indexOf.call(cards, card);
+        var card = entry.target, i = Array.prototype.indexOf.call(card.parentNode.children, card);
         seen.unobserve(card);
-        card.animate([{ opacity: 0, translate: "0 38px", rotate: (i % 2 ? -1.8 : 1.4) + "deg", scale: "0.96" }, { opacity: 1, translate: "0 0", rotate: "0deg", scale: "1" }],
-          { duration: deal.duration, easing: deal.easing, delay: Math.min(n, 7) * gap, fill: "backwards" });
+        if (card.classList.contains("note")) {
+          card.animate([{ opacity: 0, transform: "perspective(900px) translate3d(0, 64px, 0) rotateX(15deg) rotateZ(" + (i % 2 ? 1.5 : -2) + "deg)" },
+            { opacity: 1, offset: 0.35 }, { opacity: 1, transform: "perspective(900px) translate3d(0, 0, 0) rotateX(0deg) rotateZ(0deg)" }],
+            { duration: 820, easing: PAPER, delay: Math.min(n, 7) * gap * 2, fill: "backwards" });
+        } else {
+          card.animate([{ opacity: 0, translate: "0 38px", rotate: (i % 2 ? -1.8 : 1.4) + "deg", scale: "0.96" }, { opacity: 1, translate: "0 0", rotate: "0deg", scale: "1" }],
+            { duration: 620, easing: PAPER, delay: Math.min(n, 7) * gap, fill: "backwards" });
+        }
       });
     }, { threshold: 0.15 });
-    cards.forEach(function (card) { seen.observe(card); });
+    deck.forEach(function (card) { seen.observe(card); });
   })();
 
   /* ---- the lamp switch: the knob is thrown across and settles with a spring --------------------- */
@@ -360,15 +384,29 @@
       { duration: throwIt.duration, easing: throwIt.easing });
   }).observe(lampSwitch, { attributes: true, attributeFilter: ["aria-checked"] });
 
-  /* ---- the week, told as you scroll: the tide stays pinned, a cursor walks through the days, each
-     safe window is hatched in as it passes, and the day under the lamp flows into the next ----------- */
+  /* ---- today: the wind vane swings round into the wind as the readings arrive, and settles ------------ */
+  var vane = document.querySelector(".windvane");
+  if (vane && moving() && "IntersectionObserver" in window) (function () {
+    var once = new IntersectionObserver(function (entries) {
+      if (!entries[0].isIntersecting) return;
+      once.disconnect();
+      var swing = spring(ms("--duration-slower") * 2.4, 0.42);
+      vane.animate([{ rotate: "-160deg" }, { rotate: "0deg" }], { duration: swing.duration, easing: swing.easing, delay: ms("--duration-slower"), fill: "backwards" });
+    }, { threshold: 1 });
+    once.observe(vane);
+  })();
+
+  /* ---- the week, told as you scroll: the tide stays pinned under its heading, a cursor walks through the
+     days with the lamp over it, each safe window is hatched in as it passes, the day under the lamp flows
+     into the next, and a scale of the seven days fills. With the table open the week is a plain page. ---- */
   var story = document.querySelector("[data-story]");
   if (story && "IntersectionObserver" in window) (function () {
-    var plot = story.querySelector(".tide__plot");
+    var plot = story.querySelector(".tide__plot"), table = document.getElementById("tide-table");
     var cursor = story.querySelector(".tide__cursor"), dot = story.querySelector(".tide__dot"), read = story.querySelector(".tide__read");
     var shade = story.querySelector(".tide__shade"), pool = story.querySelector(".tide__pool");
     var labels = story.querySelectorAll(".tide__days > span"), times = story.querySelectorAll(".tide__times > span");
-    var steps = story.querySelectorAll(".step");
+    var steps = story.querySelectorAll(".step"), nowDay = story.querySelector(".story__now b"), nowOf = story.querySelector(".story__now span");
+    var fill = story.querySelector(".story__fill");
     var dPlot = story.querySelector(".dayc__plot"), dCurve = story.querySelector(".dayc__curve"), dArea = story.querySelector(".dayc__area");
     var dDay = story.querySelector(".dayc__day"), dWins = story.querySelectorAll(".dayc__win"), dDot = story.querySelector(".dayc__dot");
     var NAMES = ["Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Mon"], NOW = 9 + 40 / 60;
@@ -387,7 +425,7 @@
     var wins = Array.prototype.map.call(story.querySelectorAll(".tide__window"), spanOf);
     var light = Array.prototype.map.call(story.querySelectorAll(".tide__day"), spanOf);
     var DAYS = [0, 1, 2, 3, 4, 5, 6].map(function (k) { return level.slice(k * 96, k * 96 + 97); });
-    var frame = 0, near = false, was = -1, day = -1, live = false;
+    var frame = 0, near = false, was = -1, day = -1, live = false, box = null;
 
     /* level 4: the seven days as a stack of day sheets on the table, the day under the lamp in front and the
        days to come behind it, each with its own tide, its daylight and its safe windows hatched; as the week
@@ -423,11 +461,11 @@
     function place(c) {                                      /* c: the day in front, with its fraction */
       for (var k = 0; k < sheets.length; k++) {
         var d = k - c, el = sheets[k];
-        if (d < -0.7 || d > 5.5) { el.style.opacity = "0"; el.style.visibility = "hidden"; continue; }
+        if (d < -0.34 || d > 4.5) { el.style.opacity = "0"; el.style.visibility = "hidden"; continue; }
         el.style.visibility = "visible";
         var y, z, x, o;
-        if (d >= 0) { y = -d * 11; z = -d * 58; x = d * 6; o = Math.max(0, 1 - d * 0.12); }
-        else { y = d * -30; z = -d * 140; x = 0; o = Math.max(0, 1 + d * 1.6); }   /* gone by: it lifts toward you and fades */
+        if (d >= 0) { y = -d * 7; z = -d * 60; x = d * 6; o = Math.max(0, Math.min(1, 1 - d * 0.14, (4.5 - d) * 1.5)); }
+        else { y = d * -46; z = -d * 90; x = d * -40; o = Math.max(0, 1 + d * 3); }   /* gone by: it slides off toward you and is gone at once */
         el.style.transform = "translate3d(" + x.toFixed(1) + "px, " + y.toFixed(1) + "px, " + z.toFixed(1) + "px)";
         el.style.opacity = o.toFixed(3);
         el.style.zIndex = String(10 - Math.round(d * 1.5));
@@ -448,12 +486,30 @@
     }
     function band(from, to) { return "inset(0 " + (100 - clamp(to, 0, 100)).toFixed(2) + "% 0 " + clamp(from, 0, 100).toFixed(2) + "%)"; }
 
+
+    function smooth(t) { return t * t * (3 - 2 * t); }
+    function progress() { var r = story.getBoundingClientRect(); return clamp(-r.top / Math.max(1, r.height - window.innerHeight), 0, 1); }
+    /* every day has the same stretch of scroll: quick through the night, slow over the hours of daylight */
+    function hourAt(p) {
+      var k = Math.min(Math.floor(p * 7), 6), u = p * 7 - k;
+      return clamp(k * 24 + 2 + 24 * (u + 0.6 * Math.sin(2 * Math.PI * u) / (2 * Math.PI)), NOW, WEEK - 0.25);
+    }
+    function clock(hours) {
+      var m = Math.round(hours * 12) * 5, hh = Math.floor(m / 60) % 24, mm = m % 60;
+      return (hh < 10 ? "0" : "") + hh + ":" + (mm < 10 ? "0" : "") + mm;
+    }
+    function band(from, to) { return "inset(0 " + (100 - clamp(to, 0, 100)).toFixed(2) + "% 0 " + clamp(from, 0, 100).toFixed(2) + "%)"; }
+    function sizes() { box = { W: plot.clientWidth, H: plot.clientHeight, dW: dPlot.clientWidth, dH: dPlot.clientHeight }; }
+
     function render(t) {
-      var W = plot.clientWidth, H = plot.clientHeight, x = t / WEEK * W, h = heightAt(level, t);
+      if (!box) sizes();
+      var W = box.W, H = box.H, x = t / WEEK * W, h = heightAt(level, t);
       cursor.style.transform = "translate3d(" + x.toFixed(1) + "px, 0, 0)";
       dot.style.transform = "translateY(" + ((600 - 100 * h) / 650 * H - 4.5).toFixed(1) + "px)";
       shade.style.transform = "translate3d(" + (x - W).toFixed(1) + "px, 0, 0)";
       pool.style.transform = "translate3d(" + x.toFixed(1) + "px, 0, 0)";
+      if (fill) fill.style.transform = "scaleX(" + clamp(t / WEEK, 0, 1).toFixed(4) + ")";
+      /* the day is the day the cursor is in: it changes at midnight, at once, everywhere */
       var d = clamp(Math.floor(t / 24), 0, 6);
       read.textContent = NAMES[d] + " " + clock(t) + " · " + h.toFixed(1) + " m";
       read.classList.toggle("is-flipped", x > W - 180);       /* near the end of the week the label reads to the left */
@@ -464,7 +520,8 @@
       if (d !== day) {
         day = d;
         [labels, times].forEach(function (list) { Array.prototype.forEach.call(list, function (el, n) { el.toggleAttribute("data-current", n === d); }); });
-        Array.prototype.forEach.call(steps, function (el, n) { el.toggleAttribute("data-current", n === d); el.toggleAttribute("data-past", n < d); });
+        Array.prototype.forEach.call(steps, function (el, n) { el.toggleAttribute("data-current", n === d); });
+        if (nowDay) { nowDay.textContent = NAMES[d] + " " + (10 + d); nowOf.textContent = "day " + (d + 1) + " of 7"; }
       }
       /* the day under the lamp: from 20:00 to 08:00 one day's curve flows into the next one's */
       var s = (t - 14) / 24, n = Math.floor(s), a = clamp(n, 0, 6), b = clamp(n + 1, 0, 6);
@@ -490,7 +547,7 @@
       for (; slot < dWins.length; slot++) dWins[slot].style.opacity = "0";
       var hod = t - d * 24, edge = clamp(Math.min(hod, 24 - hod) / 1.5, 0, 1);
       var dh = heightAt(DAYS[a], hod) * (1 - m) + heightAt(DAYS[b], hod) * m;
-      dDot.style.transform = "translate3d(" + (hod / 24 * dPlot.clientWidth).toFixed(1) + "px, " + ((600 - 100 * dh) / 650 * dPlot.clientHeight).toFixed(1) + "px, var(--dot-z, 0px))";
+      dDot.style.transform = "translate3d(" + (hod / 24 * box.dW).toFixed(1) + "px, " + ((600 - 100 * dh) / 650 * box.dH).toFixed(1) + "px, 0)";
       dDot.style.opacity = edge.toFixed(2);
       if (stack) place(a + m);
     }
@@ -502,12 +559,13 @@
       frame = requestAnimationFrame(tick);
     }
     function start() {
-      live = !reduce.matches;
+      live = !reduce.matches && table.hidden;
       story.classList.toggle("is-live", live);
-      if (!live) {                                             /* reduced motion: the week as it is, every window in */
+      box = null;
+      if (!live) {                                             /* reduced motion, or the table open: the week as it is */
         wins.forEach(function (w) { w.lit = -1; w.el.style.removeProperty("--lit"); });
         day = -1; was = -1;
-        Array.prototype.forEach.call(steps, function (el) { el.removeAttribute("data-current"); el.removeAttribute("data-past"); });
+        Array.prototype.forEach.call(steps, function (el) { el.removeAttribute("data-current"); });
         [labels, times].forEach(function (list) { Array.prototype.forEach.call(list, function (el) { el.removeAttribute("data-current"); }); });
         return;
       }
@@ -519,15 +577,35 @@
       near = entries[0].isIntersecting;
       if (near && live && !frame) frame = requestAnimationFrame(tick);
     }, { rootMargin: "20% 0px" }).observe(story);
+    window.addEventListener("resize", function () { box = null; was = -1; });
     reduce.addEventListener("change", start);
+    /* the table opens inside the stage: the week stops being told and becomes a page to read, with the table
+       in view; closed again, the week is told from its start */
+    new MutationObserver(function () {
+      var reading = !table.hidden;
+      start();
+      var to = reading ? story.querySelector(".tides__bar") : story;
+      to.scrollIntoView({ behavior: "instant", block: "start" });
+    }).observe(table, { attributes: true, attributeFilter: ["hidden"] });
     start();
+
+    /* a link that would scroll through the pinned week (the bar's Passages, Log, Harbours) jumps straight
+       there, so the week is not told again in a blur */
+    document.addEventListener("click", function (event) {
+      var link = event.target.closest && event.target.closest('a[href^="#"]');
+      if (!link || !live) return;
+      var target = document.getElementById(link.getAttribute("href").slice(1));
+      if (!target || story.contains(target)) return;
+      var top = story.getBoundingClientRect().top + window.scrollY, end = top + story.offsetHeight - window.innerHeight;
+      var from = window.scrollY, to = target.getBoundingClientRect().top + window.scrollY;
+      if (Math.max(from, to) <= top || Math.min(from, to) >= end) return;
+      root.style.scrollBehavior = "auto";
+      requestAnimationFrame(function () { root.style.removeProperty("scroll-behavior"); });
+    });
   })();
 
-  /* ---- real depth: the kit's depth.js (the hero's plates, the cards, the notes) ------------------- */
-  /* on a touch screen the plates hold still: drifting them with the scroll would make the phone draw the
-     whole chart again and again; the lamp still walks down the pencil line */
-  if (hero && !fine.matches) hero.setAttribute("data-depth-scroll-shift", "0");
+  /* ---- real depth from the kit's depth.js: the passage slips and the notes lean to the hand and rise ---- */
   import("../../vendor/scenes/depth.js").then(function (kit) {
-    kit.mount(document.querySelector("main"), { tilt: 5 });
+    kit.mount(document.querySelector("main"), { tilt: 7, raise: 22, lift: 10 });
   }).catch(function () { /* without it the page is simply flat */ });
 })();
