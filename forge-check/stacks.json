@@ -3,14 +3,16 @@
     "What detect.py knows. Edit this file to teach it a framework, test tool, database or CI service.",
     "frameworks: packages = its own package first, then packages that pull it in (pytest-django needs pytest).",
     "role = the forge profile it points to, 'server' (a server framework forge has no profile for),",
-    "'static' (a front end) or 'test'. telltale = files that give it away when no manifest names it.",
+    "'static' (a front end), 'test' or 'theming' (how the look is themed: forge-design picks theme.py --format scss",
+    "for Sass, js for MUI, Chakra, Mantine and the CSS-in-JS ones). telltale = files that give it away when no manifest names it.",
     "telltale_words: such a file counts only when it holds the word (a Flask-Script manage.py is not Django).",
     "unless = leave it out when that one was found. Django's test runner (manage.py test) is built in, so it",
     "has no packages: its test files give it away, unless pytest was found (pytest runs those tests too).",
     "ecosystems: the language, the forge profile in that language, and file names in that language.",
     "databases: words in an image, package or setting that point to a database.",
     "ci_files: the file each CI service reads, from the top folder (inventory.py has the same table).",
-    "container_files, python_manifests, database_files: file names; a pattern with a / fits the end of the path."
+    "container_files, python_manifests, database_files: file names; a pattern with a / fits the end of the path.",
+    "package_managers: a lockfile's name, and the package manager that writes it (install with that one, never another)."
   ],
   "frameworks": [
     {"ecosystem": "php", "name": "Laravel", "role": "laravel", "packages": ["laravel/framework"], "telltale": ["artisan"]},
@@ -49,7 +51,15 @@
     {"ecosystem": "node", "name": "Vitest", "role": "test", "packages": ["vitest"], "telltale": ["vitest.config.*"]},
     {"ecosystem": "node", "name": "Jest", "role": "test", "packages": ["jest"], "telltale": ["jest.config.*"]},
     {"ecosystem": "node", "name": "Playwright", "role": "test", "packages": ["@playwright/test"], "telltale": ["playwright.config.*"]},
-    {"ecosystem": "node", "name": "Cypress", "role": "test", "packages": ["cypress"], "telltale": ["cypress.config.*"]}
+    {"ecosystem": "node", "name": "Cypress", "role": "test", "packages": ["cypress"], "telltale": ["cypress.config.*"]},
+    {"ecosystem": "node", "name": "Tailwind CSS", "role": "theming", "packages": ["tailwindcss", "@tailwindcss/vite", "@tailwindcss/postcss", "@tailwindcss/cli"], "telltale": ["tailwind.config.*"]},
+    {"ecosystem": "node", "name": "Bootstrap", "role": "theming", "packages": ["bootstrap"], "telltale": []},
+    {"ecosystem": "node", "name": "Sass", "role": "theming", "packages": ["sass", "sass-embedded", "node-sass"], "telltale": []},
+    {"ecosystem": "node", "name": "MUI", "role": "theming", "packages": ["@mui/material", "@mui/joy"], "telltale": []},
+    {"ecosystem": "node", "name": "Chakra UI", "role": "theming", "packages": ["@chakra-ui/react"], "telltale": []},
+    {"ecosystem": "node", "name": "Mantine", "role": "theming", "packages": ["@mantine/core"], "telltale": []},
+    {"ecosystem": "node", "name": "styled-components", "role": "theming", "packages": ["styled-components"], "telltale": []},
+    {"ecosystem": "node", "name": "Emotion", "role": "theming", "packages": ["@emotion/react", "@emotion/styled"], "telltale": []}
   ],
   "telltale_words": {
     "artisan": "illuminate",
@@ -82,5 +92,8 @@
   },
   "container_files": ["Dockerfile", "Dockerfile.*", "*.Dockerfile", "Containerfile", "docker-compose.y*ml", "docker-compose.*.y*ml", "compose.y*ml", "compose.*.y*ml"],
   "python_manifests": ["requirements*.txt", "requirements/*.txt", "pyproject.toml", "Pipfile"],
-  "database_files": [".env.example", ".env.sample", "env.example", "settings.py", "*settings/*.py", "schema.prisma"]
+  "database_files": [".env.example", ".env.sample", "env.example", "settings.py", "*settings/*.py", "schema.prisma"],
+  "package_managers": {"package-lock.json": "npm", "npm-shrinkwrap.json": "npm", "pnpm-lock.yaml": "pnpm", "yarn.lock": "yarn",
+                       "bun.lock": "bun", "bun.lockb": "bun", "composer.lock": "Composer", "poetry.lock": "Poetry",
+                       "uv.lock": "uv", "Pipfile.lock": "Pipenv", "pdm.lock": "PDM"}
 }

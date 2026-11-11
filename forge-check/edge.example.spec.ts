@@ -1,5 +1,6 @@
 // Edge cases for forge-check test: helpers you can reuse for every form, and one worked example (F02,
-// the "new item" form of ../forge-check/e2e.example.spec.ts). Copy it to e2e/edge.spec.ts, keep the
+// the "new item" form of ../forge-check/e2e.example.spec.ts). Copy it to e2e/edge.spec.ts (an app with
+// its own Playwright setup: edge.spec.ts beside its specs, where its config runs it), keep the
 // helpers (or move them to e2e/helpers.ts), and write one `describe` per form of your app: change
 // FORM below (the paths, the label, the button, where the saved record shows). The case IDs
 // (F02-E3) come from forge-work/test-plan.md.

@@ -87,10 +87,10 @@ test: what each level adds (each level includes the ones below it).
 
 | level | name | Dutch | what is tested | the gate asks for |
 | --- | --- | --- | --- | --- |
-| 1 | Quick | Snel | the app starts, the main flow works once, no error in the browser console; minutes | nothing more |
+| 1 | Quick | Snel | the app starts, the main flow works once, no error in the browser console; minutes; only on its own, never as a forge phase | nothing more |
 | 2 | Basic | Basis | + one test per flow of the way it should go, unit tests for the logic that matters | nothing more |
 | 3 | Standard | Standaard | + edge cases and cases that must fail, the walk (every page, 3 widths, light and dark), a second user cannot reach the first one's data | `forge-work/test/walk.json` |
-| 4 | Thorough | Grondig | + the edge helpers on every form, the speed budget enforced, screenshots compared between rounds, offline and PWA, a keyboard-only pass | `e2e/**/edge*.spec.*`, `forge-work/test/shots/r1/` and `r2/` |
+| 4 | Thorough | Grondig | + the edge helpers on every form, the speed budget enforced, screenshots compared between rounds, offline and PWA, a keyboard-only pass | `**/edge.spec.*` (in `e2e/`, or beside the app's own Playwright specs), `forge-work/test/shots/r1/` and `r2/` |
 | 5 | Exhaustive | Uitputtend | + every route in every state, hostile and oversized input on every field (own app only), two tabs at once, time zones and summer time, slow networks, each spec run three times | nothing more |
 
 secure: what each level adds.
@@ -100,11 +100,12 @@ secure: what each level adds.
 | 1 | Quick | Snel | secrets and risky code (secretscan, codecheck); only on its own, never as a forge phase | nothing more |
 | 2 | Basic | Basis | + dependencies, headers, trackers; only on its own too | nothing more |
 | 3 | Standard | Standaard | + flowcheck, the supply chain with an SBOM, the framework checks, the AVG/GDPR list, the OWASP coverage table | `forge-work/sbom.json` |
-| 4 | Thorough | Grondig | + the active probe and the two-user access check on the running app (own app only), semgrep when installed, the container checks | `forge-work/security/probe.json` and `authz.json`, or a `no running app` line under "Not checked" |
-| 5 | Exhaustive | Uitputtend | + a threat model per entry point, an access matrix of every route against every role, abuse and rate-limit cases, the git history scanned for secrets, a licence review; each finding told as an attack story | nothing more |
+| 4 | Thorough | Grondig | + the active probe and the two-user access check on the running app (own app only), semgrep when installed, the container checks | `forge-work/security/probe.json` and `authz.json` (the `--json` output of a finished run), or a `no running app` line under "Not checked"; an app with no accounts at all: a `no accounts at all` line in place of `authz.json` |
+| 5 | Exhaustive | Uitputtend | + a threat model per entry point, an access matrix of every route against every role, abuse and rate-limit cases, the git history scanned for secrets, a licence review; each finding told as an attack story | `forge-work/security/threats.md` and `access.md` |
 
-The floor: inside a forge project (`forge-work/state.json` is there) secure never runs below 3.
-`level.py set` raises a lower level to 3 and says so: tell the user.
+The floor: inside a forge project (`forge-work/state.json` is there) secure never runs below 3
+and test never below 2. `level.py set` raises a lower level to the floor and says so: tell the
+user. `get` refuses a lower level on record there and prints the command that records it again.
 
 ## Check everything
 
@@ -125,7 +126,7 @@ The floor: inside a forge project (`forge-work/state.json` is there) secure neve
 - A script that exits 2 could not finish: that is never a pass. Fix the input and run it again.
   Read a script's `--help` before you use a flag it did not show you.
 - Every script here is run from the project root as `python3 ../forge-check/<name>.py`: bugs.py,
-  walkcheck.py, shotcheck.py and imgdiff.py for test; scope.py, secretscan.py, codecheck.py,
+  walkcheck.py, shotcheck.py, imgdiff.py and testdb.py for test; scope.py, secretscan.py, codecheck.py,
   flowcheck.py, deps.py, supply.py, headers.py, trackers.py, probe.py and authz.py for secure;
   detect.py, inventory.py, getpage.py, pagecheck.py, parity.py and untrusted.py for the others.
 - secure is never skipped in a `/forge` project, and its go is always the user's own.

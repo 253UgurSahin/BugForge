@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Tell which stack a project uses, and which forge profile is closest.
 
-Reports languages, frameworks with versions (from the lockfile next to the manifest), databases,
-containers, test tools, CI and the closest forge profile (laravel, django, next, static or none)
-with a reason. Reads manifests and config files in the project folder and two folders down; other
-files count by name only (*.php). Never reads .env; of .env.example only the words that name a
-database count. stacks.json, next to this script, says which package or file means what. Simple
-patterns, not a YAML or TOML parser: treat the result as a strong hint and check it.
+Reports languages, frameworks with versions (from the lockfile next to the manifest), databases, containers,
+test tools, CI, the theming (Tailwind CSS, Bootstrap, Sass, MUI, Chakra UI, Mantine, CSS-in-JS), the package
+manager each lockfile names, and the closest forge profile (laravel, django, next, static or none) with a reason.
+Reads manifests and config files in the project folder and two folders down; other files count by name only
+(*.php). Never reads .env; of .env.example only the words that name a database count. stacks.json, next to this
+script, says which package or file means what. Simple patterns, not a YAML or TOML parser: a strong hint, check it.
 
 Usage:
     python3 detect.py .                describe the project in the current folder
@@ -115,8 +115,7 @@ def images_in(text):
 
 
 def project_files(root):
-    """Paths ('a/b.json') of the regular files in ROOT and up to MAX_DEPTH folders down, shallow
-    first. Skips SKIP_FOLDERS, virtualenvs (a folder with a pyvenv.cfg) and symlinks."""
+    """The files ('a/b.json') in ROOT and MAX_DEPTH folders down, shallow first; no SKIP_FOLDERS, venv or link."""
     found = []
     for folder, subfolders, names in os.walk(root):  # os.walk does not enter symlinked folders
         relative = "" if folder == root else os.path.relpath(folder, root).replace(os.sep, "/")
@@ -153,9 +152,10 @@ def add_item(items, name, source, version="", **extra):
 
 
 def read_manifest(root, path, found):
-    """Take what is needed from one file into FOUND. Files that are not manifests are ignored."""
+    """Take what one manifest or lockfile gives into FOUND; forge's own e2e/ (on npm) names no package manager."""
     name = posixpath.basename(path)
     ecosystem, deps, words = "", {}, []
+    add_item(found["managers"], None if path.startswith("e2e/") else STACKS["package_managers"].get(name), path)
     if name in ("composer.json", "package.json"):  # composer.json's require holds "php" too
         ecosystem = "php" if name == "composer.json" else "node"
         data = read_file(root, path, found, as_json=True) or {}
@@ -233,8 +233,7 @@ def pick_profile(frameworks, languages, databases, files):
     if best["role"] == "server":
         return "none", ("%s has no forge profile. The nearest in the same language is %s, but forge does not move "
                         "an app to another stack." % (best["name"], STACKS["ecosystems"][best["ecosystem"]]["profile"]))
-    python_manifests = STACKS["python_manifests"]
-    server_side = [item for item in languages if item["name"] == "PHP" or matches(item["source"], python_manifests)]
+    server_side = [i for i in languages if i["name"] == "PHP" or matches(i["source"], STACKS["python_manifests"])]
     if server_side or databases:
         return "none", "%s, but no server framework forge has a profile for." % label((server_side + databases)[0])
     if best["role"] == "static":
@@ -250,11 +249,11 @@ def describe(root):
     """Read the manifests under ROOT and describe the stack: the dict that --json prints."""
     files = project_files(root)
     found = {"declared": {"php": {}, "node": {}, "python": {}}, "locked": {}, "databases": [], "images": [],
-             "notes": []}
+             "notes": [], "managers": []}
     for path in files:
         read_manifest(root, path, found)
     items = known_items(root, files, found)
-    frameworks = [item for item in items if item["role"] != "test"]
+    frameworks = [item for item in items if item["role"] not in ("test", "theming")]
     languages = find_languages(found, files)
     ci = []
     for name, pattern in STACKS["ci_files"].items():  # from the top folder: the pattern fits the whole path
@@ -264,7 +263,8 @@ def describe(root):
     return {"path": os.path.abspath(root), "profile": profile, "reason": reason, "languages": languages,
             "frameworks": frameworks, "databases": found["databases"], "containerised": bool(containers),
             "container_files": containers, "images": found["images"],
-            "tests": [item for item in items if item["role"] == "test"], "ci": ci, "notes": found["notes"]}
+            "tests": [item for item in items if item["role"] == "test"], "ci": ci, "notes": found["notes"],
+            "theming": [item for item in items if item["role"] == "theming"], "package_managers": found["managers"]}
 
 
 def format_human(result):
@@ -275,7 +275,8 @@ def format_human(result):
     lines = ["Project:     " + result["path"], "", "Languages:   " + show(result["languages"]),
              "Frameworks:  " + show(result["frameworks"]), "Databases:   " + show(result["databases"]),
              "Containers:  " + containers, "Images:      " + (", ".join(result["images"]) or "none"),
-             "Tests:       " + show(result["tests"]), "CI:          " + show(result["ci"]), "",
+             "Tests:       " + show(result["tests"]), "CI:          " + show(result["ci"]),
+             "Theming:     " + show(result["theming"]), "Package manager: " + show(result["package_managers"]), "",
              "Closest forge profile: " + result["profile"], "Why: " + result["reason"]]
     lines += ["Note: " + note for note in result["notes"]]
     return "\n".join("".join(c if c.isprintable() else repr(c)[1:-1] for c in line) for line in lines)
@@ -284,15 +285,14 @@ def format_human(result):
 def main(argv=None):
     """Run from the command line. Returns the exit code: 0, or 2 for a bad path."""
     getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
-    parser = argparse.ArgumentParser(description="Tell which stack a project uses and its forge profile.")
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=__doc__)
     parser.add_argument("path", help="the project folder")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     args = parser.parse_args(argv)
     if not os.path.isdir(args.path):
         print("error: %s is not a folder that exists" % args.path, file=sys.stderr)
         return 2
-    result = describe(args.path)
-    print(json.dumps(result, indent=2) if args.json else format_human(result))
+    print(json.dumps(describe(args.path), indent=2) if args.json else format_human(describe(args.path)))
     return 0
 
 

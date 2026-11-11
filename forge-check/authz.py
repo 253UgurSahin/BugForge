@@ -21,7 +21,9 @@ Usage:
 --a, --b: the sessions of two different users. Either a text file with one name=value cookie per line (a line
 "Authorization: Bearer ..." is sent as that header), or a Playwright storageState file such as e2e/.auth/alice.json.
 Exit codes: 0 = every path checked, nothing at or above --fail-on (default: high); 1 = a finding at or above it;
-2 = refused (target not in scope), bad input, app not reachable, or a path could not be checked. Never a pass.
+2 = refused (target not in scope), bad input, app not reachable, or a path could not be checked (also after a
+finding). Never a pass. --json prints the report on stdout, but that of a run with a path not checked on stderr:
+a file that stdout is saved in then stays empty, so only a finished run ever counts as the evidence of level 4.
 """
 
 import argparse
@@ -240,8 +242,9 @@ def main(argv=None):
     lines += ["- " + note for note in notes]
     lines += ["", "Not every path could be checked (see Not checked): not a pass. Run again."] if incomplete else []
     report = {"findings": findings, "paths": rows, "not_checked": notes, "summary": summary}
-    print(json.dumps(report, indent=2) if args.json else "\n".join(lines), flush=True)
-    return 1 if failed else 2 if incomplete else 0
+    print(json.dumps(report, indent=2) if args.json else "\n".join(lines), flush=True,
+          file=sys.stderr if args.json and incomplete else sys.stdout)  # not finished: never in a saved report
+    return 2 if incomplete else 1 if failed else 0
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -117,14 +117,17 @@ class AuthzTests(unittest.TestCase):
         return path
 
     def check(self, *paths, a=None, b=None, extra=()):
-        """(exit code, report) of one --json run over these private paths."""
+        """(exit code, report) of one --json run over these private paths. A run with a path it could not check
+        prints its report on stderr: a file that stdout is saved in stays empty, so it never counts as evidence."""
         urls = self.write("urls.txt", "\n".join(paths) + "\n")
         code, out, err = run(self.url, "--urls", urls, "--a", a or self.alice, "--b", b or self.bob, "--json", *extra)
-        self.assertEqual(err, "")
-        self.assertNotIn(ALICE, out)
-        self.assertNotIn(BOB, out)
-        self.assertNotIn("passport NL", out)  # no response body in the report
-        return code, json.loads(out)
+        report = json.loads(err if code == 2 else out)
+        self.assertEqual(out if code == 2 else err, "")
+        self.assertEqual(code == 2, report["summary"]["incomplete"])
+        self.assertNotIn(ALICE, out + err)
+        self.assertNotIn(BOB, out + err)
+        self.assertNotIn("passport NL", out + err)  # no response body in the report
+        return code, report
 
     def found(self, path):
         code, report = self.check(path)
@@ -170,10 +173,13 @@ class AuthzTests(unittest.TestCase):
         self.assertTrue(report["summary"]["incomplete"])
         self.assertEqual(len([path for path, _ in App.seen if path == "/gone/41"]), 1)
 
-    def test_server_error_for_b_is_not_a_pass_and_a_finding_wins(self):
+    def test_server_error_for_b_is_not_a_pass_even_with_a_finding(self):
+        """A path not checked makes the run unfinished, also when another path gave a finding: exit 2, as every
+        checking script of the pack does, and no saved report a gate could count."""
         code, report = self.check("/boom/41")
         self.assertEqual((code, report["paths"][0]["result"]), (2, "could not check"))
-        self.assertEqual(self.check("/boom/41", "/leaky/41")[0], 1)
+        code, report = self.check("/boom/41", "/leaky/41")
+        self.assertEqual((code, [f["check"] for f in report["findings"]]), (2, ["other_user_reads"]))
 
     def test_expired_session_for_a_cannot_check(self):
         stale = self.write("stale.txt", "sid=long-gone\n")

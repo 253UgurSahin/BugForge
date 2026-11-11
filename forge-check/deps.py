@@ -39,13 +39,16 @@ PIP_AUDIT = ["pip-audit", "--no-deps", "--disable-pip", "-f", "json", "-r"]  # +
 INSTALL = {"npm": "install Node.js (nodejs.org)", "composer": "install Composer (getcomposer.org)",
            "pip-audit": 'install it with "pipx install pip-audit"'}
 NOTES = {"yarn.lock": 'Yarn is not run here: run "yarn npm audit" (or "yarn audit") in that folder',
-         "pnpm-lock.yaml": 'pnpm is not run here: run "pnpm audit" in that folder'}
+         "pnpm-lock.yaml": 'pnpm is not run here: run "pnpm audit" in that folder',
+         "bun.lock": 'bun is not run here: run "bun audit" (bun 1.2.15 or newer) in that folder',
+         "bun.lockb": 'bun is not run here: run "bun audit" (bun 1.2.15 or newer) in that folder'}
 EXPORT = {"poetry.lock": "poetry export -f requirements.txt -o requirements.txt",
           "Pipfile.lock": "pipenv requirements > requirements.txt",
           "pyproject.toml": "pip-compile -o requirements.txt pyproject.toml"}  # first one found
 WHY = 'this app uses a version of "%s" with publicly known security holes; attackers look for these'
 UPGRADE = "upgrade %s to its latest version in the requirements file (fixes came out in %s)"
-NO_LOCK = "A package.json or composer.json alone cannot be checked: create its lockfile first."
+NO_LOCK = ("A package.json or composer.json alone cannot be checked: it needs its lockfile, which only the app's "
+           "package manager writes. This check installs nothing: tell the user.")
 NO_FIX = "no fixed version of %s yet: read the advisory for a workaround, or replace it"
 MAJOR = "update %s to %s in package.json; it is a new major version, so test the app well afterwards"
 OLDER = ('npm\'s only fix is an older version of %s (%s, you have %s): do not run "npm audit fix'

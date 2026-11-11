@@ -139,11 +139,14 @@ class ProbeTests(unittest.TestCase):
         return path
 
     def probe(self, *holes, extra=()):
-        """(exit code, report, requests seen) of one --json run against the app with these holes."""
+        """(exit code, report, requests seen) of one --json run against the app with these holes. A run cut short
+        prints its report on stderr: a file that stdout is saved in stays empty, so it never counts as evidence."""
         with serve(*holes) as (url, seen):
             code, out, err = run(url, "--paths", self.paths, "--json", *extra)
-        self.assertEqual(err, "")
-        return code, json.loads(out), seen
+        report = json.loads(err if code == 2 else out)
+        self.assertEqual(out if code == 2 else err, "")
+        self.assertEqual(code == 2, report["summary"]["incomplete"])
+        return code, report, seen
 
     def checks(self, *holes):
         return sorted({finding["check"] for finding in self.probe(*holes)[1]["findings"]})
@@ -241,8 +244,9 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual((code, len(seen)), (2, 5))
         self.assertTrue(report["summary"]["incomplete"])
         self.assertIn("request cap of 5", " ".join(report["not_checked"]))
-        code, _, seen = self.probe("exposed_file", extra=["--max-requests", "5"])
-        self.assertEqual((code, len(seen)), (1, 5))  # a finding still counts
+        code, report, seen = self.probe("exposed_file", extra=["--max-requests", "5"])
+        self.assertEqual((code, len(seen)), (2, 5))  # cut short wins: the paths after the cap were never probed
+        self.assertEqual({finding["check"] for finding in report["findings"]}, {"exposed_file"})  # still reported
 
     def test_bodies_are_never_printed(self):
         with serve(*ALL_CHECKS) as (url, _):

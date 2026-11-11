@@ -206,6 +206,35 @@ class WalkcheckTests(unittest.TestCase):
         self.assertEqual(len(report["incomplete"]), 1)
         self.assertEqual(report["findings"][0]["rule"], "status")
 
+    def test_one_theme_under_both_settings_is_an_incomplete_walk(self):
+        """An app that keeps its own theme (a stored choice, a dark default) shows it twice: the other theme was never
+        walked. A page that names no theme, or one theme per setting, is fine; so is a walk of one scheme only."""
+        both = walk({("S01-home", 390, "light"): {"theme": "dark"}, ("S01-home", 390, "dark"): {"theme": "dark"}})
+        code, _, err = self.run_main(both)
+        self.assertEqual(code, 2)
+        self.assertIn("S01-home: the page says it shows one theme with the system set to light and dark", err)
+        self.assertIn('walk.md, "Light and dark"', err)
+        each = walk({("S01-home", 390, "light"): {"theme": "light"}, ("S01-home", 390, "dark"): {"theme": "dark"},
+                     ("S03-dashboard", 768, "light"): {"theme": ""}, ("S03-dashboard", 768, "dark"): {"theme": ""}})
+        self.assertEqual(self.run_main(each)[0], 0)
+        light = walk({"*": {"theme": "light"}})
+        light["schemes"] = ["light"]
+        light["results"] = [result for result in light["results"] if result["scheme"] == "light"]
+        self.assertEqual(self.run_main(light)[0], 0, "FORGE_SCHEMES=light: an app with one theme")
+
+    def test_a_route_with_one_theme_by_design_is_walked_in_that_one(self):
+        """A light landing page in an app with a dark theme: "schemes": ["light"] in its routes.json entry."""
+        data = walk({"S01-home": {"theme": "light"}})
+        data["routes"] = [dict(ROUTES[0], schemes=["light"]), ROUTES[1]]
+        data["results"] = [r for r in data["results"] if r["route"] != "S01-home" or r["scheme"] == "light"]
+        self.assertEqual(self.run_main(data)[0], 0, "its light results are the whole walk of it")
+        data["results"] = [r for r in data["results"] if r["route"] != "S01-home" or r["width"] != 390]
+        code, _, err = self.run_main(data)
+        self.assertEqual(code, 2, "a missing result of its own scheme is still missing")
+        self.assertIn("S01-home at 390 px, light: no result", err)
+        data["routes"][0]["schemes"] = ["dark"]
+        self.assertEqual(self.run_main(data)[0], 2, "the dark results it names were never walked")
+
     def test_bad_input_exits_2(self):
         empty = walk()
         empty["results"] = []

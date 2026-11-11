@@ -15,7 +15,7 @@ handler without an owner check); authz.py is level 4`.
 
 | OWASP 2021 | in plain words | what `/forge-check secure` runs for it, by level |
 | --- | --- | --- |
-| A01 Broken access control | one user reaches another user's data or an admin's page | 3: flowcheck.py (handlers with no owner check), the second-user spec of `/forge-check test` when it ran. 4: authz.py with two users. 5: the access matrix of every route against every role |
+| A01 Broken access control | one user reaches another user's data or an admin's page | 3: flowcheck.py (handlers with no owner check), the second-user spec of `/forge-check test` when it ran. 4: authz.py with two users (an app with no accounts at all: `authz.py does not apply: no accounts at all`). 5: the access matrix of every route against every role |
 | A02 Cryptographic failures | secrets, passwords or traffic poorly protected | 1: secretscan.py. 2: headers.py (HSTS). 3: flowcheck.py (weak hashes and tokens, TLS checks switched off). 5: the git history scanned for secrets |
 | A03 Injection | input ends up in SQL, a shell, a page or a file path | 1: codecheck.py. 3: flowcheck.py (input followed to a risky call). 4: probe.py (reflected input, a database error after a quote), semgrep when installed |
 | A04 Insecure design | the flow itself can be abused: prices from the browser, no limit on attempts | 3: the framework and Stripe checks in frameworks.md, by reading the code. 5: the threat model per entry point, the abuse and rate-limit cases |

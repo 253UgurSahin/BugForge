@@ -16,8 +16,17 @@
 //
 // Every sign-in counts against the app's rate limit, so the seed users sign in once per run, in a
 // setup project, and the specs reuse their cookies. e2e/playwright.config.ts (no accounts: leave
-// out the setup project, its dependency and auth.setup.ts):
+// out the setup project, its dependency and auth.setup.ts). Its first lines read the test passwords
+// from the project's git-ignored .env, and from forge-work/test/e2e.env (out of git: the demo passwords
+// an app documents), so no command and no chat ever carries one (Node 20.12 or newer):
 //   import { defineConfig } from '@playwright/test';
+//   import { readFileSync } from 'node:fs';
+//   import { parseEnv } from 'node:util';
+//   for (const file of ['../.env', '../forge-work/test/e2e.env']) try { // E2E_ lines only; the shell's win
+//     const env = parseEnv(readFileSync(file, 'utf8'));
+//     for (const [k, v] of Object.entries(env)) if (k.startsWith('E2E_') && !process.env[k]) process.env[k] = v;
+//     if (!process.env.E2E_PASSWORD && env.SEED_PASSWORD) process.env.E2E_PASSWORD = env.SEED_PASSWORD; // forge's seed
+//   } catch { /* not there: the variables come from the shell, or the signed-in tests are skipped */ }
 //   export default defineConfig({
 //     workers: 1,
 //     use: {
@@ -32,6 +41,8 @@
 // e2e/auth.setup.ts, which also tests the happy path of signing in (F01-H1):
 //   import { test as setup, expect } from '@playwright/test';
 //   import { ALICE, AUTH, BOB, PASSWORD, signIn } from './helpers';
+//   // An app with another role: one test account per role in this list too, such as [ADMIN, AUTH.admin]
+//   // (its email in helpers.ts, its password in E2E_PASSWORD_ADMIN: ../forge-check/walk.md, routes.json).
 //   for (const [email, file] of [[ALICE, AUTH.alice], [BOB, AUTH.bob]]) {
 //     setup(`F01-H1 ${email} signs in and sees the dashboard`, async ({ page }) => {
 //       setup.skip(!PASSWORD, 'set E2E_PASSWORD to the password of the seed users');
@@ -44,9 +55,10 @@
 // per 10 s from one address; Laravel Fortify: 5 a minute per email).
 //
 // Run it against your own compose stack, never against someone else's site, from e2e/:
-//   FORGE_BASE_URL=http://localhost:8080 E2E_PASSWORD=... npx playwright test
+//   FORGE_BASE_URL=http://localhost:8080 npx playwright test
 // The browser download fails (a proxy, a sandbox): run it in Playwright's own image, which has the
-// browser, of the exact version in package.json (here 1.64.1), with both variables exported:
+// browser, of the exact version in package.json (here 1.64.1), with both variables exported (the
+// image sees e2e/ only, not the .env above it):
 //   MSYS_NO_PATHCONV=1 docker run --rm --ipc=host --network host -u "$(id -u)" -e HOME=/tmp \
 //     -v "$PWD":/e2e -w /e2e -e FORGE_BASE_URL -e E2E_PASSWORD mcr.microsoft.com/playwright:v1.64.1-noble \
 //     npx playwright test

@@ -43,20 +43,28 @@ What each level adds (each level includes everything of the levels below it):
 | 1 | Quick | Snel | secrets and risky code (secretscan, codecheck); only on its own, never as a forge phase | 1, 2, 3 (codecheck), 9, 10 | nothing more |
 | 2 | Basic | Basis | + dependencies, headers, trackers; only on its own too | + 4 (deps), 5, 7 (trackers) | nothing more |
 | 3 | Standard | Standaard | + flowcheck, the supply chain with a parts list (SBOM), the framework checks, the AVG/GDPR list, the OWASP coverage table | + 3 (flowcheck), 4 (supply), 7 (AVG/GDPR), 8 (frameworks), the coverage table | `forge-work/sbom.json` |
-| 4 | Thorough | Grondig | + the active probe and the two-user access check on the running app (the user's own app only), semgrep when it is installed, the container checks | + 3 (semgrep), 6, 8 (containers) | `forge-work/security/probe.json` and `authz.json`, or a `no running app` line under "Not checked" |
-| 5 | Exhaustive | Uitputtend | + a threat model per entry point by reading the code (auth, session, payment, upload), an access matrix of every route against every role, abuse and rate-limit cases, a scan of the git history for secrets, a licence review; each finding tells the attack as a story | + 2 (history), 4 (licences), 6 (matrix), 8 (the review), stories | nothing more |
+| 4 | Thorough | Grondig | + the active probe and the two-user access check on the running app (the user's own app only), semgrep when it is installed, the container checks | + 3 (semgrep), 6, 8 (containers) | `forge-work/security/probe.json` and `authz.json` (the `--json` output of a finished run), or a `no running app` line under "Not checked"; an app with no accounts at all: a `no accounts at all` line in place of `authz.json` |
+| 5 | Exhaustive | Uitputtend | + a threat model per entry point by reading the code (auth, session, payment, upload), an access matrix of every route against every role, abuse and rate-limit cases, a scan of the git history for secrets, a licence review; each finding tells the attack as a story | + 2 (history), 4 (licences), 6 (matrix), 8 (the review), stories | `forge-work/security/threats.md` and `access.md` |
 
 ## Say what comes
 
 Once the level is on record, tell the user in two or three lines, in their language: the level and
 its name, the steps in order, and roughly how long it takes (levels 1 to 3 mostly minutes; level 4
-longer, most of it Step 6; level 5 the longest). At level 4 and up add, in the same message, the
-one thing you need from them, so the run never stops halfway for it: which two accounts of their
-app, with the same role, are user A and user B, and that they put the two passwords in their
-git-ignored `.env` as `E2E_PASSWORD` and `E2E_PASSWORD_2` (the names `/forge-check test` uses).
-Never ask for a password in the chat. Demo or test accounts the user names count as A and B. No
-two such accounts: say that level 4 needs them and ask whether level 3 will do. Then, while you
-work, one line per finished step with its result, for example `secretscan: 0 findings`.
+longer, most of it Step 6; level 5 the longest). At level 4 and up add, in the same message, what
+you need from them, so the run never stops halfway for it: which two accounts of their app, with
+the same role, are user A and user B, and that they put the two passwords in their git-ignored
+`.env` as `E2E_PASSWORD` and `E2E_PASSWORD_2` (the names `/forge-check test` uses; the demo
+passwords it wrote to `forge-work/test/e2e.env` need no question: frameworks.md, "The two
+sessions"). An app forge built needs no question: `alice@example.test` and `bob@example.test` of
+its seed are A and B, and both sign in with the `SEED_PASSWORD` of its `.env` (signin.mjs takes
+`SEED_PASSWORD` as the name of the variable). At level 5 also one account for each other role the
+app has (the `Roles:` line of `forge-work/plan.md`, or the roles in the code: admin, staff), its
+password in `.env` as `E2E_PASSWORD_ADMIN`, `E2E_PASSWORD_STAFF` and so on. Never ask for a
+password in the chat. Demo or test accounts the user names count as A and B. An app with no
+sign-in at all needs none: say that the two-user check does not apply to it (Step 6). An app with
+accounts but no two such accounts: say that level 4 needs them and ask whether level 3 will do. No
+account for a role: say that its cells of the access matrix are read in the code only. Then, while
+you work, one line per finished step with its result, for example `secretscan: 0 findings`.
 
 ## Steps
 
@@ -81,16 +89,23 @@ Each step says from which level it runs. Leave out what is marked above the leve
    pip-audit when installed; copy each "not checked" note into the report with what to install.
    Level 3: `python3 ../forge-check/supply.py . --sbom forge-work/sbom.json`, offline: missing
    lockfiles, floating versions, odd sources, look-alike names, install scripts, licences, and the
-   parts list the gate asks for. Level 5, **the licence review**: "Licences" in
-   `../forge-check/frameworks.md`.
+   parts list the gate asks for. Copy each `Not read in full` line under "Not checked": a yarn,
+   pnpm, bun or Pipenv lockfile holds no licences or install scripts. Exit 2 (a lockfile it cannot
+   read, such as a `bun.lockb`) leaves the parts list empty: never a pass, so ask the user for a
+   lockfile it reads. A file it cannot read that is no lockfile (a `package.json` that is not valid
+   JSON): the app's own is a finding (it cannot install either), fix it with the user's go; one in
+   a test fixture folder (`fixtures`, `__fixtures__`, `testdata`) is never read; any other: ask the
+   user. Level 5, **the licence review**: "Licences" in `../forge-check/frameworks.md`.
 5. **Headers** (level 2). First know what serves the user's address (`../forge/rules.md` section 9,
    its first point only) and write it at the top of "What was checked". A dev server that reloads
    by itself (`next dev`, `npm run dev`): use it as it runs. A built app (`next start`) or
-   containers older than the code: rebuild and restart them. Nothing answers: start it with the
-   README's command, or `docker compose up -d --build --wait` with a compose file. Never a second
-   server, a branch switch, a seed or an emptied database for this check. Then `python3
-   ../forge-check/headers.py <url>`, or the user's own live site. Headers saved from the browser's
-   network tab: `headers.py --file <saved.txt> --url <url>`. Nothing running: "Not checked".
+   containers older than the code: ask the user before you rebuild or restart what they started;
+   no yes: check what runs, and say under "What was checked" that it may be older than the code.
+   Nothing answers: start it with the README's command, or `docker compose up -d --build --wait`
+   with a compose file. Never a second server, a branch switch, a seed or an emptied database for
+   this check. Then `python3 ../forge-check/headers.py <url>`, or the user's own live site. Headers
+   saved from the browser's network tab: `headers.py --file <saved.txt> --url <url>`. Nothing
+   running: "Not checked".
 6. **The running app** (level 4), the address of Step 5, only where scope.py exits 0 (both scripts
    ask it themselves and refuse otherwise, sending nothing). `mkdir -p forge-work/security`, then
    write the two path lists and sign A and B in as "The running app" in
@@ -103,25 +118,38 @@ Each step says from which level it runs. Leave out what is marked above the leve
      forge-work/security/a.json --b forge-work/security/b.json --json >
      forge-work/security/authz.json`: whether user B or a visitor can read A's own pages.
 
-   Exit 0 or 1 is a run. Read each finding in the code before you report it, as in Step 3: a
-   Next.js server action checks the Origin header and needs no hidden token, so `csrf_form` on
-   its form is no finding; say so under "What was checked". Exit 2 (refused, unreachable or
-   incomplete) prints no JSON and is never a pass: fix the cause, run it again. Never write either
-   file by hand. When one cannot run, one line under "Not checked", the words first, then why:
+   Exit 0 or 1 is a finished run, its report in the file. Exit 2 is never a pass, and it leaves
+   the file empty: refused, unreachable, or cut short (the request cap, a page with no answer, a
+   path user A could not load), which prints its report on the screen instead (stderr), also when
+   a finding came first. A dev server builds a page on its first load: open each path once first.
+   Fix the cause, run it again. Never write either file by hand, and never add `2>&1` to these two
+   commands: the report of a run cut short must not reach the file.
+   Read each finding in the code before you report it, as in Step 3: a Next.js server action
+   checks the Origin header and needs no hidden token, so `csrf_form` on its form is no finding;
+   say so under "What was checked". Debug that is on only on this machine (a dev server, or
+   `DEBUG` or `APP_DEBUG` on in the local `.env`) is no finding either: Django's 404 page with
+   `DEBUG = True` (`debug_page`), Laravel's `/_ignition/health-check` or `/telescope`
+   (`exposed_file`). Say so under "What was checked" too; Step 8 reads whether production switches
+   debug off. When one cannot run, one line under "Not checked", the words first, then why:
    - the app truly cannot run here: `- probe.py and authz.py: no running app, <why>` (for
      example: Docker is not installed and the app has no other way to start);
-   - the app runs but there are no two sessions (no accounts, no passwords in `.env`, a sign-in
-     that needs a code by email): `- authz.py: no sessions, <why>`. Tell the user that level 4
-     needs it and ask: give the two accounts, or level 3 (`set secure 3 --said '<their words>'`).
-     What probe.py found stays in the report.
+   - the app runs but has no accounts at all (no sign-in anywhere: a static site, data kept in
+     the browser, a poll shared by link): `- authz.py: no accounts at all, <why>`. Level 4 still
+     holds: probe.py runs as above, and the A01 row says `authz.py does not apply: no accounts at
+     all` next to what flowcheck found;
+   - the app has accounts but there are no two sessions (no two accounts to give, no passwords in
+     `.env`, a sign-in that needs a code by email): `- authz.py: no sessions, <why>`. Tell the
+     user that level 4 needs it and ask: give the two accounts, or level 3 (`set secure 3 --said
+     '<their words>'`). What probe.py found stays in the report.
    Level 5: check the access matrix of Step 8 on the running app with authz.py, one run per role.
 7. **Trackers and privacy.** Level 2: `python3 ../forge-check/trackers.py .`. Level 3: the
    AVG/GDPR checklist in `../forge-check/coverage.md` (not legal advice).
 8. **Read the code.** Level 3: the framework checks in `../forge-check/frameworks.md` (Laravel,
    Django, Next.js, static site, Stripe) for each stack the project uses; say which you skipped and
    why. Level 4: its container checks, with `python3 ../forge-build/packcheck.py .` when there is a
-   Dockerfile. Level 5: its review: a threat model per entry point, the access matrix of every
-   route against every role, and the abuse and rate-limit cases.
+   Dockerfile. Level 5: its review: a threat model per entry point (`forge-work/security/threats.md`),
+   the access matrix of every route against every role (`forge-work/security/access.md`), and the
+   abuse and rate-limit cases.
 9. **Opt-outs** (every level). List the files that use the opt-out under "Not checked" (forge's
    notes are left out): `grep -rl --exclude-dir=.git --exclude-dir=forge-work
    --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.venv --exclude-dir=venv
@@ -173,9 +201,10 @@ None.
 - `Level:` is one line of its own under the date, the level the check ran at, as level.py records it.
 - **The user's language.** Write the report and the checkpoint in the user's language. The gate
   reads the headings, the `Level:`, `Verdict:` and `Counts:` lines, the finding head lines and the
-  `no running app` words: keep those in English, exactly as above. Explain each technical term in
-  plain words the first time it appears (SBOM: the list of every package the app uses; OWASP: the
-  common list of web security risks; CORS, TRACE, semgrep, supply chain likewise).
+  `no running app` and `no accounts at all` words: keep those in English, exactly as above.
+  Explain each technical term in plain words the first time it appears (SBOM: the list of every
+  package the app uses; OWASP: the common list of web security risks; CORS, TRACE, semgrep, supply
+  chain likewise).
 - `effort:` is S (an hour or less), M (a day or less) or L (more), as `/forge-improve` reads it.
 - **Honest about the level.** "What was checked" starts with the level and what it covers; "Not
   checked" names what the higher levels would add. A PASS at level 1 says in words: "Level 1
@@ -192,11 +221,13 @@ None.
 
 This part only reads. On FAIL, a finding in the app's code goes into `forge-work/bugs.md` and
 through the fix loop of `/forge-check test` (`../forge-check/steps/test.md`): on a branch as its
-Step 2.1 says, then only its items 6.1 to 6.5 and Step 7 (walk rounds only when a test level is on
-record and `forge-work/test/walk.json` exists). A fix that changes what a user sees (a consent
-banner, an error page, a lock-out message) is shown as that Step 7 does it, before and after shots
-with `python3 ../forge-design/changed.py`. A fix to headers, cookies or the server: rebuild what
-serves the address before headers.py, probe.py and authz.py run again, or they check the old code.
+Step 2.1 says, its Step 2.6 before the first test runs (tests can empty the database they reach),
+then only its items 6.1 to 6.5 and Step 7 (walk rounds only when a test level is on record and
+`forge-work/test/walk.json` exists). A fix that changes what a user sees (a consent banner, an
+error page, a lock-out message) is shown as that Step 7 does it, before and after shots with
+`python3 ../forge-design/changed.py`. A fix to headers, cookies or the server: rebuild what serves
+the address (what the user started: with their go, as in Step 5) before headers.py, probe.py and
+authz.py run again, or they check the old code.
 
 ## The gate
 

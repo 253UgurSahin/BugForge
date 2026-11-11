@@ -16,9 +16,17 @@ which stacks you skipped and why, and leave out what is above the level on recor
 ## Framework checks (level 3)
 
 **Laravel**
-- `APP_DEBUG=false` in production and in `.env.example`; `php artisan about` shows it (high).
+- `APP_DEBUG=false` in production (high). What counts is the production value: `.env.example` only
+  when it is the production template (a forge-built app, a Dockerfile or deploy script that copies
+  it), else the deploy settings. Unknown: a question under "Not checked", not a finding. `php
+  artisan about` shows this machine only, where debug on is no finding (Step 6).
 - `APP_KEY` is set in `.env`. Check that it is set, never print it (high).
-- CSRF protection is on for web routes, with no broad exceptions (high).
+- CSRF protection is on for web routes, with no broad exceptions (high): Laravel 11 and up keep the
+  exceptions in `bootstrap/app.php` (`validateCsrfTokens(except: [...])`), older ones in
+  `app/Http/Middleware/VerifyCsrfToken.php`.
+- Each route group or controller for one role (admin, staff) has its gate: a `can:` or role
+  middleware, a policy, or a `Gate::define` the controller checks. Read `routes/web.php` and the
+  controllers; a role's page any signed-in user can open is high.
 - Models that take request data set `$fillable` or a non-empty `$guarded` (high).
 
 **Django**
@@ -64,11 +72,15 @@ What Step 6 of the secure steps needs, all in `forge-work/security/`, nothing in
 `route.ts` under `app/` (the folder path is the URL; leave out route groups like `(shop)`; fill
 `[id]` with an id from a page) and every file under `pages/`; Laravel `php artisan route:list
 --method=GET`; Django `urls.py`; the Express routers. Give each query parameter the code reads
-(`searchParams`, `req.query`, `request.GET`) a harmless sample value: `/search?q=test`. Exit 2
-because the run was cut short: raise `--max-requests` (up to 500) or put the paths with input first.
+(`searchParams`, `req.query`, `request.GET`) a harmless sample value: `/search?q=test`. Leave out
+every path that changes something on a GET (log out, delete, approve, impersonate, verwijderen:
+the words of `UNSAFE_LINK` in `../forge-check/walk.example.spec.ts`), here and in
+private-paths.txt. Exit 2 because the run was cut short: raise `--max-requests` (up to 500) or put
+the paths with input first.
 
 **The two sessions**, user A and user B, the two accounts the user named (secure.md, "Say what
-comes"). Never set up `e2e/` for this. First make sure git ignores what you write:
+comes"). An app with no accounts at all has none: the `no accounts at all` line of Step 6, and
+probe.py still runs. Never set up `e2e/` for this. First make sure git ignores what you write:
 `git check-ignore -q forge-work/security/a.json`; when it does not, write `forge-work/.gitignore`
 with the one line `*`, as gate.py does. Playwright: when the app has it (`node_modules/playwright`)
 the script finds it; else install it in this folder only: `cd forge-work/security && npm init -y
@@ -88,9 +100,12 @@ await page.getByLabel(/password|wachtwoord/i).fill(process.env[name]);
 await page.getByRole('button', { name: /sign in|log in|inloggen|aanmelden/i }).click();
 await page.waitForURL((u) => u.pathname !== path, { timeout: 15000 });
 await page.context().storageState({ path: out });
-for (const p of pages) { // prints the links on A's own pages, never their content
+const origin = new URL(base).origin;
+for (const p of pages) { // prints the same-origin links on A's own pages, never their content
   await page.goto(p);
-  console.log((await page.$$eval('a[href^="/"]', (as) => as.map((a) => a.getAttribute('href')))).join('\n'));
+  const links = await page.$$eval('a[href]', (as) => as.map((a) => a.href)); // absolute too: route() in Blade
+  const own = links.map((href) => new URL(href)).filter((url) => url.origin === origin);
+  console.log([...new Set(own.map((url) => url.pathname + url.search))].join('\n'));
 }
 await browser.close();
 ```
@@ -98,20 +113,24 @@ await browser.close();
 Run it once per user (Node 20.6 or newer), shortly before authz.py: an expired session for B
 looks like a pass. Use the `.env` file git ignores: `node --env-file=.env
 forge-work/security/signin.mjs <url> /login <email of A> E2E_PASSWORD forge-work/security/a.json
-/bookings`, and for B with `E2E_PASSWORD_2` and `b.json`. The session files are never printed,
-never committed, and deleted once the report is written (sign in again for a later run). Sign-in
-fails, or needs a code by email: the `no sessions` line of Step 6.
+/bookings`, and for B with `E2E_PASSWORD_2` and `b.json` (an app forge built: `SEED_PASSWORD` for
+both, with `alice@example.test` and `bob@example.test`). When `forge-work/test/e2e.env` exists (the
+demo passwords the test part wrote there), put `--env-file=forge-work/test/e2e.env` before
+`--env-file=.env`: Node reads both, and the later file wins, as in the e2e config. The session
+files are never printed, never committed, and deleted once the report is written (sign in again
+for a later run). Sign-in fails, or needs a code by email: the `no sessions` line of Step 6.
 
 **private-paths.txt**, 3 to 10 paths of A's own records, read while signed in as A: the links the
-script printed for A's list pages (A's bookings, invoices, profile, an API route with A's id).
+script printed for A's list pages (A's bookings, invoices, profile, an API route with A's id), a
+query with a token or signature in it left out.
 Only pages with A's own data; no public page and no page every signed-in user sees the same, or
 authz.py reports it as read by B.
 
 ## Level 5
 
 The review an attacker would do, by reading the code. It writes two files next to the report,
-`forge-work/security/threats.md` and `forge-work/security/access.md`; their findings go into
-security.md like any other, with their own X numbers.
+`forge-work/security/threats.md` and `forge-work/security/access.md` (at level 5 the gate asks for
+both); their findings go into security.md like any other, with their own X numbers.
 
 ### Threat model per entry point
 
@@ -138,8 +157,10 @@ data, high for a page above the role. Write the table in access.md.
 
 On the running app, where scope.py exits 0, check the "own only" and "deny" cells with authz.py:
 one run per role, with that role's session as `--b`, the owner as `--a` and the owner's private
-paths in `--urls`, its `--json` output saved as `forge-work/security/authz-<role>.json`. A role
-with no seed account: "not checked: no account for this role", and ask the user for one.
+paths in `--urls`, its `--json` output saved as `forge-work/security/authz-<role>.json`. Sign each
+role in with signin.mjs as A and B are, with its own variable (`E2E_PASSWORD_ADMIN`) and
+`forge-work/security/<role>.json`. A role the user gave no account for (secure.md, "Say what
+comes"): "not checked: no account for this role", named at the checkpoint, not asked halfway.
 
 ### Abuse and rate limits
 
@@ -150,10 +171,14 @@ count ids upwards to read records one by one, replay a webhook. Read for a limit
 limit in Next.js, express-rate-limit, a size cap, a lock-out, a webhook id that is used only once.
 No limit on login or password reset is high; elsewhere medium.
 
-Only on the user's own running app (scope.py exits 0) and only with a seed account, one short
-burst may show the limit at work: at most 20 wrong passwords for `alice@example.test`, which should
-end in a 429 or a lock-out. Never a load test, never a real person's account. Clear the counters
-afterwards ("Rate limits" in `../forge-check/walk.md`).
+Only on the user's own running app (scope.py exits 0), one short burst may show the limit at work.
+Sign up a throwaway account through the app's own sign-up (a new `@example.test` email), then try
+at most 20 wrong passwords for it: it should end in a 429 or a lock-out. Never user A, user B or
+another seed or demo account: a locked account stops their next sign-in, and the user may use it
+themselves ("Rate limits" in `../forge-check/walk.md`). No sign-up in the app: no burst, and say so
+under "Not checked". Never a load test, never a real person's account. Do it after the last
+authz.py run, clear the counters afterwards as that section says, and name the throwaway account
+under "What was checked".
 
 ### Secrets in the git history
 
@@ -179,7 +204,10 @@ From `forge-work/sbom.json` and supply.py's licence notes, and the fonts, icons 
 ships: list each GPL, AGPL, SSPL, unknown or missing licence, what it asks of the user (AGPL: share
 the source with everyone who uses a hosted app, not only with those who download it) and whether
 that fits the app's own `LICENSE` and the way the user means to offer it. Medium when it clashes,
-low when it is only unknown. Not legal advice: the choice is the user's.
+low when it is only unknown. Not legal advice: the choice is the user's. A yarn, pnpm, bun or
+Pipenv lockfile holds no licences, so its packages have none in the SBOM: read each one's licence
+in `node_modules/<package>/package.json` (or the installed package's metadata) where it is there,
+and call the rest unknown; never install anything for it.
 
 ### Attack stories
 

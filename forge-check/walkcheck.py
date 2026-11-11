@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """Turn the walk of the app (forge-work/test/walk.json) into findings, and into bugs for bugs.md.
 
-e2e/walk.spec.ts opens every route at three widths, light and dark, and writes down what it saw.
-This script judges it. One problem seen at several widths or schemes is one finding. Severities:
-high: the page answers 4xx or 5xx, a script error, a 5xx answer or link, an axe violation with the
-impact critical, a speed or size value over twice its budget. medium: a console error, a failed
-request, a 4xx from the app itself, a 404 link, an axe violation with the impact serious, sideways
-scrolling, cut-off text, covered buttons, a redirect, a value over its budget. low: the rest.
-The budget (--budget FILE, JSON with any of these keys) is per page on a first load:
-lcp_ms 2500, cls 0.1, ttfb_ms 800, load_ms 4000, transfer_bytes 1500000, requests 60.
-The check is incomplete (exit 2) when a route, width or scheme has no result, a page was skipped
-or did not load, or one of its checks could not run. ../forge-check/walk.md has the details.
+e2e/walk.spec.ts opens every route at three widths, light and dark, and writes down what it saw. This script
+judges it. One problem seen at several widths or schemes is one finding. Severities: high: the page answers 4xx
+or 5xx, a script error, a 5xx answer or link, an axe violation with the impact critical, a speed or size value
+over twice its budget. medium: a console error, a failed request, a 4xx from the app itself, a 404 link, an axe
+violation with the impact serious, sideways scrolling, cut-off text, covered buttons, a redirect, a value over
+its budget. low: the rest. The budget (--budget FILE, JSON with any of these keys) is per page on a first load:
+lcp_ms 2500, cls 0.1, ttfb_ms 800, load_ms 4000, transfer_bytes 1500000, requests 60. The check is incomplete
+(exit 2) when a route, width or scheme has no result, a page was skipped or did not load, one of its checks could
+not run, or a page says it shows the same theme with the system set to light and to dark (walk.md has more).
 
 Usage:
     python3 walkcheck.py forge-work/test/walk.json [--fail-on medium] [--budget FILE] [--json]
@@ -82,7 +81,6 @@ RULES = {  # rule: (title, what the user should get, why it matters, fix)
                  "each request adds waiting time", "bundle files and drop what the page does not use"),
 }
 
-
 def plain(value, limit=160):
     """Text from the page, safe to print and to paste into bugs.md: one line, ASCII, no [tags] or
     backticks that bugs.py would read as markup, and no query string (it can hold a token)."""
@@ -91,12 +89,10 @@ def plain(value, limit=160):
     text = text.encode("ascii", "backslashreplace").decode("ascii")
     return text if len(text) <= limit else text[:limit - 3] + "..."
 
-
 def listed(words):
     """'390, 768 and 1440' from [390, 768, 1440]."""
     words = [str(word) for word in words]
     return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
-
 
 def page_problems(result, budget):
     """(rule, key, severity, the title's word, what was seen) for each problem on one walked page."""
@@ -145,15 +141,16 @@ def page_problems(result, budget):
             found.append((name, "", severity, None, "%s is %s, the budget is %s" % (name, value, limit)))
     return found
 
-
 def judge(walk, budget):
     """(findings, incomplete): the grouped findings, worst first, and what could not be judged."""
     routes = {route["name"]: route for route in walk["routes"]}
     results = {(r["route"], r["width"], r["scheme"]): r for r in walk["results"]}
+    own = {name: [s for s in walk["schemes"] if s in (route.get("schemes") or walk["schemes"])] or walk["schemes"]
+           for name, route in routes.items()}  # a route's own "schemes" in routes.json: one theme by design
     groups, incomplete = {}, []
     for name in routes:
         for width in walk["widths"]:
-            for scheme in walk["schemes"]:
+            for scheme in own[name]:
                 result, at = results.get((name, width, scheme)), "%s at %s px, %s" % (plain(name), width, scheme)
                 reasons = (["no result: the walk did not get to this page"] if result is None else
                            ["skipped: %s" % plain(result["skipped"])] if result.get("skipped") else
@@ -169,6 +166,10 @@ def judge(walk, budget):
                     if SEVERITIES.index(severity) < SEVERITIES.index(group["severity"]):
                         group.update(severity=severity, seen=seen)
                     group["pages"].append(result)
+    one = sorted({r["route"] for r in results.values() if len(own.get(r["route"], [])) > 1 and r.get("theme") and all(
+        (results.get((r["route"], r["width"], s)) or {}).get("theme") == r["theme"] for s in own[r["route"]])})
+    incomplete += ["%s: the page says it shows one theme with the system set to %s, so the other was never walked "
+                   "(walk.md, \"Light and dark\")" % (plain(listed(one), 200), listed(walk["schemes"]))] if one else []
     findings = []
     for group in groups.values():
         title, expected, why, fix = RULES[group["rule"]]
@@ -191,7 +192,6 @@ def judge(walk, budget):
     findings.sort(key=lambda finding: (SEVERITIES.index(finding["severity"]), finding["title"]))
     return findings, incomplete
 
-
 def bug_block(finding, number, build, source):
     """One bug for bugs.md, in the form bugs.py reads and forge-check test Step 5 shows."""
     evidence = "%s; %s (rule %s)" % (plain(finding["screenshot"] or "no screenshot", 200), source, finding["rule"])
@@ -203,14 +203,12 @@ def bug_block(finding, number, build, source):
         "steps: " + finding["steps"], "expected: " + finding["expected"],
         "actual: %s (%s)" % (finding["actual"], finding["why"]), "evidence: " + evidence, "fixed in: -", ""])
 
-
 def known_bugs(path):
     """(titles, next number) from the bug headings of an existing bugs.md."""
     with open(path, "rb") as handle:
         text = handle.read(MAX_BYTES).decode("utf-8-sig", errors="replace")
     heads = re.findall(r"(?m)^## B(\d{3,}) \[\w+\] \[\w+\] (.*?)\s*$", text)
     return {title for _, title in heads}, max([int(number) for number, _ in heads] or [0]) + 1
-
 
 def load(path, shape):
     """The JSON file at PATH, or a ValueError that says in plain words what is wrong with it."""
@@ -228,7 +226,6 @@ def load(path, shape):
     if not isinstance(value, shape):
         raise ValueError("%s does not have the right shape (see ../forge-check/walk.md)" % path)
     return value
-
 
 def main(argv=None):
     """Run the check from the command line. Returns the exit code: 0, 1 or 2 (see the top)."""
@@ -294,7 +291,6 @@ def main(argv=None):
         print("FAIL: at least one finding is %s or worse." % args.fail_on if failed
               else "PASS: no finding is %s or worse." % args.fail_on)
     return 1 if failed else 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

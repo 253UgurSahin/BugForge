@@ -1,5 +1,5 @@
 {
- "about": "Data for supply.py. rules: the words of each finding ({0} is the file). popular: well-known package names per registry, for the look-alike check: a name one letter away from one of these is reported, a name on the list never is. Add a name here when a real package you use is reported as a look-alike.",
+ "about": "Data for supply.py. rules: the words of each finding ({0} is the file). popular: well-known package names per registry, for the look-alike check: a name one letter away from one of these is reported, a name on the list never is. Add a name here when a real package you use is reported as a look-alike. locks: the lockfiles read as text, each with its registry and a pattern whose three groups are a package's name, its version and the address it came from (empty: the registry); they hold no licences or install scripts.",
  "rules": {
   "supply-no-lockfile": {
    "severity": "high",
@@ -61,6 +61,17 @@
    "why": "without the hash the installer cannot tell that a download was changed on the way",
    "fix": "run npm install again so the lockfile gets the hashes, and commit it"
   }
+ },
+ "locks": {
+  "yarn.lock": ["npm", "^\"?((?:@[\\w.-]+/)?[\\w.-]+)@[^\\n]*:\\r?\\n\\s+version:?\\s+\"?([^\"\\s]+)\"?(?:\\r?\\n\\s+resolved:?\\s+\"?([^\"\\s#]+))?",
+                "names, versions and download addresses only: it holds no licences or install scripts"],
+  "pnpm-lock.yaml": ["npm", "^  '?/?((?:@[\\w.-]+/)?[\\w.-]+)[@/](\\d[^:(_'\\s]*)[^:\\n]*:\\r?\\n\\s+resolution: \\{(?:[^}\\n]*?tarball: ([^,}\\s]+))?",
+                     "names, versions and tarball addresses only: it holds no licences or install scripts"],
+  "bun.lock": ["npm", "\"[^\"]+\":\\s*\\[\"((?:@[\\w.-]+/)?[\\w.-]+)@(\\d[^\"]*)\"(?:,\\s*\"([^\"]*)\")?",
+               "names, versions and registries only: it holds no licences or install scripts"],
+  "Pipfile.lock": ["pypi", "\"([\\w.-]+)\":\\s*\\{[^{}]*?\"version\":\\s*\"==([^\"]+)\"()",
+                   "names and versions only: it holds no licences, and the index each package comes from is not checked"],
+  "bun.lockb": ["npm", null, "a binary lockfile is not read: bun 1.2 or newer writes a text bun.lock (bun install --save-text-lockfile, with the user's go)"]
  },
  "popular": {
   "npm": [

@@ -17,7 +17,8 @@ finding). A finding is something you saw, with file and line; a hunch goes under
 ## Step 1: stack and size
 
 1. `python3 ../forge-check/detect.py .`: languages, frameworks with versions, databases, containers,
-   test tools, CI and the closest forge profile. A profile that does not fit the code (static, but there
+   test tools, CI, the theming (Tailwind, Sass, MUI ...), the package manager its lockfile names and
+   the closest forge profile. A profile that does not fit the code (static, but there
    are PHP files): go by the code and say so. `none`: say that forge's build skills know four profiles.
 2. `python3 ../forge-check/inventory.py .`: lines per language, the biggest files, TODO markers, tests
    against code, a checklist and one low finding for code files over 500 lines. Files it lists as
@@ -40,9 +41,11 @@ Ignored and never committed: no finding; note it under Numbers; `.dockerignore` 
 ## Step 3: tests and framework checks
 
 These run the project's code, so ask first: "May I run your tests and the framework checks here?"
-Tests can empty their database: if `phpunit.xml`, the test settings or the user do not show it is a
-local or test one, do not run them; report it as high. Use the compose stack when there is one
-(`docker compose run --rm app <command>`). Installs, or an `npx` that downloads, need their own go.
+Tests can empty their database: first `python3 ../forge-check/testdb.py .`. SAME DATABASE: do not
+run them, and report it as high (the tests reach the database the app uses). NOT SURE: do not run
+them unless the user names a test database; say so under "Not checked". Use the compose stack when
+there is one (`docker compose run --rm app <command>`). Installs, or an `npx` that downloads, need
+their own go.
 
 | Profile | Tests | Framework checks |
 | --- | --- | --- |

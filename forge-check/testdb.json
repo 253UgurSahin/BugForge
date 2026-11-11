@@ -1,0 +1,52 @@
+{
+  "about": [
+    "What testdb.py knows. Edit this file to teach it a database package, a test runner or a way tests empty a database.",
+    "packages: npm packages that reach a database. A node app with none of them (nor a workspace of the repo it uses",
+    "that lists one), and no file that imports node:sqlite or bun:sqlite, has no database to empty, unless a test file",
+    "resets or empties one.",
+    "runners: npm packages that run tests: a package.json that lists one has tests, also without a test script.",
+    "setups: a node app's test set-up files that count without a config naming them; app_env: the .env files of its app.",
+    "resets: Python regular expressions, joined with |: a test file whose text matches one resets or empties a database.",
+    "SQL counts in capitals (TRUNCATE), and in small letters only as a statement (truncate table, delete from x where),",
+    "so a CSS class or a function named truncate, or a test named 'delete from the cart', is no reset.",
+    "drivers: two names for one kind of database server, compared as one (Laravel's own driver names on the right).",
+    "advice: per stack, how its tests get a database of their own.",
+    "words: the line per verdict; %(tests)s, %(app)s and %(advice)s are filled in.",
+    "other: files of a stack testdb.py does not read: there it cannot tell which database the tests reach."
+  ],
+  "packages": [
+    "prisma", "@prisma/client", "drizzle-orm", "knex", "kysely", "typeorm", "sequelize", "@mikro-orm/core",
+    "pg", "postgres", "pg-promise", "@neondatabase/serverless", "@vercel/postgres", "@electric-sql/pglite",
+    "mysql", "mysql2", "@planetscale/database", "mssql", "tedious", "oracledb",
+    "better-sqlite3", "sqlite3", "sqlite", "@libsql/client",
+    "mongoose", "mongodb", "redis", "ioredis",
+    "@supabase/supabase-js", "firebase-admin", "@google-cloud/firestore"
+  ],
+  "runners": ["vitest", "jest", "mocha", "ava", "uvu", "tap", "jasmine"],
+  "setups": ["tests/setup.ts", "tests/setup.js", "test/setup.ts", "test/setup.js", "vitest.setup.ts", "jest.setup.js",
+             "jest.setup.ts"],
+  "app_env": [".env", ".env.local", ".env.development", ".env.development.local"],
+  "resets": [
+    "[Rr]efreshDatabase", "DatabaseMigrations", "DatabaseTruncation", "migrate[:. ](?:fresh|refresh|reset|rollback)",
+    "db push --force-reset", "--accept-data-loss", "deleteMany\\(", "\\.truncate\\(\\s*[){]", "\\.del(?:ete)?\\(\\)",
+    "dropDatabase", "dropSchema", "clearDatabase", "recursiveDelete\\(", "sync\\(\\{\\s*force:\\s*true",
+    "\\bTRUNCATE\\b", "\\bDROP\\s+(?:TABLE|DATABASE|SCHEMA)\\b", "\\bDELETE\\s+FROM\\b", "(?i:\\bflush_?(?:all|db)\\b)",
+    "\\btruncate\\s+table\\b", "\\bdrop\\s+(?:table|database|schema)\\s+if\\s+exists\\b",
+    "\\b(?:delete\\s+from|drop\\s+(?:table|database|schema))\\s+[\\w.\"`]+\\s*(?:where\\b|;)"
+  ],
+  "drivers": {"postgres": "pgsql", "postgresql": "pgsql", "mariadb": "mysql", "mysql2": "mysql", "mssql": "sqlsrv",
+              "sqlserver": "sqlsrv"},
+  "advice": {
+    "laravel": "a test database of its own (in phpunit.xml <env name=\"DB_DATABASE\" value=\"<name>_test\" force=\"true\"/>, plus <env name=\"DB_URL\" value=\"\" force=\"true\"/> when .env sets DB_URL, as its URL names the database (DATABASE_URL: the same line with that name); and that database made once)",
+    "django": "a TEST NAME of its own in DATABASES",
+    "node": "a test database of its own in .env.test or the test set-up file (a name that ends in _test)"
+  },
+  "words": {
+    "own": "a database of their own: running them is safe.",
+    "none": "no database to empty: running them is safe.",
+    "same": "SAME DATABASE: the tests use %(tests)s, the one the app uses here, and can delete every record in it. Do not run them. Ask the user, naming it: their go, or %(advice)s first.",
+    "unsure": "NOT SURE which database the tests reach%(app)s. Ask the user before you run them, naming it: the tests can delete every record in it. Their go, or %(advice)s first."
+  },
+  "other": ["Gemfile", "go.mod", "Cargo.toml", "pom.xml", "build.gradle", "mix.exs", "pyproject.toml", "requirements.txt",
+            "composer.json"]
+}

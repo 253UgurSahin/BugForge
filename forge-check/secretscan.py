@@ -16,10 +16,10 @@ define('DB_PASSWORD', '...')). A real .env file (.env, .env.local, ...) is high,
 are scanned. Two exceptions. One git ignores (so it stays on this machine) is low, and so are
 its lines, but a Stripe live key stays critical (forge works in test mode only); no git: high.
 One with only public build values (VITE_..., NEXT_PUBLIC_...) is fine, unless a name says SECRET,
-PRIVATE or PASSWORD, and so is a .env.production with no settings. Skipped: placeholders
-(changeme, ${DB_PASS}, App\\Rules\\Password), lines with forge:allow, SKIP_FOLDERS (.git,
-node_modules, vendor, build and cache folders, Laravel's generated bootstrap/cache), symlinks,
-binary files, files over 1 MB. Not checked: unquoted values, values with spaces, git history.
+PRIVATE or PASSWORD, and so is a .env.production with no settings. Skipped: placeholders (changeme,
+${DB_PASS}, App\\Rules\\Password), design tokens (var(--ok), --ok, #0b122080; text-muted for a *_TOKEN name),
+lines with forge:allow, SKIP_FOLDERS (.git, node_modules, vendor, build and cache folders, Laravel's
+bootstrap/cache), symlinks, binary files, files over 1 MB. Not checked: unquoted values, spaces, git history.
 
 Exit codes: 0 nothing at or above --fail-on (default: high); 1 at least one finding at or above
 it; 2 bad usage, a missing path, or something under it could not be read (incomplete scan).
@@ -36,9 +36,8 @@ import sys
 
 SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
 MAX_BYTES = 1024 * 1024
-SKIP_FOLDERS = {".git", "node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build",
-                ".next", ".nuxt", "out", "coverage", "storage/framework", ".cache", ".idea", ".vscode",
-                "bootstrap/cache"}  # Laravel's generated caches: its own .gitignore keeps them out
+SKIP_FOLDERS = {".git", "node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".next", ".nuxt",
+                "out", "coverage", "storage/framework", ".cache", ".idea", ".vscode", "bootstrap/cache"}
 
 Rule = collections.namedtuple("Rule", "severity title pattern why fix")
 
@@ -126,18 +125,22 @@ PLACEHOLDER_VALUES = {"password", "passwd", "pass", "secret", "token", "null", "
 PLACEHOLDER = re.compile(r"""
       ^<.*>$ | ^\{.*\}$ | ^\$\{.*\}$ | ^\$[A-Z_][A-Z0-9_]*$   # <pw>  {pw}  ${DB_PASS}  $DB_PASS
     | ^%s$ | ^%\(\w+\)s$ | ://                     # format strings; URLs (checked by the rule above)
-    | env\( | getenv | process\.env | os\.environ    # code that reads the environment
+    | env\( | getenv | process\.env | os\.environ | ^var\(-- | ^(?:rgb|hsl|oklch|oklab|color)a?\(  # the env; CSS
+    | ^--[a-z][a-z0-9-]*$ | ^\#(?:[0-9a-fA-F]{3,4}){1,2}$     # a CSS variable's name, a hex colour: #0b122080
     | ^(?:bail|required|nullable|sometimes|string|confirmed)\|   # Laravel rules: required|min:8
     | ^\\{0,2}(?:[A-Za-z_]\w*\\{1,2})+[A-Za-z_]\w*$     # a PHP class name: App\\Rules\\Password
     | (?i: your[-_] | changeme | change[-_]me | example | placeholder | xxx )
 """, re.VERBOSE)
+TOKEN_VALUE = re.compile(r"(?:color|bg|text|border|ring|fill|stroke|space|radius|rounded|shadow|font|motion|duration"
+                         r"|ease|chart|size|layout)-[a-z0-9-]+(?:/\d{1,3})?$")  # a token: text-muted, bg-surface/80
 
-def is_placeholder(rule, value):
-    """True for values that are clearly not real: 'changeme', '${DB_PASS}', '<password>', '****'."""
+def is_placeholder(rule, value, before=""):
+    """True for clear fakes ('changeme', '${DB_PASS}', '<pw>', '****'), and a TOKEN_VALUE after BEFORE's *_TOKEN =."""
     low = value.lower()
     if rule in KEY_RULES:
         return any(word in low for word in KEY_PLACEHOLDER_WORDS)
-    return low in PLACEHOLDER_VALUES or len(set(low)) == 1 or PLACEHOLDER.search(value) is not None
+    token = re.search(r"(?i)token\d*['\"]?\s*(?:=>|:=|=|:)\s*['\"]$", before) and TOKEN_VALUE.match(value)
+    return low in PLACEHOLDER_VALUES or len(set(low)) == 1 or PLACEHOLDER.search(value) is not None or bool(token)
 
 def scan_line(line):
     """Return (rule, secret) pairs for one line. Every rule runs; text already reported by one
@@ -150,7 +153,7 @@ def scan_line(line):
         for match in rule.pattern.finditer(line):
             start, end = match.span(part)
             seen = any(start < old_end and old_start < end for old_start, old_end in taken)
-            if not seen and not is_placeholder(rule, match.group(part)):
+            if not seen and not is_placeholder(rule, match.group(part), line[match.start():start]):
                 hits.append((rule, match.group(part)))
                 taken.append((start, end))
     return hits
@@ -262,12 +265,9 @@ def format_human(findings, summary):
     result = "%d %s: %s." % (len(findings), noun, counts) if findings else "No findings."
     skipped = ", skipped: %d (binary or over 1 MB)" % summary["files_skipped"] if summary["files_skipped"] else ""
     lines.append("Files checked: %d%s. %s" % (summary["files_checked"], skipped, result))
-    if summary["unreadable"]:
-        lines.append("INCOMPLETE, so not a pass. Could not read: " + ", ".join(summary["unreadable"]))
-    elif summary["failed"]:
-        lines.append("FAIL: at least one finding is %s or worse." % summary["fail_on"])
-    else:
-        lines.append("PASS: nothing is %s or worse." % summary["fail_on"])
+    verdict = "FAIL: at least one finding is %s or worse." if summary["failed"] else "PASS: nothing is %s or worse."
+    lines.append("INCOMPLETE, so not a pass. Could not read: " + ", ".join(summary["unreadable"])
+                 if summary["unreadable"] else verdict % summary["fail_on"])
     # A file name with bytes that are not UTF-8 prints as \udce9 instead of crashing the output.
     return "\n".join(lines).encode("utf-8", "backslashreplace").decode("utf-8")
 

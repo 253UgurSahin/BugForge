@@ -160,10 +160,13 @@ class RuleTests(unittest.TestCase):
     def test_real_passwords_with_brackets_dollars_or_words_are_found(self):
         # Regression: any '{', '<', '$' or 'your' in a value used to make it a "placeholder".
         for value in ["kT9#x{" + "Lq2!vR8m", "Zp4<Wn8" + "sQ1rT6y", "$ecr3t" + "Passw0rd",
-                      "Yourstruly" + "2024!", "Sampler" + "!8842", "Dummy88" + "12Kq"]:
+                      "Yourstruly" + "2024!", "Sampler" + "!8842", "Dummy88" + "12Kq",
+                      "var-" + "Qx81kLm2", "rgbK" + "q19Xz77", "colorp" + "W3n8Rt"]:  # not a CSS value
             with self.subTest(value=value):
                 self.assertEqual(titles("DB_PASSWORD = '" + value + "'"), [HARD])
         self.assertEqual(titles("postgres://app:" + "Xy{9kL2m" + "@db/app"), [CONN])
+        self.assertEqual(titles('MIXED_TOKEN = "color-' + 'Xk82mQ9zLp"'), [HARD], "a random value after a token group")
+        self.assertEqual(titles("DB_PASSWORD = 'text-" + "accent-strong'"), [HARD], "a token's name only for *_TOKEN")
 
     def test_long_minified_lines_stay_fast(self):
         # These took minutes with unbounded regex parts (quadratic backtracking).
@@ -217,6 +220,14 @@ class FalsePositiveTests(unittest.TestCase):
             "<a class='sk-" + "product-card-title-large-and-wide-x'>",  # a slug, not an OpenAI key
             "url = 'https://hooks.slack.com/" + "services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'",
             "stripe listen  # prints whsec_..., put it in .env",
+            'STATUS_TOKEN = "var(--color-pass-no)"',  # a design token, the forge design skill's own word
+            "BRAND_TOKEN = 'rgb(15,123,108)'",
+            'accentToken: "oklch(0.72,0.11,180)"',
+            'PASS_TOKEN = "--color-pass-yes"',  # a CSS variable's name
+            'SCRIM_TOKEN = "#0b122080"',  # a hex colour with its alpha
+            'FAIL_TOKEN = "color-pass-no"',  # a token group's name, for a *_TOKEN name
+            "ACCENT_TOKEN = 'text-accent-strong'",  # a Tailwind class
+            'tintToken: "bg-surface/80"',  # with Tailwind's opacity
         ]
         for line in lines:
             with self.subTest(line=line):

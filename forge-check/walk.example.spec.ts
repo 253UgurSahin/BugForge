@@ -30,15 +30,26 @@
 // is skipped and walkcheck.py then says the walk is incomplete: run the setup project first
 // (E2E_PASSWORD), or take the route out and write it under "Not tested".
 //
+// Light and dark: each page opens with the system set to light and to dark, and its result records
+// `theme`, the theme the page says it shows (data-theme, data-bs-theme, a dark or light class on <html>,
+// else its color-scheme; "" when it says none). An app that keeps its own theme (a stored choice, a dark
+// default) shows that one twice, and walkcheck.py calls the walk incomplete. FORGE_INIT_SCRIPT=<file> runs
+// that file in every page before the app's own scripts: one line that stores the app's own choice for
+// the setting, with its own key and values (../forge-check/walk.md, "Light and dark"):
+//   localStorage.setItem('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+// An app with one theme only: FORGE_SCHEMES=light (or dark) walks that one, and test-plan.md says so.
+// One route with one theme by design (a light landing page in a dark app): "schemes": ["light"] in its entry.
+//
 // What it writes, forge-work/test/walk.json (../forge-check/walk.md has every field):
 //   { "version": 1, "base_url", "round", "widths": [390, 768, 1440], "schemes": ["light", "dark"],
-//     "routes": [the routes above], "results": [one per route, width and scheme] }
-// One result: route, path, as, width, scheme, loaded, error, skipped, status, redirected_to,
+//     "routes": [the routes above], "results": [one per route, width and scheme], "init_script" }
+// One result: route, path, as, width, scheme, loaded, error, skipped, status, redirected_to, theme,
 // screenshot, console_errors, page_errors, failed_requests, bad_responses, broken_links,
 // links_checked, axe, overflow_px, clipped, overlaps, small_targets, perf, incomplete.
 //
 // Links: every same-origin link is asked for once per run with a GET, as the route's user. Links
-// that look like they change something (log out, delete, ...) are never followed: see UNSAFE_LINK.
+// that look like they change something (log out, delete, approve, verwijderen, ...: see UNSAFE_LINK),
+// or that a script sends as another method (data-method="delete") or as a download, are never followed.
 import { test, expect, type Page, type Request } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import * as fs from 'fs';
@@ -56,18 +67,27 @@ const SHOTS = path.join(WORK, 'test', 'shots', ROUND);
 const AUTH_DIR = process.env.FORGE_AUTH_DIR || '.auth'; // where the setup project saves the cookies
 
 const VIEWPORTS = [{ width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }];
-const SCHEMES = ['light', 'dark'] as const;
+const SCHEMES = (['light', 'dark'] as const).filter((scheme) =>
+  (process.env.FORGE_SCHEMES || 'light,dark').split(',').map((name) => name.trim()).includes(scheme));
+// FORGE_INIT_SCRIPT, from e2e/ or the project root: it runs in every page before the app's own scripts.
+const INIT_SCRIPT = process.env.FORGE_INIT_SCRIPT ? [path.resolve(process.env.FORGE_INIT_SCRIPT),
+  path.resolve('..', process.env.FORGE_INIT_SCRIPT)].find((file) => fs.existsSync(file)) : undefined;
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const ASSETS = ['script', 'stylesheet', 'image', 'font'];
 const CAP = 25; // at most this many entries of one kind per page, so walk.json stays small
 const MAX_LINKS = 500; // links asked for in one run
-// A GET on these could sign the seed user out or change data, so they are not followed.
-const UNSAFE_LINK = /log-?out|sign-?out|delete|remove|destroy|unsubscribe|cancel|export|download/i;
+// A GET on these could sign the user out, change data, send something or switch the session (an admin's
+// impersonate), so they are not followed. English and Dutch; the short words only as a word of their own.
+const UNSAFE_LINK = new RegExp('log-?out|sign-?out|uitlog|afmeld|delete|remove|destroy|verwijder|unsubscribe|uitschrijv'
+  + '|cancel|annule|opzeg|export|download|impersonat|login-?as|approve|goedkeur|reject|afwijz|blokke|archiv|restore'
+  + '|herstel|publish|publice|toggle|activ(?:at|eer|eren)|reset|mark-?(?:all-?)?(?:as-?)?read|refund|duplicate|verzend'
+  + '|verstu|accepte|bevestig|deelnem'
+  + '|(?:^|[^a-z])(?:un-?)?(?:ban|block|send|resend|accept|decline|join|leave|verify)(?![a-z])', 'i');
 // What a user can click or type in. A tap target smaller than 24 by 24 px is hard to hit.
 const INTERACTIVE = 'a[href], button, input:not([type="hidden"]), select, textarea, summary, '
   + '[role="button"], [role="link"], [role="checkbox"], [role="switch"], [role="tab"], [role="menuitem"]';
 
-type Route = { name: string; path: string; as: string | null };
+type Route = { name: string; path: string; as: string | null; schemes?: string[] };
 type Result = Record<string, unknown> & { route: string; width: number; scheme: string };
 
 // A query string can hold a token, so only the part before it is written down.
@@ -80,16 +100,20 @@ function readRoutes(): Route[] {
   if (!Array.isArray(raw) || raw.length === 0) throw new Error('it must be a list with at least one route');
   const names = new Set<string>();
   return raw.map((route) => {
-    const { name, path: target } = route ?? {};
+    const { name, path: target, schemes } = route ?? {};
     const as = route?.as ?? null;
     if (typeof name !== 'string' || !/^[\w-]+$/.test(name)) throw new Error(`bad name: ${JSON.stringify(name)}`);
     if (names.has(name)) throw new Error(`the name ${name} is used twice`);
     if (typeof target !== 'string' || !/^\/(?!\/)/.test(target)) throw new Error(`${name}: path must start with one /`);
     if (as !== null && (typeof as !== 'string' || !/^[\w-]+$/.test(as))) throw new Error(`${name}: bad "as"`);
+    if (schemes !== undefined && (!Array.isArray(schemes) || schemes.length === 0
+      || schemes.some((one: unknown) => one !== 'light' && one !== 'dark'))) throw new Error(`${name}: bad "schemes"`);
     names.add(name);
-    return { name, path: target, as };
+    return schemes ? { name, path: target, as, schemes } : { name, path: target, as };
   });
 }
+// The schemes a route is walked in: those of FORGE_SCHEMES that its own "schemes" (one theme by design) keeps.
+const schemesOf = (route: Route) => SCHEMES.filter((scheme) => !route.schemes || route.schemes.includes(scheme));
 
 let ROUTES: Route[] = [];
 let routesError = '';
@@ -107,12 +131,13 @@ function save(changed: Result[], fresh = false) {
   }
   const replaced = new Set(changed.map(key));
   const wanted = new Set(ROUTES.flatMap((route) => VIEWPORTS.flatMap(({ width }) =>
-    SCHEMES.map((scheme) => key({ route: route.name, width, scheme })))));
+    schemesOf(route).map((scheme) => key({ route: route.name, width, scheme })))));
   const results = old.filter((result) => wanted.has(key(result)) && !replaced.has(key(result))).concat(changed);
   fs.mkdirSync(path.dirname(WALK_FILE), { recursive: true });
   fs.writeFileSync(WALK_FILE, JSON.stringify({
     version: 1, base_url: BASE_URL, round: ROUND, written: new Date().toISOString(),
     widths: VIEWPORTS.map(({ width }) => width), schemes: SCHEMES, routes: ROUTES, results,
+    init_script: INIT_SCRIPT ? path.relative(path.dirname(WORK), INIT_SCRIPT).replace(/\\/g, '/') : null,
   }, null, 2));
 }
 
@@ -124,8 +149,11 @@ const linksSeen = new Set<string>(); // each link is asked for once per run and 
 
 test('walk: read routes.json and start a fresh walk.json', () => {
   expect(routesError, routesError).toBe('');
+  expect(SCHEMES.length, 'FORGE_SCHEMES names light, dark or both').toBeGreaterThan(0);
+  expect(!process.env.FORGE_INIT_SCRIPT || INIT_SCRIPT, `FORGE_INIT_SCRIPT: ${process.env.FORGE_INIT_SCRIPT} `
+    + 'is not a file here or in the project root').toBeTruthy();
   // Every page starts as "not run", so a page the run never reaches is seen as missing, not as fine.
-  save(ROUTES.flatMap((route) => VIEWPORTS.flatMap(({ width }) => SCHEMES.map((scheme) => ({
+  save(ROUTES.flatMap((route) => VIEWPORTS.flatMap(({ width }) => schemesOf(route).map((scheme) => ({
     route: route.name, path: route.path, as: route.as, width, scheme, loaded: false, error: 'not run',
   })))), true);
 });
@@ -215,15 +243,33 @@ async function measureLayout(page: Page) {
     }
     window.scrollTo(0, 0);
 
-    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
-      .map((anchor) => ({ href: anchor.href, text: label(anchor) }));
+    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]')).map((anchor) => ({
+      href: anchor.href, text: label(anchor), download: anchor.hasAttribute('download'),
+      method: (anchor.dataset.method || anchor.dataset.turboMethod || 'get').toLowerCase(), // Rails, Laravel UJS
+    }));
     return { overflow_px, clipped, overlaps, small_targets, links };
   }, { selector: INTERACTIVE, cap: CAP });
 }
 
+// The theme the page says it shows: "light" or "dark" from data-theme, data-color-scheme, data-mode or
+// data-bs-theme, or a dark or light class, on <html> or <body>; else its color-scheme; "" when it says none.
+function themeShown() {
+  let theme = '';
+  for (const node of [document.documentElement, document.body]) {
+    for (const name of ['data-theme', 'data-color-scheme', 'data-mode', 'data-bs-theme']) {
+      const value = node?.getAttribute(name);
+      if (!theme && (value === 'dark' || value === 'light')) theme = value;
+    }
+    if (!theme && node?.classList.contains('dark')) theme = 'dark';
+    if (!theme && node?.classList.contains('light')) theme = 'light';
+  }
+  const scheme = getComputedStyle(document.documentElement).colorScheme.replace('only ', '').trim();
+  return theme || (scheme === 'dark' || scheme === 'light' ? scheme : '');
+}
+
 for (const route of ROUTES) {
   for (const viewport of VIEWPORTS) {
-    for (const scheme of SCHEMES) {
+    for (const scheme of schemesOf(route)) {
       test(`walk ${route.name} ${viewport.width} ${scheme}`, async ({ browser }) => {
         const result: Result = {
           route: route.name, path: route.path, as: route.as, width: viewport.width, scheme,
@@ -240,6 +286,7 @@ for (const route of ROUTES) {
         const context = await browser.newContext({
           baseURL: BASE_URL, viewport, colorScheme: scheme, reducedMotion: 'reduce', storageState: state,
         });
+        if (INIT_SCRIPT) await context.addInitScript({ path: INIT_SCRIPT }); // the app's own theme for this setting
         const page = await context.newPage();
         const console_errors: string[] = [];
         const page_errors: string[] = [];
@@ -291,6 +338,7 @@ for (const route of ROUTES) {
           const same = (a: string, b: string) => a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
           result.redirected_to = same(landed.pathname, new URL(route.path, BASE_URL).pathname)
             ? null : tidy(landed.pathname);
+          result.theme = await page.evaluate(themeShown).catch(() => null);
 
           const speed = await measureSpeed(page).catch((error) => {
             incomplete.push(`speed: ${tidy(String(error))}`);
@@ -313,7 +361,7 @@ for (const route of ROUTES) {
             incomplete.push(`axe: ${tidy(String(error))}`);
           }
 
-          let links: { href: string; text: string }[] = [];
+          let links: { href: string; text: string; download: boolean; method: string }[] = [];
           try {
             const layout = await measureLayout(page);
             links = layout.links;
@@ -343,8 +391,8 @@ for (const route of ROUTES) {
             try { url = new URL(link.href); } catch { continue; }
             url.hash = '';
             const seen = `${route.as}|${url.href}`;
-            if (!/^https?:$/.test(url.protocol) || url.origin !== origin || UNSAFE_LINK.test(url.href)
-              || linksSeen.has(seen) || linksSeen.size >= MAX_LINKS) continue;
+            if (!/^https?:$/.test(url.protocol) || url.origin !== origin || UNSAFE_LINK.test(url.pathname + url.search)
+              || link.download || link.method !== 'get' || linksSeen.has(seen) || linksSeen.size >= MAX_LINKS) continue;
             linksSeen.add(seen);
             checked += 1;
             const status = await context.request.get(url.href, { timeout: 15_000 })

@@ -20,7 +20,8 @@ import time
 import unittest
 from unittest import mock
 
-from _load import load, run_cp1252, symlink
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
+from _load import load, run_cp1252, symlink  # noqa: E402
 
 mod = load("forge-check", "deps")
 
@@ -400,12 +401,14 @@ class PlanTests(unittest.TestCase):
         self.assertIn("pipenv requirements", self.plan("Pipfile", "Pipfile.lock")[0][3])
         self.assertIn("pip-compile", self.plan("pyproject.toml")[0][3])
 
-    def test_yarn_and_pnpm_only_get_a_note(self):
-        plan = self.plan("pnpm-lock.yaml", "yarn.lock")
+    def test_yarn_pnpm_and_bun_only_get_a_note(self):
+        plan = self.plan("pnpm-lock.yaml", "yarn.lock", "bun.lock")
         self.assertEqual([(name, cmd) for name, cmd, _, _ in plan],
-                         [("pnpm-lock.yaml", None), ("yarn.lock", None)])
+                         [("pnpm-lock.yaml", None), ("yarn.lock", None), ("bun.lock", None)])
         self.assertIn('"pnpm audit"', plan[0][3])
         self.assertIn('"yarn npm audit"', plan[1][3])
+        self.assertIn('"bun audit"', plan[2][3])
+        self.assertIn('"bun audit"', self.plan("bun.lockb")[0][3])  # a lockfile: never "create its lockfile first"
 
     def test_other_files_are_ignored(self):
         self.assertEqual(self.plan("index.php", "package.json", "composer.json", "README.md"), [])

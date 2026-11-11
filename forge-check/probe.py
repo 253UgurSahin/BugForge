@@ -16,7 +16,9 @@ Usage:
 --paths: a text file, one path per line with an optional query string (/search?q=tea). Each page is loaded and
 each query parameter tested; without it only / is loaded.
 Exit codes: 0 = nothing at or above --fail-on (default: high); 1 = a finding at or above it;
-2 = refused (target not in scope), bad input, app not reachable, or the run was cut short. Never a pass.
+2 = refused (target not in scope), bad input, app not reachable, or the run was cut short (also after a
+finding). Never a pass. --json prints the report on stdout, but that of a run cut short on stderr: a file
+that stdout is saved in then stays empty, so only a finished run ever counts as the evidence of level 4.
 """
 
 import argparse
@@ -288,8 +290,9 @@ def main(argv=None):
     lines += ["- " + note for note in run.notes]
     lines += ["", "The run was cut short (see Not checked): not a pass. Fix that and run again."] if run.cut_short else []
     report = {"findings": run.findings, "not_checked": run.notes, "summary": summary}
-    print(json.dumps(report, indent=2) if args.json else "\n".join(lines), flush=True)
-    return 1 if failed else 2 if run.cut_short else 0
+    print(json.dumps(report, indent=2) if args.json else "\n".join(lines), flush=True,
+          file=sys.stderr if args.json and run.cut_short else sys.stdout)  # cut short: never in a saved report
+    return 2 if run.cut_short else 1 if failed else 0
 
 if __name__ == "__main__":
     sys.exit(main())
