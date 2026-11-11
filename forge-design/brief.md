@@ -1,6 +1,7 @@
 # Design brief: {{app name}}
 
 Concept: {{the letter and name the user picked, such as B (Open book), with the colours of A}}. The user said: "{{their words, as they typed them}}"
+Picked by: {{the user | Claude for the user, on their word ("you choose"), and why this one; they can still pick another}}
 Level: {{the look level on record (python3 ../forge/level.py get look), as a number and its name: 4 (Showpiece)}}
 Date: {{YYYY-MM-DD}}
 Kind: {{new app | redesign of an app that exists}}
@@ -19,6 +20,11 @@ Kind: {{new app | redesign of an app that exists}}
 - The one job of the first screen: {{see today's bookings and the next free slot}}
 - How it should feel to that person: {{three words}}. Never: {{three words}}
 
+## Keep
+
+- The app's own taste that stays, each with why, in its own words where it has them: {{its colour, a font and the reason the app gave for it, icons or drawings made for it, its voice; a new app: what the user asked to keep, or nothing yet}}
+- Of "The generic look" (../forge-design/review.md), what is part of that taste: {{none | the item, and why it stays: the brief asks for it by name here, so it is no fault}}
+
 ## Concept
 
 - One sentence, taken from the product's own world (its material, tool, place or ritual), that every
@@ -36,7 +42,7 @@ Kind: {{new app | redesign of an app that exists}}
 
 - Neutrals: {{warm | cool | true grey}}, tinted towards {{what}}. Surfaces: {{how many levels}}
 - Accent: {{one accent, used only for the main action and the current state}}; where it never goes: {{...}}
-- Dark theme: {{yes, designed on its own | no, because ...}}
+- Dark theme: {{yes, designed on its own, and which one opens while nothing is chosen: the concept's, or the app's own switch keeps its default and both are equals | no, because ...}}
 
 ## Layout and space
 
@@ -65,4 +71,4 @@ Kind: {{new app | redesign of an app that exists}}
 ## Not this
 
 - The generic look this design stays away from, each with what it does instead:
-  {{three items from the list in ../forge-design/review.md, "The generic look", with the alternative}}
+  {{three items from the list in ../forge-design/review.md, "The generic look" (none that ## Keep keeps), with the alternative}}

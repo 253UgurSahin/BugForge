@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -84,6 +85,20 @@ class PlainCss(unittest.TestCase):
             self.assertIn(part, mapping)
             self.assertIn(part, out)
 
+    def test_the_switch_in_components_md_is_the_one_theme_py_writes(self):
+        """The rules of components.md's ## Theme block are those theme.py writes for a dark group (--default
+        system), and the selector its comment names for --default light or dark is theirs: no drift."""
+        with open(COMPONENTS, encoding="utf-8") as handle:
+            mapping = handle.read().split("## Theme", 1)[1].split("```css", 1)[1].split("```", 1)[0]
+        def selectors(css):
+            return re.findall(r"^\s*([:@][^{]*?)\s*\{", re.sub(r"/\*.*?\*/", "", css, flags=re.S), re.M)
+        tokens = self.file(SWITCHED)
+        self.assertEqual(selectors(mapping), selectors(run(tokens, "--tailwind", "no")[1]))
+        named = re.search(r"--default light or dark: (:root\S+) \*/", mapping).group(1)
+        for default in ("light", "dark"):
+            out = run(tokens, "--tailwind", "no", "--default", default)[1]
+            self.assertIn("@media (prefers-color-scheme: dark) {\n  %s {\n" % named, out)
+
     def test_dark_theme_nested_names_and_token_objects(self):
         tokens = {"color": {"bg": {"$value": "#ffffff"}, "text": {"muted": {"value": "#5b6470"}},
                             "dark": {"bg": "#0b0d10", "text": {"muted": "#9aa3ad"}}},
@@ -91,11 +106,13 @@ class PlainCss(unittest.TestCase):
         code, out, err = run(self.file(tokens), "--tailwind", "no")
         self.assertEqual(code, 0, err)
         self.assertIn("  --color-bg: #ffffff;\n  --color-text-muted: #5b6470;\n", out)
-        self.assertIn("@media (prefers-color-scheme: dark) {\n  :root {\n    --color-bg: #0b0d10;\n"
-                      "    --color-text-muted: #9aa3ad;\n  }\n}\n", out)
+        self.assertIn('@media (prefers-color-scheme: dark) {\n  :root:not([data-theme="light"]) {\n'
+                      "    color-scheme: dark;\n    --color-bg: #0b0d10;\n    --color-text-muted: #9aa3ad;\n  }\n}\n", out)
         self.assertNotIn("--color-dark", out)
         self.assertIn("  --space-0_5: 2px;\n  --space-1_5: 6px;\n  --space-2: 8px;\n", out)
-        self.assertEqual(out.count(":root {"), 2)  # no second plain block: no motion, layout or size
+        self.assertEqual(out.count(":root {"), 2)  # the colours, then color-scheme: light (no motion, layout, size)
+        self.assertIn(":root {\n  color-scheme: light;\n}\n", out)
+        self.assertEqual(run(self.file(tokens), "--tailwind", "no", "--default", "system")[1], out)  # the default
         self.assertEqual(err, "")
 
     def file(self, tokens):
@@ -148,6 +165,245 @@ class Tailwind4(unittest.TestCase):
         plain = out.split("@theme static {", 1)[1].split(":root {\n", 1)[1]
         self.assertIn("  --duration-base: 200ms;\n  --layout-content: 1200px;\n", plain)
         self.assertIn("  --size-ring: 2px;\n", plain)
+
+
+SWITCHED = {"color": {"bg": "#ffffff", "text": "#111111", "accent": "#0e7c86",
+                      "tint": "color-mix(in srgb, var(--color-text) 5%, transparent)",
+                      "dark": {"bg": "#040b0d", "text": "#e6eef0"}},
+            "space": [4, 16], "motion": {"fast": "120ms"}}
+
+
+def matches(rule, theme, marks):
+    """Does the selector RULE (as theme.py writes them) match <html data-theme=THEME class=MARKS>? A :not() with a
+    list matches when none of its parts do: :root:not([data-theme="light"], [data-theme="system"])."""
+    if rule == "@theme static":
+        return True
+    def hit(part):  # [data-theme="dark"] or .dark
+        attribute = re.match(r'\[[\w-]+="([^"]*)"\]\Z', part)
+        return theme == attribute.group(1) if attribute else part[1:] in marks
+    simple = r'(?:\[[\w-]+="[^"]*"\]|\.[\w-]+)'
+    for negated, group in re.findall(r"(:not\(|)(%s(?:, %s)*)\)?" % (simple, simple), rule[len(":root"):]):
+        if (any if negated else lambda hits: not all(hits))([hit(part) for part in group.split(", ")]):
+            return False
+    return rule.startswith((":root", "@theme"))
+
+
+def cascade(css, theme=None, device="light", marks=()):
+    """What <html> gets from CSS with this data-theme (None: none) and classes on a device that prefers DEVICE:
+    the rule outside a layer beats @theme (Tailwind's layer), then the higher specificity, then the later rule."""
+    found, stack = {}, []
+    for order, line in enumerate(line.strip() for line in css.split("\n")):
+        if line.endswith("{"):
+            stack.append(line[:-1].strip())
+        elif line == "}":
+            stack.pop()
+        elif stack and re.match(r"(--[\w-]+|color-scheme):", line):
+            name, item = line.rstrip(";").split(":", 1)
+            rule = stack[-1]
+            if any("prefers-color-scheme: %s)" % device not in outer for outer in stack[:-1]):
+                continue
+            weight = (rule != "@theme static", 1 + len(re.findall(r"\[|\.", rule)), order)
+            if matches(rule, theme, marks) and weight >= found.get(name, ((), ""))[0]:
+                found[name] = (weight, item.strip())
+    return {name: item for name, (_, item) in found.items()}
+
+
+class ThemeSwitch(unittest.TestCase):
+    """design Step 3: the app's switch (data-theme light, dark or system on <html>) or its own selector decides,
+    the device only where the user left it to the device, and the concept's default while nothing is set."""
+
+    def css(self, *args):
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        path = os.path.join(folder, "tokens.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(SWITCHED, handle)
+        code, out, err = run(path, *args)
+        self.assertEqual((code, err), (0, ""))
+        return out
+
+    def assert_shows(self, css, table, marks=()):
+        """TABLE: {data-theme: (theme on a light device, theme on a dark device)}."""
+        for theme, shown in table.items():
+            for device, want in zip(("light", "dark"), shown):
+                with self.subTest(theme=theme, device=device, marks=marks):
+                    got = cascade(css, theme, device, marks)
+                    self.assertEqual(got["color-scheme"], want)
+                    self.assertEqual(got["--color-bg"], "#040b0d" if want == "dark" else "#ffffff")
+                    self.assertEqual(got["--color-text"], "#e6eef0" if want == "dark" else "#111111")
+                    self.assertEqual(got["--color-accent"], "#0e7c86")  # no dark value: the same in both
+                    self.assertEqual(got["--color-tint"], SWITCHED["color"]["tint"])  # mixes the shown text
+
+    def test_each_default_with_tailwind_4_and_without(self):
+        light, dark, device = ("light", "light"), ("dark", "dark"), ("light", "dark")
+        for tailwind in ("no", "4"):
+            css = self.css("--tailwind", tailwind)
+            self.assertEqual(css, self.css("--tailwind", tailwind, "--default", "system"))
+            self.assert_shows(css, {None: device, "system": device, "light": light, "dark": dark})
+            self.assert_shows(self.css("--tailwind", tailwind, "--default", "light"),
+                              {None: light, "system": device, "light": light, "dark": dark})
+            self.assert_shows(self.css("--tailwind", tailwind, "--default", "dark"),
+                              {None: dark, "system": device, "light": light, "dark": dark})
+
+    def test_the_apps_own_selector_decides_alone(self):
+        for selector in (".dark", '[data-mode="dark"]'):
+            css = self.css("--tailwind", "4", "--dark-selector", selector)
+            self.assertIn(":root%s {\n  color-scheme: dark;\n  --color-bg: #040b0d;\n" % selector, css)
+            self.assertNotIn("prefers-color-scheme", css)
+            self.assertNotIn("data-theme", css)
+        css = self.css("--tailwind", "no", "--dark-selector", ".dark")
+        self.assert_shows(css, {None: ("light", "light"), "dark": ("light", "light")})  # data-theme means nothing
+        self.assert_shows(css, {None: ("dark", "dark")}, marks=("dark",))
+
+    def test_the_dark_default_writes_only_dark_values(self):
+        """--default dark: the dark colours where data-theme is neither light nor system, and for system while
+        the device is dark; the light ones are never written twice."""
+        css = self.css("--tailwind", "no", "--default", "dark")
+        self.assertIn('\n:root:not([data-theme="light"], [data-theme="system"]) {\n  color-scheme: dark;\n'
+                      "  --color-bg: #040b0d;\n  --color-text: #e6eef0;\n}\n", css)
+        self.assertIn('@media (prefers-color-scheme: dark) {\n  :root[data-theme="system"] {\n', css)
+        self.assertNotIn("prefers-color-scheme: light", css)
+        self.assertEqual(css.count("--color-bg: #ffffff;"), 1)
+
+    def variant(self, css):
+        """The two selectors of Tailwind 4's @custom-variant dark that theme.py wrote: (while the device is dark, always)."""
+        found = re.search(r"\n@custom-variant dark \{\n  @media \(prefers-color-scheme: dark\) \{ &:where\((.+), \1 \*\) "
+                          r"\{ @slot; \} \}\n  &:where\((.+), \2 \*\) \{ @slot; \}\n\}\n", css)
+        self.assertTrue(found, css)
+        return found.groups()
+
+    def test_tailwinds_dark_variant_follows_the_same_switch(self):
+        """With Tailwind, the app's own dark: classes (a logo swap, dark:invert) show exactly where the dark colours
+        do; Tailwind 3 gets the same two selectors as its darkMode line for tailwind.config.js."""
+        for default in ("system", "light", "dark"):
+            css = self.css("--tailwind", "4", "--default", default)
+            media, always = self.variant(css)
+            for theme in (None, "system", "light", "dark"):
+                for device in ("light", "dark"):
+                    with self.subTest(default=default, theme=theme, device=device):
+                        dark = (device == "dark" and matches(media, theme, ())) or matches(always, theme, ())
+                        self.assertEqual(dark, cascade(css, theme, device)["color-scheme"] == "dark")
+            three = self.css("--tailwind", "3", "--default", default)
+            self.assertIn("darkMode: ['variant', ['@media (prefers-color-scheme: dark) { &:where(%s, %s *) }', "
+                          "'&:where(%s, %s *)']] */\n" % (media, media, always, always), three)
+            self.assertNotIn("@custom-variant", three)
+        self.assertNotIn("darkMode", self.css("--tailwind", "4"))
+        for args in (("--tailwind", "no"), ("--tailwind", "4", "--dark-selector", ".dark")):  # no dark: classes,
+            css = self.css(*args)  # or the app's own switch, which has its own variant
+            self.assertNotIn("@custom-variant", css)
+            self.assertNotIn("darkMode", css)
+
+    def test_bad_or_clashing_switch_options_and_no_dark_group(self):
+        for args in (("--dark-selector", ".dark { x"), ("--dark-selector", "html.dark"),
+                     ("--default", "dark", "--dark-selector", ".dark"), ("--default", "dim")):
+            with self.subTest(args=args), self.assertRaises(SystemExit) as stop:
+                run(TEMPLATE, "--tailwind", "no", *args)
+            self.assertEqual(stop.exception.code, 2)
+        code, out, err = run(TEMPLATE, "--tailwind", "no", "--default", "dark")
+        self.assertEqual(code, 0)
+        self.assertIn("it has none", err)
+        self.assertNotIn("color-scheme", out)  # no dark group: nothing to switch
+        # components.md's command line carries --default system: with no dark group it does nothing, quietly
+        self.assertEqual(run(TEMPLATE, "--tailwind", "4", "--default", "system"), (0, run(TEMPLATE, "--tailwind", "4")[1], ""))
+
+
+class TypeAndFonts(unittest.TestCase):
+    def test_stretch_tracking_and_a_number_in_the_font_group(self):
+        tokens = template()
+        tokens["type"]["num"] = {"size": 44, "line": 44, "weight": 840, "stretch": 125, "tracking": "-0.02em"}
+        tokens["type"]["label"] = {"size": 12, "line": 16, "weight": 640, "stretch": "condensed", "tracking": 0.07}
+        tokens["font"]["stretch-wide"] = "125%"
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder)
+        path = os.path.join(folder, "tokens.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(tokens, handle)
+        code, out, err = run(path, "--tailwind", "4")
+        self.assertEqual(code, 0, err)
+        for line in ("--text-num--font-stretch: 125%;", "--text-num--letter-spacing: -0.02em;",
+                     "--text-label--font-stretch: condensed;", "--text-label--letter-spacing: 0.07em;",
+                     "--font-stretch-wide: 125%;"):
+            self.assertIn("\n  %s\n" % line, out)
+        self.assertNotIn("--text-base--font-stretch", out)  # only the steps that have one
+
+
+class Formats(Folder):
+    def test_scss_holds_the_same_values_as_sass_variables(self):
+        tokens = dict(SWITCHED, breakpoint={"md": 768}, type={"base": {"size": 16, "line": 24, "weight": 400}},
+                      font={"sans": "Source Serif 4, serif"})
+        code, out, err = run(self.write("tokens.json", tokens), "--format", "scss")
+        self.assertEqual(code, 0, err)
+        for line in ("$color-bg: #ffffff;", "$color-dark-bg: #040b0d;", "$space-4: 16px;", "$duration-fast: 120ms;",
+                     "$text-base--line-height: 24px;", '$font-sans: "Source Serif 4", serif;', "$breakpoint-md: 768px;"):
+            self.assertIn("\n%s\n" % line, out)
+        self.assertNotIn("{", out.replace(theme.START, "").replace(theme.END, ""))  # no rules: values only
+        target = self.path("_tokens.scss")
+        self.assertEqual(run(self.write("tokens.json", tokens), "--tailwind", "4", "--write", target)[0], 0)
+        self.assertEqual(self.read("_tokens.scss"), out)  # the extension picks scss; --tailwind changes nothing
+
+    def test_js_is_a_module_of_the_tokens_with_literal_values(self):
+        tokens = dict(template(), font={"sans": "Source Serif 4, serif", "_note": "x"})
+        target = self.path(os.path.join("src", "theme", "tokens.ts"))
+        code, out, err = run(self.write("tokens.json", tokens), "--write", target)
+        self.assertEqual(code, 0, err)
+        self.assertIn("(js)", out)
+        text = self.read(os.path.join("src", "theme", "tokens.ts"))
+        self.assertTrue(text.startswith(theme.START + "\nexport const tokens = {"))
+        data = json.loads(text.split("export const tokens = ", 1)[1].rsplit(";", 1)[0])
+        self.assertEqual(data["color"]["accent"], "#3f4856")
+        self.assertEqual(data["radius"]["md"], 10)  # a number stays a number: MUI's shape.borderRadius
+        self.assertEqual(data["font"], {"sans": '"Source Serif 4", serif'})
+        self.assertNotIn("pairs", data)
+        self.assertFalse([key for key in data if key.startswith("_")])
+        if shutil.which("node"):
+            module = self.write("check.mjs", text)
+            done = subprocess.run(["node", "--check", module], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  universal_newlines=True, timeout=60)
+            self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_a_colour_that_names_another_is_its_value_in_sass_and_js(self):
+        """The template's chart-1 is var(--color-accent): Sass's mix() and MUI's alpha() cannot compute with a var(),
+        so scss and js write the accent's value, the dark group's own in the dark group (components.md's
+        tokens.color.dark.bg). A chain is followed to its end (link names chart-1, which names the accent); one
+        that names no token, or a loop, stays a var() and the run still ends."""
+        color = dict(SWITCHED["color"], **{"chart-1": "var(--color-accent)", "chart-9": "var(--color-brand)",
+                                           "link": "var(--color-chart-1)", "loop-a": "var(--color-loop-b)",
+                                           "loop-b": "var(--color-loop-a)"})
+        color["dark"] = dict(color["dark"], **{"accent": "#5fd0da", "chart-1": "var(--color-accent)",
+                                               "link": "var(--color-chart-1)"})
+        tokens = self.write("tokens.json", dict(SWITCHED, color=color))
+        code, out, err = run(tokens, "--format", "scss")
+        self.assertEqual(code, 0, err)
+        for line in ("$color-chart-1: #0e7c86;", "$color-dark-chart-1: #5fd0da;", "$color-chart-9: var(--color-brand);",
+                     "$color-tint: color-mix(in srgb, #111111 5%, transparent);", "$color-link: #0e7c86;",
+                     "$color-dark-link: #5fd0da;"):
+            self.assertIn("\n%s\n" % line, out)
+        self.assertRegex(out, r"\n\$color-loop-a: var\(--color-loop-[ab]\);\n")
+        code, out, err = run(tokens, "--format", "js")
+        self.assertEqual(code, 0, err)
+        data = json.loads(out.split("export const tokens = ", 1)[1].rsplit(";", 1)[0])
+        self.assertEqual((data["color"]["chart-1"], data["color"]["dark"]["chart-1"]), ("#0e7c86", "#5fd0da"))
+        self.assertEqual((data["color"]["link"], data["color"]["dark"]["link"]), ("#0e7c86", "#5fd0da"))
+        self.assertEqual(data["color"]["dark"]["bg"], "#040b0d")
+        self.assertEqual(data["color"]["chart-9"], "var(--color-brand)")
+        self.assertEqual(data["space"], [4, 16])
+        self.assertNotIn("var(--color-accent)", out)
+
+    def test_scss_goes_below_the_use_and_import_lines(self):
+        """A Sass partial starts with @use (it must come first) and @import: the block goes below them."""
+        target = self.write("_tokens.scss", '@use "sass:math";\n@import "bootstrap/scss/functions";\n\n'
+                                            "$spacer: 1rem;\n")
+        self.assertEqual(run(self.write("tokens.json", SWITCHED), "--write", target)[0], 0)
+        text = self.read("_tokens.scss")
+        self.assertTrue(text.startswith('@use "sass:math";\n@import "bootstrap/scss/functions";\n\n' + theme.START), text)
+        self.assertTrue(text.endswith(theme.END + "\n\n$spacer: 1rem;\n"), text)
+        self.assertIn("\n$color-dark-bg: #040b0d;\n", text)
+        self.assertEqual(run(self.write("tokens.json", SWITCHED), "--write", target)[0], 0)
+        self.assertEqual(self.read("_tokens.scss"), text)  # written again in its place, not twice
+
+    def test_css_still_needs_the_tailwind_line(self):
+        with self.assertRaises(SystemExit):
+            run(TEMPLATE, "--write", self.path("app.css"))
 
 
 class WriteTests(Folder):
