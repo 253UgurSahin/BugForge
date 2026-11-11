@@ -110,14 +110,17 @@ the poster for no WebGL, weak devices and reduced motion. The mask that fades th
 on the element itself, so the words stay legible over whatever is mounted there.
 
 **Level 4, Showpiece: the chart table in three dimensions.** The sheet lies on the table and the
-camera looks across it at a low angle. The sea bed is the same `seaBed(x, y)` that drew the poster, now a
-real surface: banks stand a little proud of the paper, channels sink, and the depth contours are living
-isolines of that field (scene kit `contour.js`, fed with the sea bed instead of noise). The lamp is the
-light of the scene: it follows the pointer with easing, the pool slides over the paper and the relief
-throws soft shadows; in the dark theme it is the red lamp. A thin sheet of water lies over the relief at
-the height of the tide: `setData(height now)` raises and lowers it, so Spijkerplaat and Hooge Platen dry
-and flood. The pencil course and its fixes are drawn on the surface; the slip and the passage cards tilt
-as paper (`depth.js`).
+camera looks across it at a low angle. It is the app's own scene on the kit's `stage.js` and `glsl.js`
+(`table.js`), because no kit scene draws a printed chart: the poster SVG is printed into the texture in
+two layers (`print.js`), paper and tints under the water, every line and letter on top, so the chart's
+own figures and names stay readable. The sea bed is the same `seaBed(x, y)` that drew the poster, now a
+real surface (`seabed.js`): banks stand proud of the paper and channels sink. The lamp is the light of the
+scene: a warm pool follows the pointer, rakes the relief and the fold; in the dark theme it is the red
+lamp. A clear glaze of water lies over the relief at the height of the tide, so Spijkerplaat and Hooge
+Platen dry and flood; on first view the next 12 hours play once by themselves, and the slip's scale lets
+you drag through them. The first 3D frame lies exactly on the drawn sheet, so the hand-over does not jump.
+The pencil course and its fixes are drawn on the surface; the slip, the cards and the notes tilt as
+paper (`depth.js`). On a phone the whole tilted sheet and the slip fit the first screen.
 
 **Level 5, Cinematic: sail the pencil line.** Scroll drives a camera along the course (`journey.js`):
 the whole sheet under the lamp; down to the pier head at 14:20 with the water at its highest; across the
