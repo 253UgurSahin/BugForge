@@ -1,122 +1,139 @@
 /* Tidewatch, level 5: Cinematic. The trip down the pencil line, directed by the scene kit's journey.js.
 
-   The hero is the first chapter of a journey through one 3D scene (table.js: the chart table). The
-   stage stays pinned while the chapters scroll over it; the camera flies along the course in five
-   moves: the whole sheet under the lamp; down to the pier head at 14:20 with the water at its highest;
-   across the roads to the 14:40 fix as the ebb starts; low down the Wielingen between the buoys, the
-   sounder reading the water under the keel; then up over the whole sheet for the landfall, by night.
-   - The journey's chapter event lights the current slip and the matching mark in the strip of tools.
+   The hero is the first chapter of a journey through one 3D scene (table.js: the chart table). The stage
+   is fixed to the screen while the chapters' slips scroll over it; the camera flies along the course:
+   the whole sheet under the lamp; down behind the pier head (a waypoint bends the flight, so it never
+   skims the table) to 14:20 with the water at its highest; across the roads to the 14:40 fix as the
+   ebb starts; low down the Wielingen between the buoys, the sounder reading the water under the keel;
+   to the landfall under the red lamp, the boat at the end of the pencil line, where it runs off the
+   sheet to Zeebrugge; then up over the whole sheet as the lamp goes out and the room light comes back.
+   - The opening: the drawn chart (the poster) draws its course; the 3D sheet then takes its place
+     exactly, lifts off the page and settles into the hero's view (table.js).
+   - The journey's chapter event marks the chapter in the strip of tools. Each slip is paper: it lands
+     on the chart with a spring as it comes in, solid, and no label is ever drawn over it.
+   - The night of the landfall is read from where its slip is on the screen, so the red lamp is on
+     while that slip is read, whatever the camera's lag; the lamp goes out again as it leaves.
    - The data hook: the scene's setData gets the page's own numbers, read from the page itself: the
-     water from the tide table (high and low waters, joined as a tide curve joins them), the wind from
-     the day's reading (17 kn SW, easing to 12 kn by 18:00). The water at each chapter's hour is the
-     level of the sheet of water, so the banks dry as the passage goes on; the wind turns and stirs
-     the points over the water.
-   - While nobody scrolls, the hero's clock runs on from "now" (09:40) toward the casting off: the
-     tide rises over the banks, the window opens at 10:58 and its band lights up along the course; the
-     slip says the hour and the water.
+     water from the week's tide curve (tide.js), the wind from the day's reading (17 kn SW, easing to
+     12 kn by 18:00). The water at each chapter's hour is the level of the water on the sheet, so the
+     banks dry as the passage goes on; the wind turns, stirs and speeds the streaks over the water.
+   - While nobody scrolls, the hero's clock runs on from "now" (09:40) toward the casting off: the tide
+     rises over the banks, the window opens at 10:58 and its band sweeps out along the course; the slip
+     says the hour and the water and lights its window while the hour is inside it.
    - Callouts follow the buoys and fixes as the camera passes them; the sounder rides with the boat.
-   - Tools: "Plain chart" (the drawn chart instead of the 3D, Alt+Shift+C), "Tide table" (Alt+Shift+T:
-     to the week, with the table open), and the kit's motionToggle, which pauses the scene and
-     depth.js and is remembered.
+   - Tools: "Plain chart" (the drawn chart instead of the 3D, Alt+Shift+C, also with the stills of
+     reduced motion), "Tide table" (Alt+Shift+T: to the week, with the table open), and the kit's
+     motionToggle, which pauses the scene and depth.js and is remembered.
    Nothing of three.js loads before the page is idle (lazyScene). Reduced motion: no pin and no trip;
    each chapter shows a still of its own view beside its text, and the clock stands at now. Without
-   WebGL the drawn chart stays pinned under the chapters. */
+   WebGL the drawn chart stays on the stage under the chapters, lit by its lamp as on level 2. */
 import { lazyScene, motionToggle } from "../../vendor/scenes/lazy.js";
-import { mount as mountDepth } from "../../vendor/scenes/depth.js";
+import { readTide, NOW } from "./tide.js";
 
 const section = document.getElementById("trip");
 const root = document.documentElement;
 const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 /* ---- the page's own numbers ------------------------------------------------------------------ */
 const toHours = (text) => { const m = /(\d{1,2}):(\d{2})/.exec(text || ""); return m ? Number(m[1]) + Number(m[2]) / 60 : NaN; };
-
-/* the high and low waters of the week, from the tide table: hours from Tuesday 00:00, metres */
-function readTide() {
-  const turns = [];
-  document.querySelectorAll("#tide-table tbody tr").forEach((row, day) => {
-    row.querySelectorAll("td").forEach((cell) => {
-      const time = toHours(cell.querySelector("time") && cell.querySelector("time").textContent);
-      const h = parseFloat(cell.querySelector(".tt__h") && cell.querySelector(".tt__h").textContent);
-      const kind = cell.getAttribute("data-label") || "";
-      if (Number.isFinite(time) && Number.isFinite(h)) turns.push({ t: day * 24 + time, h, high: /high/i.test(kind) });
-    });
-  });
-  turns.sort((a, b) => a.t - b.t);
-  // between a high and a low water the tide follows half a cosine, as a tide table is read
-  return (t) => {
-    if (turns.length < 2) return 2.5;
-    let i = turns.findIndex((x) => x.t > t);
-    if (i <= 0) i = i === 0 ? 1 : turns.length - 1;
-    const a = turns[i - 1], b = turns[i];
-    const f = clamp((t - a.t) / (b.t - a.t));
-    return a.h + (b.h - a.h) * (1 - Math.cos(Math.PI * f)) / 2;
-  };
-}
+const tide = readTide();
 
 /* the wind: the day's reading and where it is going (the tile "Wind": 17 kn SW, easing to 12 kn by 18:00) */
 function readWind() {
   const tile = [...document.querySelectorAll(".stat")].find((el) => /wind/i.test(el.querySelector(".stat__label")?.textContent || ""));
-  const now = toHours(document.querySelector(".tide__nowlabel")?.textContent) || 9 + 40 / 60;
   const knots = parseFloat(tile?.querySelector("[data-count]")?.getAttribute("data-count")) || 15;
   const words = tile?.querySelector(".stat__second")?.textContent || "";
   const POINTS = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 };
   const from = POINTS[(/\b(NE|NW|SE|SW|N|E|S|W)\b/.exec(words) || [])[1]] ?? 225;
   const trend = /(\d+(?:\.\d+)?)\s*kn by (\d{1,2}:\d{2})/.exec(tile?.querySelector(".stat__trend")?.textContent || "");
-  const later = trend ? Number(trend[1]) : knots, at = trend ? toHours(trend[2]) : now + 1;
-  return { now, from, at: (t) => knots + (later - knots) * clamp((t - now) / (at - now)) };
+  const later = trend ? Number(trend[1]) : knots, at = trend ? toHours(trend[2]) : NOW + 1;
+  return { from, at: (t) => knots + (later - knots) * clamp((t - NOW) / (at - NOW)) };
 }
-
-const tide = readTide();
 const wind = readWind();
-const NOW = wind.now;
-const dataAt = (hour) => [tide(hour) / 6, wind.at(hour) / 40, wind.from / 360];
-const clock = (hour) => { const m = Math.round((((hour % 24) + 24) % 24) * 60) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+const dataAt = (hour) => [tide.height(hour) / 6, wind.at(hour) / 40, wind.from / 360];
 
 /* ---- the course and the chapters --------------------------------------------------------------- */
-// the pencil line of the chart: the pier head, the fixes at 14:40 and 15:00, on past the chart's edge
-const COURSE = [[720, 412], [524, 594], [258.6, 694.4], [96, 756], [-140, 846]];
+// the pencil line of the chart: the pier head, the fixes at 14:40 and 15:00, on to where it leaves the
+// sheet for Zeebrugge
+const COURSE = [[720, 412], [524, 594], [258.6, 694.4], [96, 756], [14, 787]];
 const legs = COURSE.slice(1).map((p, i) => Math.hypot(p[0] - COURSE[i][0], p[1] - COURSE[i][1]));
-const FIX = [0, legs[0], legs[0] + legs[1]];                       // 14:20, 14:40, 15:00 on the chart
-const EDGE = legs[0] + legs[1] + legs[2];                           // where the line leaves the chart
-const boatAt = (hour) => {                                         // chart units along the line at an hour
-  const m = (hour - (14 + 20 / 60)) * 60;
+const FIX = [0, legs[0], legs[0] + legs[1]];                        // 14:20, 14:40, 15:00 on the chart
+const EDGE = legs.reduce((a, b) => a + b, 0);                         // where the line leaves the sheet
+const OFF = 14 + 20 / 60;
+const boatAt = (hour) => {                                           // chart units along the line at an hour
+  const m = (hour - OFF) * 60;
   if (m <= 0) return 0;
   if (m <= 20) return FIX[1] * (m / 20);
   if (m <= 40) return FIX[1] + (FIX[2] - FIX[1]) * ((m - 20) / 20);
-  return Math.min(FIX[2] + ((FIX[2] - FIX[1]) / 20) * (m - 40), EDGE + legs[3]);
+  return Math.min(FIX[2] + ((FIX[2] - FIX[1]) / 20) * (m - 40), EDGE - 2);
 };
-const HOURS = [NOW, 14 + 20 / 60, 14 + 40 / 60, 15, 18 + 10 / 60];
-const WINDOW = [10 + 58 / 60, 17 + 1 / 60];                          // today's safe window, as on the slip
+const HOURS = [NOW, OFF, 14 + 40 / 60, 15, 18 + 10 / 60];
+const WINDOW = [10 + 58 / 60, 17 + 1 / 60];                           // today's safe window, as on the slip
 
-// what the scene shows at each chapter (table.js reads it by the journey's progress)
+// a view as an orbit (as table.js reads it), and the camera keyframe it makes
+const orbit = (v) => {
+  const a = (v.az * Math.PI) / 180, e = (v.el * Math.PI) / 180;
+  return { position: [v.target[0] + Math.sin(a) * Math.cos(e) * v.dist, v.target[1] + Math.sin(e) * v.dist, v.target[2] + Math.cos(a) * Math.cos(e) * v.dist], target: v.target, fov: v.fov };
+};
+// the hero: the sheet big and close in the right half, its lower corner under the slip (the lens shift
+// puts it there without turning the view); on a phone the whole sheet below the words, as an object
+const HERO = { target: [1.15, 0, 0.3], dist: 15.2, el: 45, az: 6, fov: 30, shift: [0.33, 0.12] };
+const HERO_PHONE = { target: [0, 0, 0.15], dist: 50, el: 42, az: 0, fov: 30, shift: [0, -0.55], flight: [0, -0.34] };
+// a phone (or a narrow tablet) has the words over the top of the screen: the sheet lies, whole, in the
+// band between the buttons and the strip of tools, as large as that band allows
+function fitPhoneHero() {
+  const hero = section && section.querySelector(".trip__step--hero");
+  const actions = hero && hero.querySelector(".hero__actions"), bar = section && section.querySelector(".trip__bar-in");
+  const vh = window.innerHeight, vw = window.innerWidth;
+  if (!actions || !bar || !vh || vw / vh >= 0.8) return;
+  const inner = hero.querySelector(".hero__in");
+  if (inner) hero.style.setProperty("--hero-room", Math.max(320, vh - (inner.getBoundingClientRect().top + window.scrollY)) + "px");
+  const top = actions.getBoundingClientRect().bottom + window.scrollY + 16;
+  const bottom = vh - bar.offsetHeight - 4;
+  const band = Math.max(150, bottom - top), middle = Math.min(bottom - band / 2, vh - 80);
+  const half = Math.tan((HERO_PHONE.fov * Math.PI) / 360);
+  const deep = 9 * Math.sin((HERO_PHONE.el * Math.PI) / 180) + 0.5;          // the sheet and its shadow, seen tipped
+  const byHeight = (deep * vh) / (2 * half * band), byWidth = 11.2 / (2 * half * (vw / vh) * 0.94);
+  HERO_PHONE.dist = Math.max(byHeight, byWidth);
+  HERO_PHONE.shift[1] = 1 - (2 * middle) / vh;
+}
+fitPhoneHero();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitPhoneHero);
+
+// what the scene shows along the journey (table.js blends it by the journey's progress)
 const STORY = [
-  { p: 0, hour: NOW, lamp: [1.6, 0.2], lampY: 3.6, reachLamp: 2.9, night: 0, boat: 0, hatch: 0, follow: 1, reach: EDGE + legs[3] },
-  { p: 0.25, hour: HOURS[1], lamp: [2.15, -0.45], lampY: 2.6, reachLamp: 1.9, night: 0, boat: boatAt(HOURS[1]) + 2, hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
-  { p: 0.5, hour: HOURS[2], lamp: [0.6, 1.2], lampY: 2.4, reachLamp: 1.9, night: 0, boat: boatAt(HOURS[2]), hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
-  { p: 0.75, hour: HOURS[3], lamp: [-2.2, 2.4], lampY: 2.2, reachLamp: 1.8, night: 0.05, boat: boatAt(HOURS[3]), hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
-  { p: 1, hour: HOURS[4], lamp: [-3.4, 3.0], lampY: 3.6, reachLamp: 3.3, night: 1, boat: EDGE + legs[3], hatch: 1, follow: 0.6, reach: EDGE + legs[3] },
+  { p: 0, lamp: [0.9, 0.3], lampY: 3, reach: [4.6, 4.3], night: 0, boat: 0, hatch: 0, follow: 1 },
+  { p: 0.12, lamp: [2.0, -0.2], lampY: 2.8, reach: [3.6, 3.4], night: 0, boat: 0, hatch: 0.6, follow: 0.4 },
+  { p: 0.25, lamp: [2.3, -0.45], lampY: 2.6, reach: [2.8, 2.6], night: 0, boat: boatAt(HOURS[1]) + 2, hatch: 1, follow: 0.35 },
+  { p: 0.45, lamp: [0.6, 1.2], lampY: 2.5, reach: [2.8, 2.6], night: 0, boat: boatAt(HOURS[2]), hatch: 1, follow: 0.35 },
+  { p: 0.65, lamp: [-2.2, 2.4], lampY: 2.4, reach: [2.9, 2.7], night: 0, boat: boatAt(HOURS[3]), hatch: 1, follow: 0.35 },
+  { p: 0.85, lamp: [-4.3, 3.25], lampY: 2.4, reach: [4.0, 3.8], night: 1, boat: EDGE - 2, hatch: 0.45, follow: 0.3 },
+  { p: 1, lamp: [0.6, 0.3], lampY: 3.2, reach: [5.2, 4.8], night: 0, boat: EDGE - 2, hatch: 0.6, follow: 1 },
 ];
 
 // camera keyframes, world units: the sheet is 10 x 9 round the middle, x east, z south, y up
 const CHAPTERS = [
-  { camera: { position: [-2.6, 8.5, 11.0], target: [-3.45, -0.6, 0.35], fov: 30 },      // the whole sheet, right of the words
-    phone: { position: [1.6, 10.6, 5.4], target: [1.2, 0, -4.4], fov: 46 },
-    still: { position: [0.2, 9.0, 9.9], target: [0.1, -0.5, 0.35], fov: 33 } },
-  { camera: { position: [3.1, 1.75, 2.1], target: [1.75, 0, -0.25], fov: 36 },          // down to the pier head
-    phone: { position: [2.9, 3.2, 3.2], target: [2.0, 0, 0.55], fov: 50 },
-    still: { position: [3.0, 1.9, 2.0], target: [2.15, 0, -0.35], fov: 38 } },
+  { ...{ camera: orbit(HERO) }, phone: orbit(HERO_PHONE),                               // the hero
+    still: { position: [0.2, 9.4, 10.2], target: [0.1, -0.5, 0.35], fov: 33 }, progress: 0, hour: HOURS[0] },
+  { via: true, camera: { position: [3.4, 5.2, 5.6], target: [1.4, 0, -0.2], fov: 34 },  // down behind the pier head
+    phone: { position: [3.2, 6.2, 5.2], target: [1.7, 0, -0.3], fov: 48 }, progress: 0.12, hour: NOW + (OFF - NOW) * 0.6 },
+  { camera: { position: [3.1, 1.75, 2.1], target: [1.75, 0, -0.25], fov: 36 },          // off the pier head
+    phone: { position: [3.0, 3.3, 3.4], target: [2.0, 0, 0.45], fov: 50 },
+    still: { position: [3.0, 1.9, 2.0], target: [2.15, 0, -0.35], fov: 38 }, progress: 0.25, hour: HOURS[1] },
   { camera: { position: [1.7, 1.7, 3.5], target: [-0.2, 0, 1.25], fov: 38 },            // across the roads to the fix
-    phone: { position: [1.4, 3.1, 4.6], target: [0.1, 0, 2.15], fov: 52 },
-    still: { position: [1.8, 1.8, 3.6], target: [0.3, 0, 1.45], fov: 40 } },
+    phone: { position: [1.5, 3.2, 4.7], target: [0.1, 0, 2.05], fov: 52 },
+    still: { position: [1.8, 1.8, 3.6], target: [0.3, 0, 1.45], fov: 40 }, progress: 0.45, hour: HOURS[2] },
   { camera: { position: [0.45, 2.75, 3.95], target: [-2.85, -0.25, 2.6], fov: 40 },     // down the Wielingen
-    phone: { position: [0.9, 5.3, 4.7], target: [-2.0, -0.25, 2.9], fov: 54 },
-    still: { position: [0.3, 2.6, 4.0], target: [-2.6, -0.25, 2.55], fov: 42 } },
-  { camera: { position: [0.2, 10.2, 9.2], target: [-1.6, -0.5, 0.6], fov: 32 },         // the landfall, the whole sheet by night
-    phone: { position: [-1.4, 8.6, 10.6], target: [-2.6, -0.3, 4.6], fov: 50 },
-    still: { position: [0.0, 10.0, 9.4], target: [-0.6, -0.5, 0.5], fov: 33 } },
-].map((c, i) => ({ ...c, progress: STORY[i].p, params: { hour: HOURS[i], night: STORY[i].night, data: dataAt(HOURS[i]) } }));
+    phone: { position: [0.9, 5.2, 4.9], target: [-2.0, -0.25, 2.8], fov: 54 },
+    still: { position: [0.3, 2.6, 4.0], target: [-2.6, -0.25, 2.55], fov: 42 }, progress: 0.65, hour: HOURS[3] },
+  { camera: orbit({ target: [-5.25, 0, 3.35], dist: 6.6, el: 50, az: 52, fov: 38 }),   // the landfall, under the red lamp
+    phone: orbit({ target: [-4.55, 0, 3.4], dist: 8.6, el: 56, az: 32, fov: 50 }),
+    still: orbit({ target: [-4.1, 0, 3.15], dist: 6.6, el: 42, az: 66, fov: 40 }), progress: 0.85, hour: HOURS[4] },
+  { at: 1, camera: { position: [0.0, 12.6, 11.2], target: [0.1, 0, 0.5], fov: 34 },       // the whole sheet, in the room light again
+    phone: { position: [0.0, 19, 17], target: [0.1, 0, 0.6], fov: 40 }, progress: 1, hour: HOURS[4] },
+].map((c) => ({ ...c, params: { hour: c.hour, data: dataAt(c.hour) } }));
 
 /* ---- callouts: buoys and fixes, named as the camera passes them ------------------------------ */
 const CALLOUTS = [
@@ -132,6 +149,25 @@ const CALLOUTS = [
   { at: [196, 690], text: "<b>W6</b> red" },
   { at: [262, 762], text: "<b>W7</b> green" },
 ];
+const clock = (hour) => { const m = Math.round((((hour % 24) + 24) % 24) * 60) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+
+const steps = section ? [...section.querySelectorAll("[data-chapter]")] : [];
+const cards = steps.map((step) => step.querySelector(".trip__card")).filter(Boolean);
+const marks = section ? [...section.querySelectorAll("[data-go]")] : [];
+let live = null, current = -1, tripHour = NOW;
+
+/* the rectangles of the slips on screen now: nothing is named underneath one */
+function slipBoxes() {
+  const out = [];
+  const vh = window.innerHeight;
+  for (const card of cards) {
+    const r = card.getBoundingClientRect();
+    if (r.bottom > -20 && r.top < vh + 20) out.push(r);
+  }
+  const slip = steps[0] && steps[0].querySelector(".hero__slip");
+  if (slip) { const r = slip.getBoundingClientRect(); if (r.bottom > 0 && r.top < vh) out.push(r); }
+  return out;
+}
 
 function callouts(scene, layer) {
   if (!layer || !scene.onCamera) return () => {};
@@ -147,13 +183,12 @@ function callouts(scene, layer) {
   layer.appendChild(sounder);
   let last = 0, lastText = "";
   const off = scene.onCamera((camera) => {
-    const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000 || 0.016);
+    const now = performance.now(), dt = Math.min(0.25, (now - last) / 1000 || 0.016);
     last = now;
     const w = layer.clientWidth, h = layer.clientHeight;
-    // the lit slip covers part of the stage: nothing is named underneath it
-    const card = current > 0 && steps[current] ? steps[current].querySelector(".trip__card") : null;
-    const box = card ? card.getBoundingClientRect() : null;
-    const under = (x, y) => box && x > box.left - 160 && x < box.right + 12 && y > box.top - 16 && y < box.bottom + 16;
+    const boxes = slipBoxes(), bar = section.querySelector(".trip__bar-in");
+    const barTop = bar ? bar.getBoundingClientRect().top : h;
+    const under = (x, y, x2) => boxes.some((b) => x2 > b.left - 12 && x < b.right + 12 && y > b.top - 18 && y < b.bottom + 18);
     const project = (wx, wy, wz) => {
       const p = camera.position, e = camera.matrixWorldInverse.elements, m = camera.projectionMatrix.elements;
       const x = e[0] * wx + e[4] * wy + e[8] * wz + e[12], y = e[1] * wx + e[5] * wy + e[9] * wz + e[13], z = e[2] * wx + e[6] * wy + e[10] * wz + e[14];
@@ -161,56 +196,62 @@ function callouts(scene, layer) {
       const cx = (m[0] * x + m[4] * y + m[8] * z + m[12]) / cw, cy = (m[1] * x + m[5] * y + m[9] * z + m[13]) / cw;
       return { x: (cx + 1) / 2 * w, y: (1 - cy) / 2 * h, behind: z > -0.05, dist: Math.hypot(p.x - wx, p.y - wy, p.z - wz) };
     };
+    const opening = scene.opening && scene.opening();
     const boat = scene.boatPoint();
     for (const c of made) {
       const [wx, wz] = [(c.at[0] - 500) / 100, (c.at[1] - 450) / 100];
-      // a fix the boat is sitting on is named by the sounder instead
       const sitting = boat && boat.on && Math.hypot(boat.chart[0] - c.at[0], boat.chart[1] - c.at[1]) < 40;
       const s = project(wx, scene.surfaceAt(c.at[0], c.at[1]) + 0.02, wz);
-      const inView = !s.behind && s.x > -40 && s.x < w - 140 && s.y > 60 && s.y < h - 90 && !under(s.x, s.y);
-      const goal = inView && !sitting ? smooth(5.2, 3.2, s.dist) : 0;
-      c.shown += (goal - c.shown) * Math.min(1, dt * 5);
+      const inView = !opening && !s.behind && s.x > -40 && s.x < w - 150 && s.y > 60 && s.y < barTop - 24 && !under(s.x, s.y, s.x + 130);
+      const goal = inView && !sitting ? smooth(5.4, 3.4, s.dist) : 0;
+      // under a slip a label goes at once; elsewhere it fades in and out with the camera
+      c.shown = goal === 0 && !inView ? 0 : c.shown + (goal - c.shown) * Math.min(1, dt * 5);
       if (c.shown < 0.01) { if (c.el.style.opacity !== "0") c.el.style.opacity = "0"; continue; }
       c.el.style.opacity = c.shown.toFixed(3);
       c.el.style.transform = `translate3d(${s.x.toFixed(1)}px, ${(s.y - 7).toFixed(1)}px, 0)`;
     }
     // the sounder rides with the boat: the water under the keel, from the tide and the sea bed
-    const b = boat;
-    if (b) {
-      const s = project(b.world[0], b.world[1] + 0.03, b.world[2]);
-      const depth = Math.max(0, scene.level() - scene.bedAt(b.chart[0], b.chart[1]));
-      const visible = b.on && !s.behind && s.x > 0 && s.x < w - 220 && s.y > 60 && s.y < h - 90 && s.dist < 6 && !under(s.x + 18, s.y - 26);
+    if (boat) {
+      const s = project(boat.world[0], boat.world[1] + 0.03, boat.world[2]);
+      const depth = Math.max(0, scene.level() - scene.bedAt(boat.chart[0], boat.chart[1]));
+      const ox = s.x + 18, oy = s.y - 26;
+      const visible = boat.on && !opening && !s.behind && ox > 0 && ox < w - 230 && oy > 50 && oy < barTop - 30 && s.dist < 7 && !under(ox, oy, ox + 220);
       sounder.style.opacity = visible ? "1" : "0";
       if (visible) {
-        const text = `<b>${depth.toFixed(1)} m</b> under the keel · ${clock(tripHour)}`;
+        const atEnd = boat.chart[0] < 40;
+        const text = atEnd ? `<b>Zeebrugge</b> alongside · ${clock(tripHour)}` : `<b>${depth.toFixed(1)} m</b> under the keel · ${clock(tripHour)}`;
         if (text !== lastText) { sounder.innerHTML = text; lastText = text; }
-        sounder.style.transform = `translate3d(${(s.x + 18).toFixed(1)}px, ${(s.y - 26).toFixed(1)}px, 0)`;
+        sounder.style.transform = `translate3d(${ox.toFixed(1)}px, ${oy.toFixed(1)}px, 0)`;
       }
     }
   });
   return () => { off(); layer.textContent = ""; };
 }
 
-/* ---- the stage: one journey through the chart table ------------------------------------------ */
-const steps = section ? [...section.querySelectorAll("[data-chapter]")] : [];
-const marks = section ? [...section.querySelectorAll("[data-go]")] : [];
-const gauge = document.getElementById("slip-gauge");
-let live = null, current = -1, tripHour = NOW;
-const idle = { hour: NOW };
-
-function showChapter(index) {
-  current = index;
-  steps.forEach((el, i) => el.toggleAttribute("data-current", i === index));
-  marks.forEach((a, i) => { if (i === index) a.setAttribute("aria-current", "step"); else a.removeAttribute("aria-current"); });
+/* ---- the slip on the hero: the water of the hour, and its window lit while the hour is inside it --- */
+const slip = steps[0] && steps[0].querySelector(".hero__slip");
+const readouts = [...document.querySelectorAll("[data-tide]")].map((el) => ({
+  el, gauge: el.querySelector(".gauge"), h: el.querySelector("[data-tide-h]"), way: el.querySelector("[data-tide-way]"), time: el.querySelector("[data-tide-time]"),
+}));
+function wayOf(hour) {
+  const rate = tide.height(hour + 0.25) - tide.height(hour - 0.25);
+  if (Math.abs(rate) < 0.07) return tide.height(hour) > 2.5 ? "high water" : "low water";
+  return rate > 0 ? "rising" : "falling";
 }
-
-function tellGauge(hour) {
-  if (!gauge) return;
-  const h = tide(hour), rising = tide(hour + 0.25) > h;
-  gauge.querySelector(".gauge__h").textContent = h.toFixed(1) + " m";
-  gauge.querySelector(".gauge__way").textContent = rising ? "rising" : "falling";
-  gauge.querySelector(".gauge__time").textContent = clock(hour);
-  gauge.style.setProperty("--level", clamp((h - 0.5) / 4.6).toFixed(3));
+let toldHour = -1;
+function say(hour) {
+  const minute = Math.round(hour * 60);
+  if (minute === toldHour) return;
+  toldHour = minute;
+  const metres = tide.height(hour), isNow = Math.abs(hour - NOW) < 1 / 120;
+  for (const r of readouts) {
+    if (r.h) r.h.textContent = metres.toFixed(1) + " m";
+    if (r.way) r.way.textContent = wayOf(hour);
+    if (r.time) r.time.textContent = clock(hour) + (isNow ? " now" : "");
+    if (r.gauge) r.gauge.style.setProperty("--level", clamp(metres / 6).toFixed(3));
+    r.el.classList.toggle("is-lapse", !isNow);
+  }
+  if (slip) slip.classList.toggle("is-open", hour >= WINDOW[0] && hour <= WINDOW[1] && !isNow);
 }
 
 // the readings on the slips, worked out from the same numbers the scene gets
@@ -218,63 +259,122 @@ function fillReadings() {
   steps.forEach((step, i) => {
     const hour = HOURS[i];
     if (hour === undefined) return;
-    const h = tide(hour), rising = tide(hour + 0.25) > h, top = Math.abs(tide(hour + 0.2) - tide(hour - 0.2)) < 0.03;
+    const h = tide.height(hour), way = wayOf(hour);
     const water = step.querySelector('[data-read="water"]');
-    if (water) water.textContent = `${h.toFixed(1)} m, ${top ? "high" : rising ? "rising" : "falling"}`;
+    if (water) water.textContent = `${h.toFixed(1)} m, ${way === "high water" ? "high" : way}`;
     const breeze = step.querySelector('[data-read="wind"]');
     const points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
     if (breeze) breeze.textContent = `${points[Math.round(wind.from / 45) % 8]} ${Math.round(wind.at(hour))} kn`;
   });
 }
 
-// the hero's clock: while the trip waits at its first chapter, the hours run on from now toward the
-// casting off (about four seconds an hour), then start again. It rides on the stage's own frames, so
-// it stops whenever the scene does (reduced motion, paused, out of sight).
-function idleClock(journeyHandle) {
+function showChapter(index) {
+  current = index;
+  steps.forEach((el, i) => el.toggleAttribute("data-current", i === index));
+  marks.forEach((a, i) => { if (i === index) a.setAttribute("aria-current", "step"); else a.removeAttribute("aria-current"); });
+}
+
+// the hero's clock: once the opening is over and while the trip waits at its first chapter, the hours
+// run on from now toward the casting off (about four seconds an hour), hold, and start again. It rides
+// on the stage's own frames, so it stops whenever the scene does (reduced motion, paused, out of sight).
+function heroClock(journeyHandle) {
   const scene = journeyHandle.scene;
-  let shown = "";
+  let hour = NOW, rest = 0, ready = !scene.opening || !scene.opening();
+  journeyHandle.stage.container.addEventListener("tableopen", () => { ready = true; });
   return journeyHandle.stage.onFrame((time, delta) => {
-    if (current > 0 || journeyHandle.stage.still) return;
-    idle.hour += delta / 4.2;
-    if (idle.hour > HOURS[1] + 0.9) idle.hour = NOW;
-    const hour = Math.min(idle.hour, HOURS[1]);
+    if (current > 0 || journeyHandle.stage.still || !ready) return;
+    if (hour >= OFF) { rest += delta; if (rest > 2.4) { hour = NOW; rest = 0; } }
+    else hour = Math.min(OFF, hour + delta / 4);
     const data = dataAt(hour);
-    CHAPTERS[0].params.data.splice(0, 3, ...data);            // the journey blends on from where the clock is
+    CHAPTERS[0].params.data.splice(0, 3, ...data);      // the journey blends on from where the clock is
     CHAPTERS[0].params.hour = hour;
-    scene.setStory({ idleHatch: smooth(WINDOW[0] - 0.05, WINDOW[0] + 0.35, hour) });
+    scene.setStory({ idleHatch: smooth(WINDOW[0] - 0.05, WINDOW[0] + 0.45, hour) });
     scene.setData(data);
-    if (clock(hour) !== shown) { shown = clock(hour); tellGauge(hour); }
+    say(hour);
   });
+}
+
+/* ---- each slip is laid on the chart as it comes in: down from the lamp, settling with a little give */
+function spring(duration, bounce) {
+  const zeta = 1 - clamp(bounce, 0.05, 0.6), w = (2 * Math.PI) / (duration / 1000), wd = w * Math.sqrt(1 - zeta * zeta);
+  const at = (t) => 1 - Math.exp(-zeta * w * t) * (Math.cos(wd * t) + ((zeta * w) / wd) * Math.sin(wd * t));
+  const settle = Math.log(1000 * (1 + (zeta * w) / wd)) / (zeta * w), points = [];
+  for (let i = 0; i <= 32; i++) points.push(i === 32 ? 1 : +at((settle * i) / 32).toFixed(3));
+  const easing = `linear(${points.join(", ")})`;
+  const ok = window.CSS && CSS.supports && CSS.supports("transition-timing-function", easing);
+  return { duration: Math.round(settle * 1000), easing: ok ? easing : "cubic-bezier(0.34, 1.56, 0.64, 1)" };
+}
+function landSlips() {
+  if (!("IntersectionObserver" in window) || !Element.prototype.animate) return;
+  const fall = spring(560, 0.28);
+  const seen = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting || reduce.matches || section.getAttribute("data-journey") === "still") continue;
+      seen.unobserve(entry.target);
+      const rest = getComputedStyle(entry.target).rotate;
+      entry.target.animate([{ translate: "10px -34px", rotate: "-4.5deg", scale: "1.04" }, { translate: "0 0", rotate: rest === "none" ? "0deg" : rest, scale: "1" }],
+        { duration: fall.duration, easing: fall.easing });
+    }
+  }, { threshold: 0.12 });
+  cards.forEach((card) => seen.observe(card));
+}
+
+/* the veil over the hero lifts as its words leave; the landfall's night follows its slip on screen */
+function onScroll() {
+  const vh = window.innerHeight || 1;
+  const hero = steps[0] ? steps[0].getBoundingClientRect() : null;
+  if (hero) section.style.setProperty("--trip-hero", (1 - smooth(0.04, 0.42, -hero.top / vh)).toFixed(3));
+}
+function landfallNight() {
+  const card = cards[cards.length - 1];
+  if (!card) return 0;
+  const vh = window.innerHeight || 1, r = card.getBoundingClientRect();
+  const dusk = smooth(1.02, 0.66, (r.top + r.height / 2) / vh);        // as its slip comes up into view
+  const dawn = smooth(0.24, -0.12, r.bottom / vh);                      // and once it has gone over the top
+  return dusk * (1 - dawn);
 }
 
 if (section && steps.length) {
   fillReadings();
-  tellGauge(NOW);
+  say(NOW);
   const coarse = window.matchMedia("(pointer: coarse)").matches;
+  const poster = section.querySelector("svg.trip__poster");
+  // wait until the drawn chart's own opening is over (the course pencilled, the slip laid), so the 3D
+  // sheet takes over from a chart at rest
+  const settled = (cap = 4000) => {
+    const running = typeof document.getAnimations === "function"
+      ? document.getAnimations().filter((a) => {
+        const target = a.effect && a.effect.target;
+        return target && section.contains(target) && a.playState === "running" && a.effect.getTiming().iterations !== Infinity;
+      }) : [];
+    return Promise.race([Promise.all(running.map((a) => a.finished.catch(() => null))), new Promise((r) => setTimeout(r, cap))]);
+  };
   const trip = lazyScene(section, async () => {
-    const [journey, table, bed, paper] = await Promise.all([
-      import("../../vendor/scenes/journey.js"), import("./table.js"), import("./seabed.js"), import("./paper.js"),
+    const [journey, table, bed, print] = await Promise.all([
+      import("../../vendor/scenes/journey.js"), import("./table.js"), import("./seabed.js"), import("./print.js"),
     ]);
     // without WebGL 2 the stage will not start: skip the work below, the journey shows the poster
-    const probe = document.createElement("canvas").getContext("webgl2");
+    let probe = null;
+    try { probe = document.createElement("canvas").getContext("webgl2"); } catch (error) { probe = null; }
     if (!probe) return { mount: (el, options) => journey.mount(el, { ...options, scene: (stageEl) => table.mount(stageEl, {}) }) };
     const lose = probe.getExtension("WEBGL_lose_context");
     if (lose) lose.loseContext();
-    // the relief and the two printed sheets are made before the stage, between other work
     const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
-    const relief = bed.reliefGrid(coarse ? 288 : 384, coarse ? 260 : 346, 4);
+    // the relief and the print are made before the stage, between other work; the print as sharp as the
+    // camera comes close (a phone draws fewer pixels and gets half)
+    const relief = bed.reliefGrid(coarse ? 257 : 385, coarse ? 232 : 347, 4);
     await pause();
-    const svg = section.querySelector("svg.trip__poster");
-    const scale = coarse ? 1.6 : 2.2;
-    const day = await paper.chartPicture(svg, "day", scale);
-    await pause();
-    const night = await paper.chartPicture(svg, "night", scale);
-    await pause();
+    const chart = print.chartPrint(poster, { width: coarse ? 2048 : 4096 });
+    const [base, baseNight, ink, pencil] = [await chart.base("day"), await chart.base("night"), await chart.ink(), await chart.pencil()];
+    if (!reduce.matches && window.scrollY < 40) await settled();
     return {
       mount: (el, options) => journey.mount(el, {
         ...options,
         scene: (stageEl) => {
-          const scene = table.mount(stageEl, { relief, day, night, course: COURSE, story: STORY, window: [0, EDGE + legs[3]] });
+          const scene = table.mount(stageEl, {
+            relief, course: COURSE, story: STORY, window: [0, EDGE], hero: HERO, heroPhone: HERO_PHONE,
+            print: { base, baseNight, ink, pencil, width: chart.width, height: chart.height, tokens: chart.tokens },
+          });
           scene.dispose = callouts(scene, stageEl.querySelector(".trip__labels"));
           return scene;
         },
@@ -282,27 +382,30 @@ if (section && steps.length) {
     };
   }, {
     chapters: CHAPTERS,
-    inertia: 0.75,
-    dwell: 0.4,
-    parallax: 0.05,
-    drift: 0.006,
+    inertia: 0.35,
+    dwell: 0.35,
+    parallax: 0.04,
+    drift: 0.005,
     focus: [0.4, 0, 0.6],
     stillWidth: 880,
     stillRatio: 0.6,
-    onUpdate: ({ params }) => {
-      // also called before each still is drawn: the slip and the stage only follow the live trip
+    onUpdate: ({ params, progress }) => {
+      // also called before each still is drawn: the stage only follows the live trip
       if (section.getAttribute("data-journey") !== "live") return;
       tripHour = params.hour || NOW;
-      section.style.setProperty("--trip-night", clamp(params.night || 0).toFixed(3));
-      section.toggleAttribute("data-night-now", (params.night || 0) > 0.5);
-      if (current > 0 || (params.hour || NOW) > NOW + 0.01) tellGauge(params.hour || NOW);
+      const night = landfallNight();
+      if (live && live.scene && live.scene.setStory) live.scene.setStory({ night });
+      const shown = live && live.scene && live.scene.night ? live.scene.night() : night;
+      section.style.setProperty("--trip-night", clamp(shown).toFixed(3));
+      section.toggleAttribute("data-night-now", shown > 0.5);
+      if (current > 0 || progress > 0.02) say(params.hour || NOW);
     },
     lazy: { timeout: 400, margin: "100%" },
   });
   section.addEventListener("chapter", (event) => showChapter(event.detail.index));
   trip.ready.then((journeyHandle) => {
     live = journeyHandle;
-    if (journeyHandle && journeyHandle.stage && journeyHandle.scene && journeyHandle.scene.setStory) idleClock(journeyHandle);
+    if (journeyHandle && journeyHandle.stage && journeyHandle.scene && journeyHandle.scene.setStory) heroClock(journeyHandle);
   });
 
   // the chapter marks: a table of contents that flies there
@@ -311,23 +414,43 @@ if (section && steps.length) {
     event.preventDefault();
     live.goTo(Number(a.getAttribute("data-go")));
   }));
-  // no journey running (no WebGL, before it loads, paused, or the plain chart): the slips are still
-  // lit as they pass
+  // no journey running (no WebGL, before it loads, paused, or the plain chart): the chapters are still
+  // marked as they pass
   if ("IntersectionObserver" in window) {
     const seen = new IntersectionObserver((entries) => {
-      const runs = section.getAttribute("data-journey") === "live" && !section.hasAttribute("data-plain")
-        && root.getAttribute("data-motion") !== "paused";
+      const runs = section.getAttribute("data-journey") === "live" && !section.hasAttribute("data-plain") && root.getAttribute("data-motion") !== "paused";
       if (runs) return;
       const best = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
       if (best) showChapter(steps.indexOf(best.target));
     }, { threshold: [0.35, 0.6] });
     steps.forEach((step) => seen.observe(step));
   }
+  landSlips();
+  let ticking = 0;
+  addEventListener("scroll", () => { if (!ticking) ticking = requestAnimationFrame(() => { ticking = 0; onScroll(); }); }, { passive: true });
+  addEventListener("resize", () => { onScroll(); fitPhoneHero(); });
+  onScroll();
 
-  // the plain chart, one key press away: the drawn chart instead of the 3D table
+  // the plain chart, one key press away: the drawn chart instead of the 3D table. Live, the drawn chart
+  // (the poster) comes back over the stage; with stills (reduced motion) a copy of it takes the place of
+  // the stills in the hero
   const plain = document.getElementById("plain-chart");
+  const plainStill = () => {
+    if (section.querySelector(".trip__plain") || !poster || !steps[0]) return;
+    const figure = document.createElement("figure");
+    figure.className = "trip__plain";
+    figure.setAttribute("aria-hidden", "true");
+    const copy = poster.cloneNode(true);
+    copy.setAttribute("class", "chart");
+    copy.removeAttribute("data-scene-poster");
+    copy.removeAttribute("data-enter");
+    copy.querySelectorAll("defs, [id]").forEach((el) => (el.tagName.toLowerCase() === "defs" ? el.remove() : el.removeAttribute("id")));
+    figure.appendChild(copy);
+    steps[0].appendChild(figure);
+  };
   if (plain) plain.addEventListener("click", () => {
     const on = !section.hasAttribute("data-plain");
+    if (on) plainStill();
     section.toggleAttribute("data-plain", on);
     plain.setAttribute("aria-pressed", String(on));
     if (on) trip.pause("plain"); else trip.resume("plain");
@@ -338,18 +461,13 @@ if (section && steps.length) {
     const table = document.getElementById("tide-table"), toggle = document.getElementById("table-toggle");
     if (table && table.hidden && toggle) toggle.click();
   });
-  // one key press away, from anywhere on the page (not while typing in a field): Alt+Shift+T for the
-  // tide table, Alt+Shift+C for the plain chart
+  // from anywhere on the page (not while typing in a field): Alt+Shift+T the tide table, Alt+Shift+C the plain chart
   document.addEventListener("keydown", (event) => {
     if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
     if (event.target.closest && event.target.closest("input, select, textarea, [contenteditable]")) return;
     if (event.code === "KeyT" && toTable) { event.preventDefault(); toTable.click(); }
-    if (event.code === "KeyC" && plain && section.getAttribute("data-journey") === "live") { event.preventDefault(); plain.click(); plain.focus(); }
+    if (event.code === "KeyC" && plain && /^(live|still)$/.test(section.getAttribute("data-journey") || "")) { event.preventDefault(); plain.click(); plain.focus({ preventScroll: true }); }
   });
   motionToggle(document.getElementById("motion"));
   showChapter(0);
 }
-
-/* ---- paper with depth: the slip and the passage cards lean to the hand, the notes open as pages */
-const main = document.querySelector("main");
-if (main) mountDepth(main, { tilt: 4, lift: 7, raise: 12, ease: 0.55, fold: 70, foldTime: 1, foldStagger: 0.12 });

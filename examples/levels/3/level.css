@@ -1,18 +1,20 @@
 /* Tidewatch, level 3: Expressive. Loaded after ../shared/tokens.css, ../shared/base.css and the scene kit's
    ../../vendor/scenes/depth.css. Everything of level 2 stays (the first part of this file, unchanged); the
    second part, from "level 3: Expressive" down, adds:
-   - the chart as a sheet lying on the table at a slight angle, in plates at their own depth (the sea below,
-     the land, the ink, the pencil, the slip on top), moved by the kit's depth.js with the hand and the scroll;
-   - the signature: the lamp hangs over the chart and follows the hand. Its pool lights the paper, the land
-     throws a shadow away from it and so does the slip; at night it is the red lamp, and the chart is only
-     there where it shines. It also walks down the pencil line as the hero scrolls away;
+   - the signature: the chart as a sheet of paper lying on the chart table, seen from the reader's chair
+     (CSS 3D: the far edge narrower, a cut edge towards the reader, one corner turned up, its shadow on the
+     table). It is printed in three plates, the colours, the ink and the pencil, which part a little when the
+     hand or the page moves; it leans a few degrees towards the hand;
+   - the lamp over it: a round pool of warm light that follows the hand, or rests on the pencil line and walks
+     down it as the hero scrolls away. At night it is the red lamp, and the chart is lit only where it falls;
    - the week told as you scroll: the tide curve stays pinned, a cursor walks through the days, each safe
      window is hatched in as it passes, and the day under the lamp flows into the next;
-   - the passage slips lean toward the lamp with its glare (depth.js tilt) and are dealt with a spring; their
-     strips draw the day's tide; the three notes rise as a pile, deal out and step forward (depth.js stack);
-   - springs from the Web Animations API (level.js): the slip, the passage slips, the lamp switch.
+   - the passage slips lean towards the hand and lift (depth.js tilt), dealt with a spring; their strips draw
+     the day's tide; the three notes rise as a pile, deal out and step forward (depth.js stack);
+   - springs from the Web Animations API (level.js): the sheet, the slip, the passage slips, the lamp switch.
    Reduced motion: base.css stops every CSS animation, level.js runs no spring and no loop, depth.js lays
-   everything flat, the story is a plain list and the notes a plain row. */
+   everything flat, the sheet lies still with the lamp on the pencil line, the story is a plain list. */
+
 
 /* ---------------------------------------------------------------- level-2 tokens */
 :root {
@@ -283,82 +285,192 @@
   ::view-transition-new(root) { animation-duration: var(--duration-base); }
 }
 
+
 /* ================================================================ level 3: Expressive */
 :root {
-  --l3-tilt: 14deg;                             /* the sheet lies on the table, seen at a slight angle */
-  --l3-perspective: 1500px;
-  --l3-edge: 2.5rem;                            /* table round the sheet, for its shadow */
-  --l3-sheet-scale: 1.06;
-  --shadow-table: 0 1px 1px rgba(48, 34, 10, 0.18), 0 10px 18px -8px rgba(48, 34, 10, 0.36), 4px 16px 26px -14px rgba(48, 34, 10, 0.3);   /* stays inside --l3-edge */
-  --size-pool: clamp(34rem, 60vw, 62rem);       /* the pool of lamp light on the chart */
-  --color-relief: rgba(74, 52, 14, 0.5);        /* the shadow the raised land throws on the sea */
-  --color-pool-shade: rgba(96, 70, 30, 0.44);   /* the paper outside the pool, multiplied */
-  --color-pool-warm: rgba(255, 228, 176, 0.5);  /* the paper inside it: lamp light is warm */
-  --color-lamp-core: var(--color-lamp);         /* the hot middle of the pool */
+  /* the sheet on the table, seen from the reader's chair */
+  --l3-lay: 27deg;                              /* how far the sheet lies back */
+  --l3-turn: -1.4deg;                           /* and how it lies turned: a sheet is never quite square */
+  --l3-sink: -28px;                             /* a little under the screen, so no part of it ever comes nearer */
+  --l3-eye: 1450px;                             /* how far the eye is from the screen */
+  --l3-eye-at: 26% -46%;                        /* and where it is: left of the sheet, above the table */
+  --l3-curl: 5.5rem;                            /* the corner that has turned up */
+  --l3-pool: 280px;                             /* the radius of the lamp's pool on the sheet */
+  --l3-k: 2;                                    /* the plates are laid out at twice their size: sharp in perspective, and the
+                                                   browser never needs to draw them again while the sheet leans */
+
+  --l3-paper: #f9f4e7;                          /* the sheet: whiter than the table it lies on */
+  --l3-glow: rgba(255, 233, 182, 0.58);         /* the warm middle of the lamp's pool */
+  --l3-shade: rgba(54, 44, 30, 0.28);           /* the sheet where the lamp does not reach */
+  --l3-cast: rgba(56, 38, 10, 0.3);             /* the sheet's shadow on the table */
+  --l3-contact: rgba(56, 38, 10, 0.26);         /* where it touches the table */
+  --l3-cut: #d6c8ab;                            /* the cut edge of the paper, towards the reader */
+  --l3-back: #ece2cd;                           /* the back of the paper, on the turned-up corner */
+  --l3-crease-dark: rgba(92, 66, 22, 0.13);     /* the fold: one side turned from the light */
+  --l3-crease-light: rgba(255, 255, 255, 0.5);  /* and one side towards it */
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --color-relief: rgba(0, 0, 0, 0.66); --color-pool-shade: rgba(4, 1, 0, 0.4); --color-pool-warm: transparent; --color-lamp-core: #c8411f; --shadow-table: 0 12px 24px -10px rgba(0, 0, 0, 0.75); }
-}
-:root[data-theme="dark"] { --color-relief: rgba(0, 0, 0, 0.66); --color-pool-shade: rgba(4, 1, 0, 0.4); --color-pool-warm: transparent; --color-lamp-core: #c8411f; --shadow-table: 0 12px 24px -10px rgba(0, 0, 0, 0.75); }
-
-/* ---- the chart as plates: the sea below, the land, the ink, the pencil, each at its own depth ---- */
-.chart .tint { stroke: none; }
-.chart .tint--deep, .chart .tint--two { fill: none; }
-.chart .tint--shoal2 { fill: var(--color-chart-shoal-2); }
-.chart .tint--shoal { fill: var(--color-chart-shoal); }
-.chart .tint--dry { fill: var(--color-chart-dry); }
-.chart .line { fill: none; stroke: var(--color-chart-contour); stroke-width: 0.8; }
-.chart .line--deep { stroke-width: 0.7; stroke-opacity: 0.55; }
-.chart .line--shoal2 { stroke-opacity: 0.8; }
-.chart .line--two { stroke-width: 0.7; stroke-dasharray: 1 3; stroke-linecap: round; }
-.chart .line--dry { stroke: var(--color-chart-ink); stroke-width: 0.7; stroke-opacity: 0.5; stroke-dasharray: 0.6 2.4; stroke-linecap: round; }
-.chart .c-shadow { fill: var(--color-relief); }
-
-/* ---- the sheet: lying on the table at a slight angle, with the fold it has always had ---- */
-.hero__scene { perspective: var(--l3-perspective); perspective-origin: 58% 30%; }
-.sheet { position: absolute; inset: 0; overflow: hidden; transform-origin: 50% 100%; transform: rotateX(var(--l3-tilt)) scale(var(--l3-sheet-scale)); }
-.hero__scene::after { display: none; }        /* level 2's fold lies on the screen; here it lies on the sheet */
-.sheet::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to right, transparent calc(57% - 56px), var(--color-fold-shade) calc(57% - 0.5px), var(--color-fold-light) calc(57% + 0.5px), transparent calc(57% + 64px)); }
-@media (min-width: 60.0625rem) {
-  /* a strip of table right and below the sheet, where its shadow falls */
-  .hero__scene { right: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) - var(--l3-edge)); bottom: calc(var(--space-7) - var(--l3-edge)); }
-  .sheet { inset: 0 var(--l3-edge) var(--l3-edge) 0; box-shadow: var(--shadow-table); }
-}
-
-/* ---- the lamp: a pool of light behind the chart (it shows through the paper and, at night, is all the
-   light there is) and a shade on the sheet around it. level.js moves both, and the shadows. ---- */
-.hero::after { display: none; }               /* level 2's lamp is fixed; this one hangs free */
-.hero__light { position: absolute; z-index: -1; inset: 0; pointer-events: none; }
-@media (min-width: 60.0625rem) {
-  /* the lamp lights the chart, not the bare table past its right edge */
-  .hero__light {
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - max(var(--size-gutter), (100% - var(--size-content)) / 2) - 2rem), transparent calc(100% - max(var(--size-gutter), (100% - var(--size-content)) / 2) + 2.5rem));
-    mask-image: linear-gradient(to right, #000 calc(100% - max(var(--size-gutter), (100% - var(--size-content)) / 2) - 2rem), transparent calc(100% - max(var(--size-gutter), (100% - var(--size-content)) / 2) + 2.5rem));
+  :root:not([data-theme="light"]) {
+    --l3-paper: #a62d17; --l3-glow: rgba(255, 112, 70, 0.26); --l3-shade: rgba(15, 6, 4, 0.92); --l3-cast: rgba(0, 0, 0, 0.62);
+    --l3-contact: rgba(0, 0, 0, 0.7); --l3-cut: #2a0d07; --l3-back: #3b150c; --l3-crease-dark: rgba(0, 0, 0, 0.2); --l3-crease-light: rgba(255, 150, 110, 0.07);
   }
 }
-.hero__lamp {
-  position: absolute; left: 0; top: 0; width: var(--size-pool); height: var(--size-pool);
-  margin: calc(var(--size-pool) / -2) 0 0 calc(var(--size-pool) / -2); border-radius: 50%; pointer-events: none;
-  background: radial-gradient(closest-side, var(--color-lamp-core) 0%, var(--color-lamp) 24%, var(--color-lamp-mid) 56%, var(--color-lamp-edge) 100%);
-  transform: translate3d(68vw, 51vh, 0);
+:root[data-theme="dark"] {
+  --l3-paper: #a62d17; --l3-glow: rgba(255, 112, 70, 0.26); --l3-shade: rgba(15, 6, 4, 0.92); --l3-cast: rgba(0, 0, 0, 0.62);
+  --l3-contact: rgba(0, 0, 0, 0.7); --l3-cut: #2a0d07; --l3-back: #3b150c; --l3-crease-dark: rgba(0, 0, 0, 0.2); --l3-crease-light: rgba(255, 150, 110, 0.07);
 }
-.hero__shade {
-  position: absolute; left: 0; top: 0; width: calc(var(--size-pool) * 3); height: calc(var(--size-pool) * 3);
-  margin: calc(var(--size-pool) * -1.5) 0 0 calc(var(--size-pool) * -1.5); pointer-events: none; mix-blend-mode: multiply;
-  background: radial-gradient(closest-side, var(--color-pool-warm) 0%, transparent 15%, var(--color-pool-shade) 44%, var(--color-pool-shade) 100%);
+
+/* ---- the chart as a sheet of paper lying on the table under the lamp ---------------------------------- */
+.hero::after { display: none; }               /* level 2's lamp is a fixed glow; this one hangs over the sheet */
+.hero__scene { overflow: visible; -webkit-mask-image: none; mask-image: none; container-type: size; }
+.hero__scene::after { display: none; }        /* level 2's fold lies on the screen; this one lies in the paper */
+.desk { position: absolute; inset: 0; perspective: var(--l3-eye); perspective-origin: var(--l3-eye-at); pointer-events: none; }
+/* One plane: everything on the sheet is flattened into it, so the browser draws each plate straight into the
+   perspective from its own sharp picture (a 3D context inside the sheet would halve their resolution) */
+.sheet, .sheet__curl {
+  position: absolute; right: var(--l3-right, 0px); bottom: var(--l3-bottom, 0px);
+  height: var(--l3-height, min(100cqh, 100cqw * 900 / 860)); aspect-ratio: 860 / 900;
 }
-:root[data-theme="dark"] .hero__shade { mix-blend-mode: normal; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hero__shade { mix-blend-mode: normal; } }
+.sheet { transform-origin: 50% 100%; transform: translateZ(var(--l3-sink)) rotateX(var(--l3-lay)) rotateZ(var(--l3-turn)); }
+.sheet > i, .sheet__paper > i { position: absolute; display: block; }
+/* its shadow on the table: soft, and falling away from the lamp (level.js moves it) */
+.sheet__shadow {
+  inset: 6%; background: var(--l3-cast); box-shadow: 0 0 56px 30px var(--l3-cast);
+  transform: translate3d(14px, 22px, 0); will-change: transform;
+}
+.sheet__contact { inset: 0; box-shadow: 0 0 1px var(--l3-contact), 0 2px 4px -1px var(--l3-contact); }
+/* the paper's cut edge, where the sheet comes nearest */
+.sheet__edge { left: 0; right: 0; top: 100%; height: 3px; background: linear-gradient(var(--l3-cut), color-mix(in oklab, var(--l3-cut), #000 22%)); }
+/* the paper clips nothing itself: a clip in perspective would make the browser draw the plates flat first
+   and then turn that picture, which softens every letter. The plates are its exact size; only the lamp is cut. */
+.sheet__paper { position: absolute; inset: 0; background: var(--l3-paper); }
+.sheet__clip { position: absolute; inset: 0; overflow: hidden; }
+/* three plates as the chart was printed: the colours, the ink, and the pencil. Each is drawn at --l3-k
+   times its size and scaled back, so the browser keeps enough detail for the perspective to stay sharp. */
+.plate {
+  position: absolute; left: 0; top: 0; width: calc(100% * var(--l3-k)); height: calc(100% * var(--l3-k));
+  transform-origin: 0 0; transform: translate3d(0, 0, 0) scale(calc(1 / var(--l3-k)));
+}
+.plate .chart { position: absolute; inset: 0; width: 100%; height: 100%; }
+.plate--base { z-index: 1; }
+.plate--ink { z-index: 5; }
+.plate--pencil { z-index: 6; }
+/* the lamp: a pool of light that the hand moves over the sheet. By day it leaves the paper inside it bright
+   and puts the rest a step into shade; at night it is the red lamp and the only light there is. Both are
+   one layer each, moved whole, so moving the lamp never draws the chart again. */
+.sheet__lamp, .sheet__glow { position: absolute; left: 56%; top: 50%; width: 0; height: 0; will-change: transform; }
+.sheet__clip--glow { z-index: 2; }
+.sheet__clip--lamp { z-index: 7; }
+.sheet__glow::before, .sheet__lamp > i { content: ""; position: absolute; display: block; }
+.sheet__glow::before {
+  left: calc(var(--l3-pool) * -1); top: calc(var(--l3-pool) * -1); width: calc(var(--l3-pool) * 2); height: calc(var(--l3-pool) * 2);
+  background: radial-gradient(closest-side, var(--l3-glow), color-mix(in oklab, var(--l3-glow), transparent 55%) 34%, transparent 70%);
+}
+.pool {
+  left: calc(var(--l3-pool) * -1); top: calc(var(--l3-pool) * -1); width: calc(var(--l3-pool) * 2); height: calc(var(--l3-pool) * 2);
+  background: radial-gradient(closest-side, transparent 54%, color-mix(in oklab, var(--l3-shade), transparent 50%) 71%, var(--l3-shade) 88%);
+}
+.pool__out { background: var(--l3-shade); }
+.pool__out--n { left: -4000px; width: 8000px; top: -4000px; height: calc(4000px - var(--l3-pool)); }
+.pool__out--s { left: -4000px; width: 8000px; top: var(--l3-pool); height: 4000px; }
+.pool__out--w { left: -4000px; width: calc(4000px - var(--l3-pool)); top: calc(var(--l3-pool) * -1); height: calc(var(--l3-pool) * 2); }
+.pool__out--e { left: var(--l3-pool); width: 4000px; top: calc(var(--l3-pool) * -1); height: calc(var(--l3-pool) * 2); }
+/* at night the ink, the neat line and the compass stay above the gloom, as a dim red print outside the pool */
+:root[data-theme="dark"] .sheet__clip--lamp { z-index: 4; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sheet__clip--lamp { z-index: 4; } }
+/* the fold the sheet has always had: a soft valley, feathered on both sides of the crease */
+.sheet__fold {
+  z-index: 3; top: 0; bottom: 0; left: calc(57% - 72px); width: 144px; transform: translateZ(0);
+  background: linear-gradient(to right, transparent, color-mix(in oklab, var(--l3-crease-dark), transparent 70%) 30%, var(--l3-crease-dark) 48.5%,
+    color-mix(in oklab, var(--l3-crease-dark), var(--l3-crease-light)) 50%, var(--l3-crease-light) 51.5%, color-mix(in oklab, var(--l3-crease-light), transparent 75%) 64%, transparent);
+}
+/* the corner that has turned up: where it was, the table shows; under it, its shadow on the chart */
+.sheet__dog {
+  z-index: 8; top: 0; right: 0; width: var(--l3-curl); height: var(--l3-curl); transform: translateZ(0);
+  background: linear-gradient(to bottom left, var(--color-bg) 50%, var(--l3-contact) 50%, transparent 74%);
+}
+@property --curl-a { syntax: "<angle>"; inherits: false; initial-value: -146deg; }
+/* it lies beside the sheet, with the sheet's own turn and the lean (level.js writes --lean), so it can rise
+   out of the paper's plane: hinged on the diagonal of the corner, it stands a little off the chart */
+.sheet__curl {
+  display: block; pointer-events: none; transform-origin: 0 0;
+  transform: translate(50%, 100%) rotate3d(var(--lean, 1, 0, 0, 0deg)) translateZ(var(--l3-sink)) rotateX(var(--l3-lay)) rotateZ(var(--l3-turn))
+    translate(-50%, -100%) translateX(calc(100% - var(--l3-curl))) rotate3d(1, 1, 0, var(--curl-a, -146deg));
+  clip-path: polygon(0 0, var(--l3-curl) 0, var(--l3-curl) var(--l3-curl));
+  background: linear-gradient(to top right, color-mix(in oklab, var(--l3-back), #000 8%) 50%, var(--l3-back) 72%, color-mix(in oklab, var(--l3-back), #fff 30%)) 0 0 / var(--l3-curl) var(--l3-curl) no-repeat;
+}
+/* four pins, one in each corner, that tell level.js where the sheet lies on the screen */
+.sheet__pin { width: 0; height: 0; }
+.sheet__pin--a { left: 0; top: 0; }
+.sheet__pin--b { left: 100%; top: 0; }
+.sheet__pin--c { left: 100%; top: 100%; }
+.sheet__pin--d { left: 0; top: 100%; }
+/* the chart's own colours on the sheet */
+.sheet .chart .tint { stroke: none; }
+.sheet .chart .tint--deep, .sheet .chart .tint--two { fill: none; }
+.sheet .chart .tint--shoal2 { fill: var(--color-chart-shoal-2); }
+.sheet .chart .tint--shoal { fill: var(--color-chart-shoal); }
+.sheet .chart .tint--dry { fill: var(--color-chart-dry); }
+.sheet .chart .line { fill: none; stroke: var(--color-chart-contour); stroke-width: 0.8; }
+.sheet .chart .line--deep { stroke-width: 0.7; stroke-opacity: 0.55; }
+.sheet .chart .line--shoal2 { stroke-opacity: 0.8; }
+.sheet .chart .line--two { stroke-width: 0.7; stroke-dasharray: 1 3; stroke-linecap: round; }
+.sheet .chart .line--dry { stroke: var(--color-chart-ink); stroke-width: 0.7; stroke-opacity: 0.5; stroke-dasharray: 0.6 2.4; stroke-linecap: round; }
 
-/* ---- the slip: depth.js owns its transform, so its resting turn moves to rotate; its shadow falls away
-   from the lamp (level.js writes --slip-sx and --slip-sy) ---- */
-.hero__slip { transform: none; rotate: -1.6deg; box-shadow: 0 1px 0 rgba(14, 42, 59, 0.05), calc(var(--slip-sx, 0) * 1px) calc(var(--slip-sy, 4) * 1px + 8px) 22px -12px var(--color-relief); }
+/* the chart's lettering: HTML laid over each plate (a browser would lay out and repaint SVG text on every
+   frame of a 3D turn). Placed in % of the chart, turned by --r, anchored by m (middle) or e (end), sized in
+   chart units (--fs x --u, one unit being 1/860 of the plate) with the optical size the chart used. */
+.chart-text { position: absolute; inset: 0; container-type: size; pointer-events: none; font-family: var(--font-display); color: var(--color-chart-ink); --u: calc(100cqw / 860); --halo: var(--l3-paper); }
+/* inside the neat line, as the chart's own lettering is */
+.chart-text:not(.chart-text--pencil) { clip-path: inset(1.39% 1.45%); }
+.tx {
+  --fs: 11.5; position: absolute; display: block; white-space: nowrap; line-height: 1; font-size: calc(var(--fs) * var(--u));
+  font-optical-sizing: none; font-variation-settings: "opsz" calc(var(--fs) * 0.95); text-box: trim-both cap alphabetic;
+  transform-origin: 0 0; transform: rotate(var(--r, 0deg)) translate(var(--ax, 0%), -100%);
+}
+.tx.x-m { --ax: -50%; }
+.tx.x-e { --ax: -100%; }
+.tx.x-sea { --fs: 23; font-style: italic; letter-spacing: 0.46em; opacity: 0.5; }
+.tx.x-water { --fs: 19; font-style: italic; letter-spacing: 0.1em; opacity: 0.82; }
+.tx.x-water.x-sm { --fs: 11.5; letter-spacing: 0.04em; }
+.tx.x-bank { --fs: 12.5; font-style: italic; letter-spacing: 0.03em; opacity: 0.85; }
+.tx.x-region { --fs: 21; font-weight: 500; letter-spacing: 0.62em; opacity: 0.42; }
+.tx.x-region2 { --fs: 15; font-weight: 500; letter-spacing: 0.4em; opacity: 0.42; }
+.tx.x-town { --fs: 15; font-weight: 600; letter-spacing: 0.2em; }
+.tx.x-place { --fs: 11.5; opacity: 0.8; }
+.tx.x-small { --fs: 9.5; font-family: var(--font-sans); font-stretch: 84%; font-weight: 500; opacity: 0.85; }
+.tx.x-small.x-ital { --fs: 10.5; font-family: var(--font-display); font-style: italic; font-weight: 450; }
+.tx.x-bottom { opacity: 0.6; }
+.tx.x-snd { --fs: 11.5; font-style: italic; font-weight: 420; opacity: 0.74; }
+.tx.x-snd .x-d { font-size: calc(8 * var(--u)); position: relative; top: calc(2.6 * var(--u)); }
+.tx.x-snd.x-dry { text-decoration: underline; text-decoration-thickness: calc(0.7 * var(--u)); opacity: 0.62; }
+.tx.x-fig, .tx.x-neat { paint-order: stroke fill; -webkit-text-stroke: calc(var(--halo-w) * var(--u)) var(--halo); }
+.tx.x-fig { --fs: 9; --halo-w: 4.5; font-family: var(--font-sans); font-weight: 500; color: var(--color-chart-contour); }
+.tx.x-neat { --fs: 9; --halo-w: 3.5; font-family: var(--font-mono); letter-spacing: 0.02em; color: var(--color-chart-edge); }
+.tx.x-dia { --fs: 9.5; font-family: var(--font-sans); font-weight: 600; color: var(--color-chart-magenta); }
+.tx.x-rose { --fs: 8.5; font-family: var(--font-mono); letter-spacing: 0.04em; color: var(--color-chart-magenta); }
+.tx.x-rose.x-var { --fs: 7.5; }
+.tx.x-tk { --fs: 8.5; font-family: var(--font-sans); font-stretch: 84%; font-weight: 500; letter-spacing: 0.16em; opacity: 0.8; }
+.tx.x-tn { --fs: 24; letter-spacing: 0.01em; }
+.tx.x-ts { --fs: 13.5; font-style: italic; }
+.tx.x-pen { --fs: 15; font-style: italic; font-weight: 500; color: var(--color-chart-pencil); opacity: 0.94; }
+.tx.x-pen.x-time, .tx.x-pen.x-note { --fs: 13.5; }
+:root[data-theme="dark"] .chart-text { --halo: transparent; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .chart-text { --halo: transparent; } }
 
-/* what moves every frame gets a layer of its own, made once, so the chart is never drawn again mid-motion */
-.hero__lamp, .hero__shade, .plate--shadow { will-change: transform; }
-@media (hover: hover) and (pointer: fine) { .plate, .hero__slip { will-change: transform; } }
-.story.is-live :is(.tide__cursor, .tide__shade, .tide__pool, .dayc__dot) { will-change: transform; }
+/* where the sheet lies: on a wide screen right of the words, its near edge along the foot of the hero */
+@media (min-width: 60.0625rem) {
+  /* it starts right of the headline, so the words never run over its edge */
+  .hero__scene {
+    top: calc(var(--size-header) + var(--space-5)); bottom: var(--space-6);
+    left: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) + var(--text-display) * 5.9 + var(--space-3));
+    right: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) - var(--space-4));
+  }
+}
 
+/* ---- the slip lies on the sheet; level.js moves it with the hand and the page (translate), and its shadow
+   falls away from the lamp (--slip-sx, --slip-sy) ---- */
+.hero__slip { box-shadow: 0 1px 0 rgba(14, 42, 59, 0.05), calc(var(--slip-sx, 4) * 1px) calc(var(--slip-sy, 8) * 1px + 6px) 26px -10px var(--l3-cast); will-change: transform; }
 /* ---- the week, told as you scroll. level.js marks the story .is-live (motion on, script running), pins its
    stage, walks a cursor through the week and writes which day is current; without it the steps are a list. ---- */
 :root { --color-veil: rgba(242, 235, 221, 0.8); }
@@ -390,7 +502,7 @@
 .tide__shade, .tide__pool { position: absolute; top: 0; bottom: 0; left: 0; }
 .tide__shade { width: 200%; background: linear-gradient(to right, transparent 0 50%, var(--color-veil) 53%, var(--color-veil)); }
 /* at night the lamp hangs over the hour the cursor reads: a red pool that lights the curve under it */
-.tide__pool { display: none; width: 34%; margin-left: -17%; background: radial-gradient(closest-side, var(--color-lamp-mid), transparent); mix-blend-mode: screen; }
+.tide__pool { display: none; width: 34%; margin-left: -17%; background: radial-gradient(closest-side, color-mix(in oklab, var(--color-lamp), transparent 52%), transparent); }
 :root[data-theme="dark"] .tide__pool { display: block; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tide__pool { display: block; } }
 .tide__read.is-flipped { left: auto; right: var(--space-1); }
@@ -424,17 +536,23 @@
 .dayc__dot { position: absolute; top: 0; left: -4px; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--color-text); box-shadow: 0 0 0 2px var(--color-sunk); }
 .dayc__hours { display: flex; justify-content: space-between; margin-top: var(--space-2); font: 500 var(--text-xs)/1 var(--font-mono); color: var(--color-text-muted); }
 
-/* ---- the passage slips: paper that leans toward the lamp (depth.js tilt), with the lamp's glare on it ---- */
+/* ---- the passage slips: paper that leans toward the hand (depth.js tilt), lifts and throws its shadow. The
+   words stay in full ink: the kit's pale glare is off, and the lamp's glint is painted on the paper itself,
+   under the words, where the hand is (depth.js writes --depth-gx, --depth-gy and --depth-lift) ---- */
 .pass { overflow: visible; isolation: auto; cursor: pointer; }
 .pass::before { display: none; }              /* level 2's shadow layer: depth.css lays the shadow here */
 .pass:hover, .pass:active { transform: none; box-shadow: var(--depth-shadow); }
 .pass .strip { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
-/* on paper by day the lamp's glare is warm, not white: a faint yellow that leaves the ink dark */
-.pass[data-depth-tone="light"] > .depth-glare::before { display: block; background: radial-gradient(closest-side, rgba(255, 210, 128, 0.2), rgba(255, 210, 128, 0)) center / 70% 70% no-repeat; }
-:root[data-theme="dark"] .pass > .depth-glare::before { background: radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 16%, transparent), transparent) center / 64% 64% no-repeat; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .pass > .depth-glare::before { background: radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 16%, transparent), transparent) center / 64% 64% no-repeat; }
+.pass > .depth-glare::before { display: none; }
+.pass {
+  background:
+    radial-gradient(circle at calc(50% + var(--depth-gx, 0) * 45%) calc(50% + var(--depth-gy, 0) * 45%),
+      color-mix(in oklab, var(--l3-glint), transparent calc(100% - var(--depth-lift, 0) * 100%)), transparent 62%),
+    var(--color-surface);
 }
+:root { --l3-glint: rgba(255, 228, 170, 0.55); }
+:root[data-theme="dark"] { --l3-glint: rgba(255, 106, 77, 0.14); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --l3-glint: rgba(255, 106, 77, 0.14); } }
 
 /* ---- three notes in the margin: index cards that rise off the table as one pile, deal out into a row
    and step forward (depth.js stack; the deal follows the scroll where the browser can) ---- */
@@ -452,12 +570,29 @@ html[data-motion] .notes > .note.arrive { opacity: 1; animation: none; }
   @keyframes l3-deal { from { translate: 0 0 0; } }
   @keyframes l3-rule { from { transform: scaleX(0); } }
 
-  /* the lamp comes on; the slip lands with a spring (level.js), only its fade is CSS */
-  .hero__lamp { animation: l2-fade var(--duration-draw) var(--ease-move) var(--duration-fast) backwards; }
+  /* the opening: the sheet fades in while level.js lays it on the table; the slip lands with a spring
+     (level.js), only its fade is CSS */
+  [data-enter="chart"] { animation-name: l2-fade; }
+  /* the sheet leans towards the hand slowly, as a heavy sheet would (level.js sets the turn) */
+  .sheet { transition: rotate 950ms cubic-bezier(0.25, 0.6, 0.2, 1); }
+  .sheet__curl { transition: transform 950ms cubic-bezier(0.25, 0.6, 0.2, 1); }
   [data-enter="slip"] { animation: l2-fade var(--duration-slow) var(--ease-standard) var(--m-slip) backwards; }
+  /* the pencil's lettering, laid over the pencil plate as HTML, comes in as level 2's does */
+  .chart-text--pencil :is(.x-time, .x-crs, .x-pencil-note) { animation: l2-fade var(--duration-slow) var(--ease-standard) backwards; }
+  .chart-text--pencil .x-time1 { animation-delay: var(--m-course); }
+  .chart-text--pencil .x-time2 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.38); }
+  .chart-text--pencil .x-time3 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.59); }
+  .chart-text--pencil .x-crs1 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.22); }
+  .chart-text--pencil .x-crs2 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.5); }
+  .chart-text--pencil .x-pencil-note { animation-delay: var(--m-notes); animation-duration: var(--duration-slower); }
 
-  /* the days of the story come and go */
-  .story.is-live .story__steps > .step { transition: opacity var(--duration-slow) var(--ease-standard), translate var(--duration-slow) var(--ease-standard); }
+  /* the days of the story: the old day leaves quickly, then the new one comes in, so two never overprint;
+     a jump of more than a day (level.js marks it) goes straight to the new day */
+  .story.is-live .story__steps > .step { transition: opacity var(--duration-fast) var(--ease-exit), translate var(--duration-fast) var(--ease-exit); }
+  .story.is-live .story__steps > .step[data-current] {
+    transition: opacity var(--duration-slow) var(--ease-standard) var(--duration-fast), translate var(--duration-slow) var(--ease-standard) var(--duration-fast);
+  }
+  .story.is-live.is-jumping .story__steps > .step { transition: none; }
   .story.is-live .tide__days span { transition: color var(--duration-base) var(--ease-standard); }
 
   /* the passage slips: dealt with a spring (level.js); then their strip draws the day's tide */
@@ -483,28 +618,37 @@ html[data-motion] .notes > .note.arrive { opacity: 1; animation: none; }
   }
 }
 
-/* ---- narrower screens ---- */
+/* ---- narrower screens: the sheet lies below the words, seen low across the table, running off the
+   left edge of the screen; the slip lies on it, as on a wide screen ---- */
 @media (max-width: 60rem) {
-  /* the chart shows below the words: a wider pool, so the whole strip of it is lit as in level 2 */
-  :root { --size-pool: 50rem; }
-  :root[data-theme="dark"] { --color-pool-shade: rgba(4, 1, 0, 0.24); }
+  :root { --l3-lay: 46deg; --l3-turn: -2deg; --l3-eye: 820px; --l3-eye-at: 58% -10%; --l3-pool: 150px; --l3-curl: 3rem; --l3-sink: -14px; --l3-reveal: 25rem; }
+  /* the sheet lies in the room the words leave under them */
+  .hero__text { padding-bottom: var(--l3-reveal); }
+  .hero__scene { inset: auto 0 0 0; height: var(--l3-reveal); --l3-height: 31rem; --l3-right: max(var(--size-gutter), 50% - 16rem); --l3-bottom: var(--space-3); }
+  .hero__slip { display: block; left: max(var(--size-gutter), 50% - 18rem); bottom: var(--space-7); width: 13.75rem; padding: var(--space-3) var(--space-4) var(--space-4); }
+  .hero__slip-time { font-size: var(--text-md); gap: var(--space-2); }
+  .hero__slip-note { display: none; }
   /* the notes: one column; each card still steps forward in turn as the pile scrolls in */
   .notes[data-depth="stack"] > * { grid-area: auto; }
   .notes[data-depth="stack"] > :nth-child(2) { translate: 0 0 44px; }
   .notes[data-depth="stack"] > :nth-child(3) { translate: 0 0 88px; }
   .story.is-live .story__day { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
-}
-@media (max-width: 60rem) and (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --color-pool-shade: rgba(4, 1, 0, 0.24); }
+  /* the folded tide table: its caption runs across the full width, above the days */
+  .tt caption { display: block; padding: var(--space-3) 0 var(--space-4); border-bottom: var(--size-border) solid var(--color-border); }
 }
 @media (max-width: 44rem) {
+  /* a phone: the sheet is wider than the screen and runs off its left edge */
+  :root { --l3-lay: 50deg; --l3-eye: 760px; --l3-pool: 135px; --l3-reveal: 20.5rem; }
+  .hero__scene { --l3-height: 26.5rem; --l3-right: var(--size-gutter); }
+  .hero__slip { left: var(--size-gutter); }
   .story__day { margin-left: var(--tide-gutter, var(--space-5)); }
   .step { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
   .story.is-live .step__line { font-size: var(--text-sm); }
 }
 
-/* ---- reduced motion: the page stands still, and the notes lie in a plain row (depth.js lays everything
-   flat; the row needs no step back to read, so its offsets go too) ---- */
+/* ---- reduced motion: the page stands still. The sheet lies on the table as it is, the lamp over the
+   pencil line, and the notes lie in a plain row (depth.js lays everything flat; the row needs no step
+   back to read, so its offsets go too) ---- */
 @media (prefers-reduced-motion: reduce) {
   .notes[data-depth="stack"] > * { transform: none !important; translate: none !important; }
   .notes[data-depth="stack"] > *::after { opacity: 0; }
@@ -513,8 +657,4 @@ html[data-motion] .notes > .note.arrive { opacity: 1; animation: none; }
 }
 @media (prefers-reduced-motion: reduce) and (max-width: 60rem) {
   .notes[data-depth="stack"] { grid-template-columns: minmax(0, 1fr); }
-}
-/* without the script the lamp hangs where level 2 has it: over the middle of the chart */
-@media (max-width: 60rem) {
-  html:not(.js) .hero__lamp { top: auto; bottom: 9rem; margin: 0 0 calc(var(--size-pool) / -2) calc(var(--size-pool) / -2); transform: translateX(58vw); }
 }

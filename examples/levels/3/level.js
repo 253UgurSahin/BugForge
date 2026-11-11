@@ -2,15 +2,17 @@
    this file shapes how it looks while it happens. Its first part is level 2's, unchanged: sections arrive
    once, figures count up, the night lamp spreads from its switch as a View Transition, the tide table and
    the plan note leave with a fade. Its second part, "level 3: Expressive", adds:
-   - the lamp over the chart: it follows the hand on a damped cable, moves its pool and the shade on the
-     tilted sheet (the CSS perspective undone, so both meet), and the shadows of the land and the slip;
-     nobody pointing, it hangs over the river and walks down the pencil line as the hero scrolls away;
-   - the opening: the sheet is laid on the table, its plates come down, the slip lands, all with springs;
+   - the sheet on the table: it leans a few degrees towards the hand, its three plates (the colours, the
+     ink, the pencil) part a little with the hand and the scroll, and the slip floats above it;
+   - the lamp: its pool follows the hand over the paper (the screen point is found back on the tilted sheet
+     from its four corner pins), swings a little on its cable and settles; off the paper it rests on the
+     pencil line and walks down it as the hero scrolls away. The sheet's shadow falls away from it;
+   - the opening: the sheet is laid down, the lamp comes on, the ink lands, the slip lands, a corner springs up;
    - the week told as you scroll: the tide curve pinned, a cursor through the days (fast at night, slow over
      daylight), each safe window hatched in as it passes, and the day's own curve flowing into the next;
-   - springs (the Web Animations API with a CSS linear() curve): the slip, the passage slips, the lamp switch;
-   - the kit's depth.js (../../vendor/scenes/depth.js), loaded with import(): the hero's plates, the passage
-     slips and the notes. Without it, or without this script, the page is the flat level-2 page.
+   - springs (the Web Animations API with a CSS linear() curve): the sheet, the slip, the passage slips, the switch;
+   - the kit's depth.js (../../vendor/scenes/depth.js), loaded with import(): the passage slips and the notes.
+     Without it, or without this script, the page is still whole: the sheet lies on the table, unlit by hand.
    Every loop runs only while something moves on screen; with reduced motion nothing here moves at all. */
 (function () {
   "use strict";
@@ -179,9 +181,10 @@
 /* ================================================================ level 3: Expressive */
 (function () {
   "use strict";
+  var root = document.documentElement;
   var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
   var fine = window.matchMedia("(hover: hover) and (pointer: fine)");
-  var style = getComputedStyle(document.documentElement);
+  var style = getComputedStyle(root);
   function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
   function token(name) { return style.getPropertyValue(name).trim(); }
   function ms(name) { var value = token(name); return /ms$/.test(value) ? parseFloat(value) : parseFloat(value) * 1000; }
@@ -199,120 +202,183 @@
   /* the opening, in the times level 2 uses: the pencil sets down, draws for --duration-draw, the slip lands */
   var COURSE = ms("--duration-slower") + ms("--duration-fast"), SLIP = COURSE + ms("--duration-draw") - ms("--duration-fast");
 
-  /* ---- the lamp: it hangs over the chart and follows the hand -------------------------------- */
+  /* ---- the sheet on the table, and the lamp over it --------------------------------------------- */
+  /* What moves every frame is only ever a layer of its own, moved whole: the lamp, the ink and pencil
+     plates, the sheet's shadow, the slip; nothing on the sheet is drawn again. The chart's lettering is HTML
+     laid over its plates (level.css), because a browser lays out and repaints SVG text whenever the 3D turn
+     above it changes. The sheet's lean towards the hand is one CSS transition that the compositor runs, set
+     again only when the hand crosses into another part of the sheet. */
   var hero = document.querySelector(".hero");
-  var lamp = hero && hero.querySelector(".hero__lamp");
-  if (lamp) (function () {
-    var scene = hero.querySelector(".hero__scene");
-    var shade = hero.querySelector(".hero__shade");
-    var slip = hero.querySelector(".hero__slip");
-    var shadows = Array.prototype.slice.call(hero.querySelectorAll(".plate--shadow"));
-    var LANDS = { "1": [528, 216], "2": [517, 770] };       /* the middle of each land mass, in chart units */
-    var p = null, v = { x: 0, y: 0 }, hand = null, frame = 0, last = 0, cast = false;
+  var sheet = hero && hero.querySelector(".sheet");
+  if (sheet) (function () {
+    var paper = sheet.querySelector(".sheet__paper");
+    var pins = Array.prototype.slice.call(paper.querySelectorAll(".sheet__pin"));
+    var lamp = paper.querySelector(".sheet__lamp"), glow = paper.querySelector(".sheet__glow");
+    var ink = paper.querySelector(".plate--ink"), pencil = paper.querySelector(".plate--pencil");
+    var cast = sheet.querySelector(".sheet__shadow");
+    var slip = hero.querySelector(".hero__slip"), curl = hero.querySelector(".sheet__curl");
+    var FIXES = [[720, 412], [524, 594], [258.6, 694.4]];   /* the pencil line's fixes, in chart units */
+    /* what moves, each on a spring of its own: the lamp, the hand's pull on the plates, the page leaving */
+    function S(v) { return { v: v, d: 0, t: v }; }
+    var pool = { x: S(0), y: S(0) }, pull = { x: S(0), y: S(0) }, page = S(0);
+    var hand = null, frame = 0, last = 0, size = null, map = null, lean = "", ready = false, laid = !moving();
 
-    var sheet = hero.querySelector(".sheet");
-    function box() {                                         /* the sheet, and where the chart lies on it */
-      var sw = sheet.offsetWidth, sh = sheet.offsetHeight, narrow = window.innerWidth <= 960;
-      var pw = narrow ? Math.max(sw, 740) : sw, ph = narrow ? pw * 0.9 : sh;
-      var s = Math.max(pw / 1000, ph / 900);
-      return { sx: scene.offsetLeft + sheet.offsetLeft, sy: scene.offsetTop + sheet.offsetTop, sw: sw, sh: sh, narrow: narrow,
-        ox: sw - pw + pw - 1000 * s, oy: sh - ph + ph - 900 * s, s: s };
-    }
-    function chartToHero(b, x, y) { return { x: b.sx + b.ox + x * b.s, y: b.sy + b.oy + y * b.s }; }
-    function rest(b) {                                       /* nobody points: over the river, and down the pencil line as the hero scrolls away */
-      var h = hero.offsetHeight;
-      var at = b.narrow ? { x: b.sx + b.sw * 0.58, y: h - 150 } : { x: b.sx + b.sw * 0.5, y: h * 0.51 };
-      var gone = reduce.matches ? 0 : clamp(-hero.getBoundingClientRect().top / (h * 0.8), 0, 1);
-      var fix = chartToHero(b, 524, 594), go = 0.7 * gone;    /* towards the 14:40 fix on the pencil line */
-      return { x: at.x + (fix.x - at.x) * go, y: at.y + (fix.y - at.y) * go };
-    }
-    function target(b) {
-      if (!hand || reduce.matches) return rest(b);
-      return { x: clamp(hand.x, b.sx + b.sw * 0.16, hero.offsetWidth - 24), y: clamp(hand.y, hero.offsetHeight * 0.06, hero.offsetHeight * 0.97) };
-    }
-    /* where a point of the screen lies on the tilted sheet: the CSS perspective, undone. The numbers are
-       read from the CSS once, and again after a resize */
-    var view = null;
     function measure() {
-      var cs = getComputedStyle(scene), root = getComputedStyle(document.documentElement);
-      view = { o: cs.perspectiveOrigin.split(" ").map(parseFloat), P: parseFloat(cs.perspective) || 0,
-        org: getComputedStyle(sheet).transformOrigin.split(" ").map(parseFloat),
-        th: (parseFloat(root.getPropertyValue("--l3-tilt")) || 0) * Math.PI / 180, k: parseFloat(root.getPropertyValue("--l3-sheet-scale")) || 1 };
+      var cs = getComputedStyle(root);
+      var w = paper.offsetWidth, h = paper.offsetHeight, s = Math.max(w / 860, h / 900);
+      size = { w: w, h: h, s: s, ox: w - 1000 * s, oy: h - 900 * s, k: parseFloat(cs.getPropertyValue("--l3-k")) || 1,
+        top: hero.getBoundingClientRect().top + window.scrollY, tall: hero.offsetHeight };
     }
-    function onSheet(x, y) {
-      if (!view) measure();
-      var o = view.o, P = view.P, org = view.org, th = view.th, k = view.k;
-      var X = x - scene.offsetLeft, Y = y - scene.offsetTop, sx0 = sheet.offsetLeft, sy0 = sheet.offsetTop;
-      if (!P) return { x: X - sx0, y: Y - sy0 };
-      var q = Y - o[1], A = sy0 + org[1] - o[1], d = P * (q - A) / (P * Math.cos(th) + q * Math.sin(th));
-      var s = P / (P - d * Math.sin(th)), gx = o[0] + (X - o[0]) / s;
-      return { x: org[0] + (gx - sx0 - org[0]) / k, y: org[1] + d / k };
+    function onSheet(x, y) { return { x: size.ox + x * size.s, y: size.oy + y * size.s }; }
+    /* nobody pointing: the lamp rests on the pencil line, past the 14:20 fix, and walks on down it towards
+       the 15:00 fix as the hero scrolls away */
+    function rest(q) {
+      var p = FIXES.map(function (f) { return onSheet(f[0], f[1]); });
+      var a = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y), b = Math.hypot(p[2].x - p[1].x, p[2].y - p[1].y);
+      var d = (0.2 + 0.72 * clamp(q, 0, 1)) * (a + b), i = d < a ? 0 : 1, f = i ? (d - a) / b : d / a;
+      return { x: p[i].x + (p[i + 1].x - p[i].x) * f, y: p[i].y + (p[i + 1].y - p[i].y) * f };
     }
-    function draw(b) {
-      lamp.style.transform = "translate3d(" + p.x.toFixed(1) + "px, " + p.y.toFixed(1) + "px, 0)";
-      var lit = onSheet(p.x, p.y);
-      shade.style.transform = "translate3d(" + lit.x.toFixed(1) + "px, " + lit.y.toFixed(1) + "px, 0)";
-      /* the land throws its shadow away from the lamp; on a touch screen once, from where the lamp rests */
-      var from = fine.matches ? p : cast ? null : rest(b);
-      if (from) shadows.forEach(function (el) {
-        var c = LANDS[el.getAttribute("data-land")], at = chartToHero(b, c[0], c[1]);
-        var dx = (at.x - from.x) * 0.03, dy = (at.y - from.y) * 0.03, n = Math.hypot(dx, dy), k = n > 16 ? 16 / n : 1;
-        el.style.translate = (dx * k).toFixed(1) + "px " + (dy * k).toFixed(1) + "px";
-        cast = true;
-      });
-      if (slip && slip.offsetParent) {                         /* and so does the slip lying on it */
-        var sx = slip.offsetLeft + slip.offsetWidth / 2 + slip.offsetParent.offsetLeft, sy = slip.offsetTop + slip.offsetHeight / 2 + slip.offsetParent.offsetTop;
-        slip.style.setProperty("--slip-sx", clamp((sx - p.x) * 0.03, -16, 16).toFixed(1));
-        slip.style.setProperty("--slip-sy", clamp((sy - p.y) * 0.03, -10, 16).toFixed(1));
+    /* where the sheet lies on the page, from its four corner pins: the plane's homography, so a point of
+       the screen can be found back on the paper however it is turned. Read only while the sheet is still. */
+    function chart() {
+      var q = pins.map(function (el) { var r = el.getBoundingClientRect(); return [r.left + window.scrollX, r.top + window.scrollY]; });
+      var x0 = q[0][0], y0 = q[0][1], x1 = q[1][0], y1 = q[1][1], x2 = q[2][0], y2 = q[2][1], x3 = q[3][0], y3 = q[3][1];
+      var dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3, dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+      var den = dx1 * dy2 - dx2 * dy1, g = den ? (dx3 * dy2 - dx2 * dy3) / den : 0, h = den ? (dx1 * dy3 - dx3 * dy1) / den : 0;
+      var m = [x1 - x0 + g * x1, x3 - x0 + h * x3, x0, y1 - y0 + g * y1, y3 - y0 + h * y3, y0, g, h, 1];
+      var A = m[4] * m[8] - m[5] * m[7], B = m[5] * m[6] - m[3] * m[8], C = m[3] * m[7] - m[4] * m[6];
+      var det = m[0] * A + m[1] * B + m[2] * C;
+      if (!det) { map = null; return; }
+      var inv = [A, m[2] * m[7] - m[1] * m[8], m[1] * m[5] - m[2] * m[4], B, m[0] * m[8] - m[2] * m[6], m[2] * m[3] - m[0] * m[5],
+        C, m[1] * m[6] - m[0] * m[7], m[0] * m[4] - m[1] * m[3]];
+      var xs = [x0, x1, x2, x3], ys = [y0, y1, y2, y3];
+      map = {
+        find: function (x, y) {
+          var w = inv[6] * x + inv[7] * y + inv[8];
+          return { u: (inv[0] * x + inv[1] * y + inv[2]) / w, v: (inv[3] * x + inv[4] * y + inv[5]) / w };
+        },
+        l: Math.min.apply(null, xs), r: Math.max.apply(null, xs), t: Math.min.apply(null, ys), b: Math.max.apply(null, ys)
+      };
+    }
+    function progress() { return reduce.matches ? 0 : clamp((window.scrollY - size.top) / Math.max(1, size.tall * 0.85), 0, 1); }
+    /* the lean: the part of the sheet under the hand sinks a few degrees, in steps of a third of the sheet */
+    function leanTo(nx, ny) {
+      var qx = Math.round(nx * 2) / 2, qy = Math.round(ny * 2) / 2, ax = -2.4 * qy, ay = 3.4 * qx, a = Math.hypot(ax, ay);
+      var next = a ? (ax / a).toFixed(3) + " " + (ay / a).toFixed(3) + " 0 " + a.toFixed(2) + "deg" : "0deg";
+      if (next === lean) return;
+      lean = next;
+      sheet.style.rotate = next;
+      if (curl) curl.style.setProperty("--lean", a ? (ax / a).toFixed(3) + ", " + (ay / a).toFixed(3) + ", 0, " + a.toFixed(2) + "deg" : "1, 0, 0, 0deg");
+    }
+    function aim() {
+      page.t = progress();
+      var at = null;
+      if (hand && map && laid && !reduce.matches) {
+        var x = hand.x + window.scrollX, y = hand.y + window.scrollY;
+        var nx = clamp((x - (map.l + map.r) / 2) / ((map.r - map.l) / 2), -1, 1), ny = clamp((y - (map.t + map.b) / 2) / ((map.b - map.t) / 2), -1, 1);
+        pull.x.t = nx; pull.y.t = ny;
+        var uv = map.find(x, y);
+        /* only on the paper itself: off it, over the words or the slip, the lamp goes back to the pencil line */
+        if (!hand.off && uv.u > -0.02 && uv.u < 1.02 && uv.v > -0.02 && uv.v < 1.02) { at = { x: uv.u * size.w, y: uv.v * size.h }; leanTo(nx, ny); }
+        else leanTo(0, 0);
+      } else {
+        pull.x.t = 0; pull.y.t = 0;
+        if (laid && !reduce.matches) leanTo(0, 0);
+      }
+      if (!at) at = rest(page.t);
+      pool.x.t = clamp(at.x, size.w * 0.04, size.w * 0.96);
+      pool.y.t = clamp(at.y, size.h * 0.04, size.h * 0.96);
+    }
+    function draw() {
+      var at = "translate3d(" + pool.x.v.toFixed(1) + "px, " + pool.y.v.toFixed(1) + "px, 0)", k = 1 / size.k;
+      lamp.style.transform = at;
+      glow.style.transform = at;
+      /* the plates part: the ink floats a little over the colours, the pencil a little more; with the hand,
+         and with the page as it leaves */
+      ink.style.transform = "translate3d(" + (8 * pull.x.v).toFixed(2) + "px, " + (7 * pull.y.v - 30 * page.v).toFixed(2) + "px, 0) scale(" + k + ")";
+      pencil.style.transform = "translate3d(" + (17 * pull.x.v).toFixed(2) + "px, " + (14 * pull.y.v - 70 * page.v).toFixed(2) + "px, 0) scale(" + k + ")";
+      /* the sheet's shadow falls away from the lamp */
+      var sx = 12 + (size.w / 2 - pool.x.v) * 0.05, sy = 18 + (size.h / 2 - pool.y.v) * 0.05;
+      cast.style.transform = "translate3d(" + sx.toFixed(1) + "px, " + sy.toFixed(1) + "px, -2px)";
+      if (slip) {
+        slip.style.translate = (20 * pull.x.v).toFixed(1) + "px " + (14 * pull.y.v - (fine.matches ? 130 : 24) * page.v).toFixed(1) + "px";
+        slip.style.setProperty("--slip-sx", clamp(4 + (0.5 - pool.x.v / size.w) * 30, -12, 18).toFixed(1));
+        slip.style.setProperty("--slip-sy", clamp(8 + (0.5 - pool.y.v / size.h) * 20, -4, 20).toFixed(1));
       }
     }
+    function settle() { [pool.x, pool.y, pull.x, pull.y, page].forEach(function (s) { s.v = s.t; s.d = 0; }); }
     function tick(now) {
       frame = 0;
-      var b = box(), t = target(b);
-      if (!p || reduce.matches) { p = { x: t.x, y: t.y }; v.x = v.y = 0; draw(b); last = 0; return; }
-      var dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
+      if (!ready) return;
+      aim();
+      if (reduce.matches) { settle(); draw(); last = 0; return; }
+      var dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60, busy = false;
       last = now;
-      /* a lamp on its cable: it swings after the hand and settles, a little past and back */
-      var w = 6.2, z = 0.62;
-      v.x += (w * w * (t.x - p.x) - 2 * z * w * v.x) * dt; v.y += (w * w * (t.y - p.y) - 2 * z * w * v.y) * dt;
-      p.x += v.x * dt; p.y += v.y * dt;
-      draw(b);
-      if (Math.abs(t.x - p.x) + Math.abs(t.y - p.y) > 0.4 || Math.abs(v.x) + Math.abs(v.y) > 0.4) wake(); else last = 0;
+      /* the lamp hangs on a cable: it swings after the hand and settles, a little past and back; the plates
+         follow the hand more heavily; the page's own scroll is followed closely */
+      [[pool.x, 7, 0.62], [pool.y, 7, 0.62], [pull.x, 5, 0.9], [pull.y, 5, 0.9], [page, 14, 1]].forEach(function (e) {
+        var s = e[0], w = e[1], z = e[2];
+        s.d += (w * w * (s.t - s.v) - 2 * z * w * s.d) * dt;
+        s.v += s.d * dt;
+        if (Math.abs(s.t - s.v) > 0.02 || Math.abs(s.d) > 0.02) busy = true;
+      });
+      draw();
+      if (busy) wake(); else last = 0;
     }
-    function wake() { if (!frame && !document.hidden) frame = requestAnimationFrame(tick); }
+    /* nothing is drawn while the hero is off screen or the tab is hidden */
+    var near = true;
+    if ("IntersectionObserver" in window) new IntersectionObserver(function (entries) {
+      near = entries[0].isIntersecting;
+      if (near) wake();
+    }).observe(hero);
+    function wake() { if (!frame && near && !document.hidden) frame = requestAnimationFrame(tick); }
+    function reset() { measure(); if (laid) chart(); aim(); settle(); draw(); }
+
     window.addEventListener("pointermove", function (event) {
       if (event.pointerType === "touch" || !fine.matches) return;
-      var r = hero.getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
-      /* only over the chart: over the words the lamp goes back to its place, so nothing lights the text */
-      var over = y >= 0 && y <= r.height && x >= scene.offsetLeft + scene.offsetWidth * 0.14;
-      hand = over ? { x: x, y: y } : null;
+      var target = event.target, off = Boolean(target.closest && target.closest(".topbar, .hero__slip, .hero__actions"));
+      hand = hero.contains(target) ? { x: event.clientX, y: event.clientY, off: off } : null;
       wake();
     }, { passive: true });
     document.documentElement.addEventListener("pointerleave", function () { hand = null; wake(); });
     window.addEventListener("scroll", wake, { passive: true });
-    window.addEventListener("resize", function () { view = null; wake(); });
-    reduce.addEventListener("change", wake);
-    /* switched on: the lamp swings in on its cable from up and to the right, and settles over the river */
-    var b0 = box(), r0 = rest(b0);
-    p = moving() ? { x: r0.x + Math.min(b0.sw, 900) * 0.2, y: r0.y - hero.offsetHeight * 0.16 } : r0;
-    draw(b0);
-    if (moving()) wake(); else tick(performance.now());
-  })();
+    window.addEventListener("resize", function () { reset(); wake(); });
+    reduce.addEventListener("change", function () { if (reduce.matches) { lean = ""; sheet.style.rotate = ""; if (curl) curl.style.removeProperty("--lean"); } reset(); wake(); });
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) wake(); });
+    /* once the lean has come to rest, the sheet is read again */
+    sheet.addEventListener("transitionend", function (event) { if (event.target === sheet) { chart(); wake(); } });
 
-  /* ---- the opening of level 3: the sheet is laid on the table, its plates come down one by one ---- */
-  if (hero && moving()) (function () {
-    var sheet = hero.querySelector(".sheet"), lay = spring(ms("--duration-draw") * 1.4, 0.18);   /* laid down */
-    sheet.animate([{ transform: "rotateX(30deg) scale(1.12)" }],                 /* to its place in the CSS */
-      { duration: lay.duration, easing: lay.easing, delay: ms("--duration-stagger") });
-    var land = hero.querySelector(".plate--land"), ink = hero.querySelector(".plate--ink"), drop = spring(ms("--duration-slower") * 1.3, 0.3);
-    hero.querySelectorAll(".plate--shadow").forEach(function (el) {
-      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms("--duration-slower"), easing: token("--ease-standard"), delay: ms("--duration-slow"), fill: "backwards" });
+    /* the CSS puts the lamp over the middle of the sheet; from here on its place is a transform */
+    [lamp, glow].forEach(function (el) { el.style.left = "0"; el.style.top = "0"; });
+    measure();
+    if (laid) chart();
+    aim(); settle();
+    ready = true;
+    draw();
+
+    /* the opening: the sheet is laid down on the table, its shadow tightens under it, the lamp comes on,
+       the ink plate lands on the colours, the pencil draws (level 2's CSS), the slip lands, and last the
+       corner that was folded down springs up */
+    if (!moving()) return;
+    var lay = spring(ms("--duration-draw") * 1.5, 0.16), drop = spring(ms("--duration-slower") * 1.3, 0.3);
+    var down = sheet.animate([{ translate: "0 -36px 70px", rotate: "x -20deg" }, { translate: "0 0 0", rotate: "x 0deg" }],
+      { duration: lay.duration, easing: lay.easing, delay: ms("--duration-stagger"), fill: "backwards" });
+    down.finished.then(function () { laid = true; chart(); wake(); }, function () { laid = true; });
+    cast.animate([{ opacity: 0, scale: "1.16" }, { opacity: 1, scale: "1" }],
+      { duration: lay.duration, easing: token("--ease-standard"), delay: ms("--duration-base"), fill: "backwards" });
+    [lamp, glow].forEach(function (el) {
+      el.animate([{ scale: "0.3", opacity: el === glow ? 0 : 1 }, { scale: "1", opacity: 1 }],
+        { duration: lay.duration, easing: lay.easing, delay: ms("--duration-slow"), fill: "backwards" });
     });
-    land.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms("--duration-slower"), easing: token("--ease-standard"), delay: ms("--duration-base"), fill: "backwards" });
-    ink.animate([{ opacity: 0, translate: "0 -14px" }, { opacity: 1, translate: "0 0" }], { duration: drop.duration, easing: drop.easing, delay: ms("--duration-slow") + ms("--duration-fast"), fill: "backwards" });
-    var slip = hero.querySelector(".hero__slip"), fall = spring(ms("--duration-slower") * 1.35, 0.32);
-    if (slip) slip.animate([{ translate: "8px -34px", rotate: "-6deg", scale: "1.06" }, { translate: "0 0", rotate: "-1.6deg", scale: "1" }],
+    ink.animate([{ opacity: 0, translate: "0 -18px" }, { opacity: 1, translate: "0 0" }],
+      { duration: drop.duration, easing: drop.easing, delay: ms("--duration-slow") + ms("--duration-fast"), fill: "backwards" });
+    var fall = spring(ms("--duration-slower") * 1.35, 0.32);
+    if (slip) slip.animate([{ transform: "translate(8px, -40px) rotate(-6deg) scale(1.06)" }, { transform: "rotate(-1.6deg)" }],
       { duration: fall.duration, easing: fall.easing, delay: SLIP, fill: "backwards" });
+    /* the corner lies folded flat while the sheet comes down, then springs up */
+    var flip = spring(ms("--duration-slower") * 1.5, 0.42);
+    if (curl) curl.animate([{ opacity: 0, "--curl-a": "-179deg", offset: 0 }, { opacity: 1, offset: 0.08 }, { opacity: 1, "--curl-a": "-146deg" }],
+      { duration: flip.duration, easing: flip.easing, delay: SLIP + ms("--duration-slow"), fill: "backwards" });
   })();
 
   /* ---- the passage slips are dealt onto the table, each settling with a little give ---------------- */
@@ -367,7 +433,7 @@
     var wins = Array.prototype.map.call(story.querySelectorAll(".tide__window"), spanOf);
     var light = Array.prototype.map.call(story.querySelectorAll(".tide__day"), spanOf);
     var DAYS = [0, 1, 2, 3, 4, 5, 6].map(function (k) { return level.slice(k * 96, k * 96 + 97); });
-    var frame = 0, near = false, was = -1, day = -1, live = false;
+    var frame = 0, near = false, was = -1, day = -1, live = false, changed = 0;
 
     function smooth(t) { return t * t * (3 - 2 * t); }
     function progress() { var r = story.getBoundingClientRect(); return clamp(-r.top / Math.max(1, r.height - window.innerHeight), 0, 1); }
@@ -396,9 +462,15 @@
         if (lit !== w.lit) { w.lit = lit; w.el.style.setProperty("--lit", lit.toFixed(3)); }
       });
       if (d !== day) {
+        /* one day on: the old day leaves, then the new one comes (level.css). Further, or again within a
+           moment (a jump, a fast scroll): straight to the new day, so two days never overprint */
+        var now = performance.now(), jump = day < 0 || Math.abs(d - day) > 1 || now - changed < 360;
         day = d;
+        changed = now;
+        if (jump) story.classList.add("is-jumping");
         [labels, times].forEach(function (list) { Array.prototype.forEach.call(list, function (el, n) { el.toggleAttribute("data-current", n === d); }); });
         Array.prototype.forEach.call(steps, function (el, n) { el.toggleAttribute("data-current", n === d); el.toggleAttribute("data-past", n < d); });
+        if (jump) { void getComputedStyle(steps[d]).opacity; story.classList.remove("is-jumping"); }
       }
       /* the day under the lamp: from 20:00 to 08:00 one day's curve flows into the next one's */
       var s = (t - 14) / 24, n = Math.floor(s), a = clamp(n, 0, 6), b = clamp(n + 1, 0, 6);
@@ -456,10 +528,7 @@
     start();
   })();
 
-  /* ---- real depth: the kit's depth.js (the hero's plates, the cards, the notes) ------------------- */
-  /* on a touch screen the plates hold still: drifting them with the scroll would make the phone draw the
-     whole chart again and again; the lamp still walks down the pencil line */
-  if (hero && !fine.matches) hero.setAttribute("data-depth-scroll-shift", "0");
+  /* ---- real depth from the kit's depth.js: the passage slips lean and lift, the notes stack ---------- */
   import("../../vendor/scenes/depth.js").then(function (kit) {
     kit.mount(document.querySelector("main"), { tilt: 5 });
   }).catch(function () { /* without it the page is simply flat */ });
