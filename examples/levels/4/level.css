@@ -316,7 +316,7 @@
   --l3-crease-dark: rgba(92, 66, 22, 0.12);     /* the fold: one side turned from the light */
   --l3-crease-light: rgba(255, 255, 255, 0.5);  /* and one side towards it */
   --l3-ink-2: #263b49;                          /* small print on paper: darker than --color-text-muted, so 12 px reads */
-  --l3-pool-c: rgba(255, 186, 96, 0.36);        /* the lamp over the hour the tide story reads */
+  --l3-pool-c: rgba(255, 186, 96, 0.2);         /* the lamp over the hour the tide story reads: a faint warmth, never a blob */
   --l3-glint: rgba(255, 186, 96, 0.5);          /* the lamp caught by a card under the hand */
   --l3-sheet: #fbf8f0;                          /* the tide sheet laid on the table */
   --l3-dusk: rgba(48, 30, 8, 0.34);             /* the dialog: the lamp turned down */
@@ -327,7 +327,7 @@
     --l3-paper: #84260f; --l3-lit: #ffffff; --l3-rim: #d09c8b; --l3-dim: #5e4740; --l3-glow: rgba(255, 92, 52, 0.42);
     --l3-table: rgba(150, 38, 14, 0.62); --l3-room: rgba(0, 0, 0, 0.32); --l3-cast: rgba(0, 0, 0, 0.62); --l3-contact: rgba(0, 0, 0, 0.7);
     --l3-cut: #2a0d07; --l3-back: #3b150c; --l3-crease-dark: rgba(0, 0, 0, 0.2); --l3-crease-light: rgba(255, 150, 110, 0.06);
-    --l3-ink-2: #e2cdbf; --l3-pool-c: rgba(166, 45, 23, 0.5); --l3-glint: rgba(255, 106, 77, 0.16); --l3-sheet: #1a110e;
+    --l3-ink-2: #e2cdbf; --l3-pool-c: rgba(166, 45, 23, 0.3); --l3-glint: rgba(255, 106, 77, 0.16); --l3-sheet: #1a110e;
     --l3-dusk: rgba(6, 2, 1, 0.66); --l3-dusk-2: rgba(2, 1, 0, 0.86);
   }
 }
@@ -335,7 +335,7 @@
   --l3-paper: #84260f; --l3-lit: #ffffff; --l3-rim: #d09c8b; --l3-dim: #5e4740; --l3-glow: rgba(255, 92, 52, 0.42);
   --l3-table: rgba(150, 38, 14, 0.62); --l3-room: rgba(0, 0, 0, 0.32); --l3-cast: rgba(0, 0, 0, 0.62); --l3-contact: rgba(0, 0, 0, 0.7);
   --l3-cut: #2a0d07; --l3-back: #3b150c; --l3-crease-dark: rgba(0, 0, 0, 0.2); --l3-crease-light: rgba(255, 150, 110, 0.06);
-  --l3-ink-2: #e2cdbf; --l3-pool-c: rgba(166, 45, 23, 0.5); --l3-glint: rgba(255, 106, 77, 0.16); --l3-sheet: #1a110e;
+  --l3-ink-2: #e2cdbf; --l3-pool-c: rgba(166, 45, 23, 0.3); --l3-glint: rgba(255, 106, 77, 0.16); --l3-sheet: #1a110e;
   --l3-dusk: rgba(6, 2, 1, 0.66); --l3-dusk-2: rgba(2, 1, 0, 0.86);
 }
 
@@ -348,7 +348,8 @@
 /* on a phone the words are shorter and keep one button (the header has the other). The page marks a phone
    as html.is-narrow (before the first paint, and again when the width changes), because a width rule here
    is also matched for a moment while Chromium takes a full-page picture, which then lost the second button */
-html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
+/* (Level 3 used to drop the last sentence and the second button on a phone. A level keeps everything of the
+   level below, and level 2 shows both, so they stay; the sheet lies below them.) */
 
 /* ---- the lamp switch says what it is, also where its words are hidden ---- */
 .lamp__icon { display: none; flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
@@ -375,9 +376,10 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
 /* ---- the week, told as you scroll. level.js marks the story .is-live (motion on, script running, the table
    closed), pins its stage, walks a cursor through the week and writes which day is current; without it the
    steps are a list. The heading, the note and the table button stay with the week while it is pinned. ---- */
-:root { --color-veil: rgba(251, 248, 240, 0.78); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --color-veil: rgba(13, 7, 6, 0.8); } }
-:root[data-theme="dark"] { --color-veil: rgba(13, 7, 6, 0.8); }
+/* the days still to come lie under a veil that leaves them as a faint pencil line, still readable as data */
+:root { --color-veil: rgba(251, 248, 240, 0.6); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --color-veil: rgba(13, 7, 6, 0.58); } }
+:root[data-theme="dark"] { --color-veil: rgba(13, 7, 6, 0.58); }
 
 .tt { margin: 0 0 var(--space-7); }
 /* the week is a sheet of chart paper on the table: a neat line, a soft shadow, the lamp over the hour */
@@ -400,7 +402,8 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
 
 .story.is-live { height: calc(100vh + 7 * 40vh); height: calc(100svh + 7 * 40svh); }
 .story.is-live .story__stage {
-  position: sticky; top: 0; display: grid; align-content: center; height: 100vh; height: 100svh; padding-block: var(--space-4);
+    /* the stage starts at its top: centred, it left an empty band between "Today" and the week */
+    position: sticky; top: 0; display: grid; align-content: start; height: 100vh; height: 100svh; padding-block: 0 var(--space-4);
 }
 .story.is-live .section__head { margin-bottom: var(--space-4); padding-top: var(--space-4); }
 .story.is-live .tides__bar { align-items: center; margin-bottom: var(--space-5); }
@@ -427,7 +430,7 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
 .story.is-live .tide__veil { display: block; position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .tide__shade, .tide__pool { position: absolute; top: 0; bottom: 0; left: 0; will-change: transform; }
 .tide__shade { width: 200%; background: linear-gradient(to right, transparent 0 50%, var(--color-veil) 53%, var(--color-veil)); }
-.tide__pool { width: 34%; margin-left: -17%; background: radial-gradient(closest-side, var(--l3-pool-c), color-mix(in oklab, var(--l3-pool-c), transparent 62%) 52%, transparent); }
+.tide__pool { width: 18%; margin-left: -9%; background: radial-gradient(closest-side, var(--l3-pool-c), color-mix(in oklab, var(--l3-pool-c), transparent 62%) 52%, transparent); }
 .tide__read.is-flipped { left: auto; right: var(--space-1); }
 .story.is-live .tide__days span[data-current] { font-weight: 700; }
 .story.is-live .tide__cursor { display: block; position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-left: var(--size-border) solid var(--color-text); pointer-events: none; will-change: transform; }
@@ -602,6 +605,8 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
   .story.is-live .tides__bar { margin-bottom: var(--space-3); }
   .story.is-live .story__now b { font-size: var(--text-lg); }
   .story.is-live .tide__legend { gap: var(--space-1) var(--space-4); font-size: 0.75rem; }
+    /* seven days in 330 px: each column keeps its date only; the caption above says which day it is */
+    .story.is-live .tide__days b, .story.is-live .tide__days .moon { display: none; }
   .story.is-live .step__day b { font-size: var(--text-2xl); }
   .story.is-live .step__line { margin-top: var(--space-2); font-size: var(--text-sm); }
   .story.is-live .story__rule { margin-top: var(--space-4); }
@@ -695,7 +700,9 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
    camera from (table.js reads this perspective and this transform), so the scene paints over it exactly
    and the drawn sheet steps aside under it (.hero.is-3d). Without WebGL it stays, with its own lamp. ---- */
 :root {
-  --l4-lay: 39deg;                              /* how far the sheet lies back on the table */
+    /* how far the sheet lies back on the table: 33 degrees, so it stands taller in the window than level 3's
+       sheet (at 39 it lay further away and smaller); the 3D camera is worked out from this, so both agree */
+    --l4-lay: 33deg;
   --l4-turn: -3deg;                             /* and how it lies turned: a sheet is never quite square */
   --l4-eye: 1300px;                             /* how far the eye is from the screen */
   --l4-eye-at: 24% -46%;                        /* and where: left of the sheet, above the table */
@@ -707,13 +714,13 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --l4-paper: #a62d17; --l4-cut: #2a0d07; --l4-back: #3b150c; --l4-ink-glow: #5e2416;
+    --l4-paper: #a62d17; --l4-cut: #3a120a; --l4-back: #7a2c1a; --l4-ink-glow: #5e2416;
     --l4-sheet-shadow: 0 2.5px 0 var(--l4-cut), 0 14px 30px -10px rgba(0, 0, 0, 0.8);
     --color-pool-shade: rgba(12, 4, 2, 0.9);
   }
 }
 :root[data-theme="dark"] {
-  --l4-paper: #a62d17; --l4-cut: #2a0d07; --l4-back: #3b150c; --l4-ink-glow: #5e2416;
+  --l4-paper: #a62d17; --l4-cut: #3a120a; --l4-back: #7a2c1a; --l4-ink-glow: #5e2416;
   --l4-sheet-shadow: 0 2.5px 0 var(--l4-cut), 0 14px 30px -10px rgba(0, 0, 0, 0.8);
   --color-pool-shade: rgba(12, 4, 2, 0.9);
 }
@@ -730,7 +737,9 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
   }
 }
 .sheet {
-  position: absolute; right: var(--l4-right, var(--space-5)); bottom: var(--l4-bottom, var(--space-4));
+    /* close to the content's right edge, and laid high enough that "Pause motion" sits under the sheet,
+       not on its corner */
+    position: absolute; right: var(--l4-right, var(--space-2)); bottom: var(--l4-bottom, 3.5rem);
   height: var(--l4-height, min(112cqh, (100cqw - var(--space-5)) * 900 / 860)); aspect-ratio: 860 / 900;
   overflow: hidden; background: var(--l4-paper); box-shadow: var(--l4-sheet-shadow);
   transform-origin: 50% 100%; transform: rotateX(var(--l4-lay)) rotateZ(var(--l4-turn));
@@ -772,7 +781,8 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
 }
 .tideclock__time { font-weight: 700; }
 .tideclock__way { color: var(--color-text-muted); }
-.tideclock.is-lapse .tideclock__time { color: var(--color-accent); }
+/* another hour than now is said in ink, bold: magenta stays for the main action and the safe window */
+.tideclock.is-lapse .tideclock__time { color: var(--color-text); }
 .hero.is-3d .tideclock { opacity: 1; visibility: visible; }
 
 /* ---- the slip: the water of the hour, and the reader's own hour ---- */
@@ -786,7 +796,7 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
 .tidebar__label { letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .tidebar__h { color: var(--color-text); font-weight: 700; }
 .tidebar__time { margin-left: auto; color: var(--color-text); }
-.tidebar.is-lapse .tidebar__time { color: var(--color-accent); font-weight: 700; }
+.tidebar.is-lapse .tidebar__time { color: var(--color-text); font-weight: 700; }
 /* a tide staff: its marks, and the water standing in it */
 .gauge { flex: none; width: 12px; height: 20px; overflow: visible; color: var(--color-text); }
 .gauge__staff { fill: var(--color-bg); stroke: currentColor; stroke-width: 1; }
@@ -807,7 +817,9 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
 .tool__glyph { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .glyph-run, .glyph-play { fill: currentColor; stroke: none; }
 .glyph-back, .glyph-play { display: none; }
-.tool--tide[aria-pressed="true"] { background: var(--color-text); color: var(--color-bg); border-color: var(--color-text); }
+/* while the hours play, the control says "Back to now" as an outlined control in ink, not a filled button:
+   the hero keeps one main action, "Plan a passage" */
+.tool--tide[aria-pressed="true"] { background: transparent; color: var(--color-text); border-color: var(--color-text); }
 .tool--tide[aria-pressed="true"] .glyph-run { display: none; }
 .tool--tide[aria-pressed="true"] .glyph-back { display: inline; }
 .tool--tide:disabled .glyph-run { display: none; }
@@ -918,3 +930,18 @@ html:not(.js) :is(.tool, .tideclock) { display: none; }
   font: 600 0.6875rem/1 var(--font-mono); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--color-text);
 }
 .dstack__day.is-none .dstack__name::after { content: " · no window"; font-weight: 500; color: var(--color-text-muted); }
+
+/* the space between "Today" and the week: the section's own padding is enough (with the pinned stage's it
+   left an empty band of 170 px), as in level 3 */
+.tides:has(.story.is-live) { padding-top: var(--space-6); }
+
+/* the slip keeps one height: once the 3D table is coming its scale already takes its room (unseen until the
+   table is built and offers it), so the slip does not grow on the first screen while it is being read */
+/* (!important: base.css hides every [hidden] with !important; here the room is kept on purpose, unseen) */
+:is(.hero.is-3d, .hero.is-3d-coming) .scrub[hidden] { display: block !important; visibility: hidden; }
+/* hero.js loads once the page is idle, so on a wide screen with motion on the room is kept from the first
+   paint in CSS alone; a scene that falls back (no WebGL) lets it go again, so the drawn chart's slip is whole */
+@media (prefers-reduced-motion: no-preference) and (min-width: 60.0625rem) {
+    .hero__slip .scrub[hidden] { display: block !important; visibility: hidden; }
+    .hero:has(#hero-scene[data-scene="fallback"]) .hero__slip .scrub[hidden] { display: none !important; }
+}

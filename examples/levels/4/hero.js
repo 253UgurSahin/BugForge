@@ -162,9 +162,13 @@ if (scene) {
   /* live: the drawn sheet steps aside under the 3D one, the scale is offered, and on the first view the
      next twelve hours play once by themselves */
   let firstRun = false;
+    /* the 3D table is coming (WebGL 2 is there and motion is welcome): the slip takes its final height now, from
+       the first paint, so it does not grow while it is read; if the scene falls back, it lets that room go */
+    hero.classList.toggle("is-3d-coming", typeof WebGL2RenderingContext !== "undefined" && !reduce.matches);
   new MutationObserver(() => {
     const live = box.getAttribute("data-scene") === "live";
     hero.classList.toggle("is-3d", live);
+      if (box.getAttribute("data-scene") === "fallback") hero.classList.remove("is-3d-coming");
   }).observe(box, { attributes: true, attributeFilter: ["data-scene"] });
   box.addEventListener("tablebuilt", () => {
     if (scrubber) scrubber.hidden = false;
