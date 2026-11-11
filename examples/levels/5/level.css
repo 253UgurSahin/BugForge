@@ -307,9 +307,10 @@
 
 /* ---- the week, told as you scroll. level.js marks the story .is-live (motion on, script running), pins its
    stage, walks a cursor through the week and writes which day is current; without it the steps are a list. ---- */
-:root { --color-veil: rgba(242, 235, 221, 0.8); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --color-veil: rgba(13, 7, 6, 0.8); } }
-:root[data-theme="dark"] { --color-veil: rgba(13, 7, 6, 0.8); }
+/* the days still to come lie under a veil that leaves them as a faint pencil line, still readable as data */
+:root { --color-veil: rgba(242, 235, 221, 0.6); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --color-veil: rgba(13, 7, 6, 0.58); } }
+:root[data-theme="dark"] { --color-veil: rgba(13, 7, 6, 0.58); }
 
 .tt { margin: 0 0 var(--space-7); }
 .story__day { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); margin: var(--space-7) 0 0 var(--tide-gutter, var(--space-6)); }
@@ -322,7 +323,8 @@
 .tide__veil, .tide__cursor, .dayc { display: none; }
 
 .story.is-live { height: calc(100vh + 7 * 44vh); height: calc(100svh + 7 * 44svh); }
-.story.is-live .story__stage { position: sticky; top: 0; display: grid; align-content: center; height: 100vh; height: 100svh; }
+/* the stage starts at its top: centred, it left an empty band between "Today" and the week (as on levels 3 and 4) */
+.story.is-live .story__stage { position: sticky; top: 0; display: grid; align-content: start; height: 100vh; height: 100svh; padding-top: var(--space-4); }
 .story.is-live .tide__plot { height: min(var(--size-plot), 36vh); }
 .story.is-live .story__day { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: end; gap: var(--space-5) var(--space-8); margin-top: var(--space-6); }
 .story.is-live .story__steps > .step { grid-area: 1 / 1; display: block; padding: 0; border: 0; opacity: 0; translate: 0 var(--size-shift); }
@@ -819,4 +821,77 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
 @media (forced-colors: active) {
   .plan__top, .plan__leaf { border-color: CanvasText; }
   .trip__card, .tool, .trip__marks { border-color: CanvasText; }
+}
+
+/* ---- level 4's tide on the hero, kept: the scale on the slip and the flag at the gauge ---- */
+/* the scale: from now to casting off; the window's hours are lit on it as on level 4's */
+.scrub5 { position: relative; margin-top: var(--space-3); padding-bottom: var(--space-4); }
+.scrub5__input { width: 100%; margin: 0; accent-color: var(--color-text); cursor: pointer; }
+.scrub5__input:focus-visible { outline: var(--size-ring, 2px) solid var(--color-accent); outline-offset: 3px; }
+.scrub5__ticks { position: absolute; left: 0; right: 0; bottom: 0; height: var(--space-4); font: 500 0.6875rem/1 var(--font-mono); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.scrub5__ticks span { position: absolute; left: calc(var(--t) * 100%); bottom: 0; transform: translateX(calc(var(--t) * -100%)); white-space: nowrap; }
+/* the slip keeps one height: on a wide screen with motion on the scale's room is kept from the first paint
+   (!important: base.css hides every [hidden] with !important; this room is kept on purpose, unseen) */
+@media (prefers-reduced-motion: no-preference) and (min-width: 60.0625rem) {
+    .hero__slip .scrub5[hidden] { display: block !important; visibility: hidden; }
+}
+/* the flag at the tide gauge: the hour and the water, as on level 4, standing on the chart */
+.callout--gauge {
+    padding: var(--space-1) var(--space-2); border: var(--size-border) solid var(--color-border); border-radius: var(--radius-sm);
+    background: var(--color-surface); color: var(--color-text); text-shadow: none; box-shadow: 0 6px 14px -8px var(--color-relief);
+}
+.callout--gauge::before { display: none; }
+.trip[data-night-now] .callout--gauge { background: var(--night-surface); border-color: var(--night-border); }
+
+/* ---- the strip of tools as the chart's foot margin, not a row of boxes: one paper band with a ruled
+   top edge across the screen; the chapters are its scale (times as ticks, the current one under a magenta
+   bar) and the tools plain words in the instruments' voice, divided by hairlines. Boxed, each with its own
+   border and shadow, they read as scaffolding over the chart and crowded the slips. ---- */
+.trip__bar-in {
+    background: var(--color-bg);                 /* opaque paper: with the chart showing through it read as glass */
+    border-top: var(--size-border) solid var(--color-rule);
+}
+.trip__marks, .tool { border: 0; border-radius: 0; background: none; box-shadow: none; }
+.trip__marks li + li { border-left: 0; }
+.trip__marks a { padding-inline: var(--space-3); }
+.trip__marks li:first-child a { padding-left: 0; }
+.trip__marks a::after { top: calc(-1 * (var(--size-tools) - var(--size-control-sm)) / 2 - 1px); }
+.trip__marks a:hover { background: none; }
+.trip__tools { gap: 0; }
+.tool { padding: 0 var(--space-3); }
+.tool + .tool { border-left: var(--size-border) solid var(--color-border); }
+.trip__tools .tool:last-child { padding-right: 0; }
+.tool:hover { text-decoration: underline; text-underline-offset: 3px; }
+.tool[aria-pressed="true"] { background: none; color: var(--color-text); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.trip[data-night-now] .trip__bar-in { background: var(--night-bg); border-top-color: var(--night-border); }
+
+/* a phone: the sheet lies in the band under the buttons, as wide as the screen; the slip stays one compact
+   corner over it (the time and the water), so the scale is left out there and the hours run by themselves */
+@media (max-width: 44rem) {
+    .trip__step--hero .hero__slip .scrub5 { display: none !important; }
+}
+
+/* the week on a phone: each column keeps its date only, the caption says which day it is (as levels 3 and 4) */
+@media (max-width: 44rem) {
+    .story.is-live .tide__days b, .story.is-live .tide__days .moon { display: none; }
+}
+
+/* the hero's slip carries level 4's scale now, so on a wide screen it lies 60 px higher: its foot stays clear
+   of the strip of tools (the strip is a paper band, and the slip ran under it) */
+@media (min-width: 60.0625rem) {
+    .trip__step--hero .hero__slip { bottom: calc(var(--size-tools) + var(--space-3) + 3.75rem); }
+}
+
+/* the chapters' times are the film's timeline: larger, in full ink, the current one bold under its bar
+   (in the small muted print they read as a footnote) */
+.trip__marks a { font-size: var(--text-xs); color: var(--color-text); }
+.trip__marks b { font-size: var(--text-sm); }
+.trip__marks a[aria-current="step"] b { font-weight: 700; }
+
+/* the safe window on the scale, as on level 4: hatched in magenta from 10:58 (28 percent of the way from now
+   to casting off) to the end of the scale, under the thumb's track */
+.scrub5::before {
+    content: ""; position: absolute; left: 27.9%; right: 0; top: calc(50% - var(--space-4) / 2 - 7px); height: 5px; pointer-events: none;
+    border-top: 2px solid var(--color-accent);
+    background: repeating-linear-gradient(-45deg, var(--color-hatch) 0 1px, transparent 1px 4px);
 }
