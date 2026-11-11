@@ -4,17 +4,19 @@
  * Two modes. "bars": a dense field of slim columns rising out of a dark (or paper) floor, their
  * heights the data, seen from a low view that runs off the edge of the frame, like a landscape.
  * Each cap is a small light: the cap glows in the accent and its light runs a little way down the
- * column, while the body fades into the floor (dark page) or deepens towards it (light page). The
+ * column, while the body fades into the floor (dark page) or deepens towards it (light page); the
+ * faces turned from the key light are clearly darker; values near zero shrink into the floor. The
  * tallest values are picked out in the second accent, or, when both accents are grey, as near-white
  * caps (near-black on a light page) above mid-grey; the far rows melt into the page (depth fog); a
- * faint reflection (dark page) or a soft contact shadow (light page) grounds the mass. "ridges": the
- * same grid as a stack of ridgelines (a joy plot in 3D): one ribbon per row, with a faint fill
- * beneath that hides the rows behind it.
+ * faint reflection over a soft glow (dark page) or a soft contact shadow (light page) grounds the
+ * mass. "ridges": the same grid as a stack of ridgelines (a joy plot in 3D): one ribbon per row,
+ * with a faint fill beneath that hides the rows behind it.
  *
- * It lives: from the first frame the columns rise in a wave from the front-left corner; a soft band
- * of accent light travels slowly to and fro along the rows, lighting the caps it crosses, and the
- * heights breathe a few percent in a slow wave. The pointer turns the camera a few degrees, leans
- * the key light, and pools accent light on the floor and the caps under it.
+ * It lives: from the first frame the columns rise from a low relief, in a wave from the front-left
+ * corner; a soft band of accent light travels slowly to and fro over the rows, lighting the columns
+ * it crosses, and the heights breathe a few percent in a slow wave. The pointer turns the camera (up
+ * to about 14 degrees round and 8 up or down), leans the key light, and pools accent light on the
+ * floor and on the caps under it.
  *
  *   import { mount } from "./scenes/datascape.js";
  *   const scape = mount(document.querySelector(".hero-scene"), {
@@ -35,7 +37,7 @@
  *   intensity  1: the strength of the light, the glow and the bands (0 flat, 2 strong).
  *   onHover    null: gets { index, row, column, value } of the data cell when the eased pointer
  *              rests on its column or ridge (found by a raycast), and null when it leaves. The column
- *              under the pointer rises by about a quarter and glows along its whole length, white-hot
+ *              under the pointer rises by about a quarter and glows along its whole length, hottest
  *              at the cap; its neighbours rise a little, so the light falls off around it.
  *   data       the first values, as for setData. Without them it shows sample data (an app's use
  *              by hour of the day, one row a month), so it is never empty.
@@ -48,15 +50,16 @@
  *   columns in all) on a smooth surface through the values, and onHover reports the data cell
  *   nearest to the column under the pointer. Each column springs to its new height after a short
  *   delay that runs as a wave from the front-left corner; a missing number leaves its cell empty;
- *   an empty list brings the sample back. onHover reports the numbers as given. A cell that joins or
- *   leaves the tallest values dims in its old colour and comes back in the new one.
+ *   an empty list brings the sample back. onHover reports the numbers as given. In "bars" a column
+ *   that joins or leaves the tallest values dims in its old colour and comes back in the new one.
  * setProgress(p), 0..1: three states, and the camera turns round the sculpture from one to the next.
- *   At 0 a low view along the rows, the field calm. Towards 0.5 a front of accent light walks over
- *   the columns from left to right (over the width): a bright line of caps with a sheen on the floor;
+ *   At 0 a low view along the rows, the field calm. Towards 0.5 the camera turns and rises, and a
+ *   front of accent light walks over the columns, from the first (left) column of the data to the
+ *   last (right) one, over the width, not the rows: a bright line of caps with a sheen on the floor;
  *   the columns it has passed are lit at full accent, the columns ahead fall back to about a third.
  *   Towards 1 the camera rises and closes in on the tallest values (second accent) while the rest of
- *   the field falls back into the fog. Without setProgress the field rests in the first state, lit
- *   only by the travelling band.
+ *   the field falls back into the fog (in "bars" it also sinks to two fifths of its height).
+ *   Without setProgress the field rests in the first state, lit only by the travelling band.
  * setPointer(x, y), pause(), resume(), destroy(), stage: as stage.js describes.
  *
  * Poster: a child `<img data-scene-poster src="datascape.png" alt="">` shows until the first frame
@@ -67,10 +70,10 @@
  *
  * Cost: three draw calls (floor, reflection, bars) or two (floor, ridges), no textures. Bars are one
  * instanced box (the sample is a field of 24 by 48); ridges have 4, 6 or 10 points per column and
- * at least 100, 160 or 240 a row (low, medium, high quality; low also drops the reflection). The
- * bands and the breathing are uniforms, so they cost the processor nothing; it runs a spring per
- * column, a raycast while the pointer is over the scene, and rewrites the buffers only while a
- * spring moves.
+ * at least 100, 160 or 240 a row (low, medium, high quality; low also drops the reflection and draws
+ * at three quarters of the resolution, unless renderScale says otherwise). The bands and the
+ * breathing are uniforms, so they cost the processor nothing; it runs a spring per column, a raycast
+ * while the pointer is over the scene, and rewrites the buffers only while a spring moves.
  */
 import * as THREE from "three";
 import { createStage } from "./stage.js";
@@ -81,7 +84,7 @@ const SPRING = 70, DAMPING = 10;   // the springs settle in about half a second,
 const MAX_ROWS = 64, MAX_COLUMNS = 128;
 const DENSE = 40, MAX_CELLS = 4096;   // bars: a grid with fewer columns is filled in, up to this many columns in all
 const BAND_PERIOD = 13;   // seconds the travelling band takes there and back
-const RISE = 0.3;         // seconds the rising wave takes from the front-left corner to the far end
+const RISE = 0.25;        // seconds the rising wave takes from the front-left corner to the far end
 
 const shared = `${stageUniforms}
 uniform vec4 uSize, uMotion, uFocus, uFloor, uSpot;   // see the uniforms in mount()
@@ -96,22 +99,25 @@ const pieces = `${shared}${line}${fog}${grain}
 float acrossAt(vec3 w) { return w.x / (2.0 * uFloor.x) + 0.5; }
 float passedAt(vec3 w) { return smoothstep(uMotion.w + 0.03, uMotion.w - 0.03, acrossAt(w)); }
 float aheadAt(vec3 w) { return smoothstep(uMotion.w + 0.02, uMotion.w + 0.07, acrossAt(w)) * smoothstep(0.05, 0.3, uProgress); }
-float frontAt(vec3 w) { return exp(-pow((acrossAt(w) - uMotion.w) / 0.03, 2.0)); }
+float frontAt(vec3 w) { return exp(-pow((acrossAt(w) - uMotion.w) / 0.055, 2.0)); }
 // The band that travels to and fro over the rows (uMotion.x, over the depth: 0 the far row, 1 the
 // near one), and the pool under the pointer.
 float bandAt(vec3 w) { return uMotion.z * exp(-pow((w.z / (2.0 * uFloor.y) + 0.5 - uMotion.x) / uMotion.y, 2.0)); }
 float spotAt(vec3 w) { vec2 s = w.xz - uSpot.xy; return uSpot.z * exp(-dot(s, s) / 0.5); }
+// The pointer on screen: what is drawn within about a tenth of the height of it catches its light
+// too, so the caps under the pointer light up even where its ray meets the floor far behind them.
+float haloAt() {
+  vec2 s = (gl_FragCoord.xy / uResolution * 2.0 - 1.0 - uPointer) * vec2(uResolution.x / uResolution.y, 1.0);
+  return uSpot.z * exp(-dot(s, s) / 0.05);
+}
 // The light on a place of the sculpture: a little everywhere, more on high values and on the peaks,
-// on what the front has passed and on the front itself, in the band and under the pointer.
-// 0 is dark, 1 fully lit, more is hot.
+// on what the front has passed and on the front itself, in the band and under the pointer (the
+// floor leaves the halo out). 0 is dark, 1 fully lit, more is hot.
 float lightAt(vec3 w, float height, float peak) {
-  return (0.12 + 0.4 * height + 0.4 * peak + 0.55 * passedAt(w) + 1.6 * frontAt(w) + 1.3 * bandAt(w) + 1.1 * spotAt(w)) * uSize.w;
+  return (0.12 + 0.4 * height + 0.4 * peak + 0.55 * passedAt(w) + 1.8 * frontAt(w) + 1.3 * bandAt(w) + 1.1 * spotAt(w)) * uSize.w;
 }
 // Near 1 (setProgress towards 1) everything but the peaks falls back into the fog.
-float focusFade(vec3 w) { return uFocus.z * smoothstep(0.35, 1.3, distance(w.xz, uFocus.xy)); }
-// Colours are mixed in display space (as a designer mixes them) and turned back into linear light
-// at the end, so a 10 percent tint looks like 10 percent, also in the dark.
-vec3 shown(vec3 c) { return pow(max(c, 0.0), vec3(1.0 / 2.2)); }`;
+float focusFade(vec3 w) { return uFocus.z * smoothstep(0.35, 1.3, distance(w.xz, uFocus.xy)); }`;
 const finish = `
   #include <colorspace_fragment>
   gl_FragColor.rgb += dither(gl_FragCoord.xy) * gl_FragColor.a;`;
@@ -124,7 +130,9 @@ varying vec3 vLocal, vNormal, vWorld;   // vLocal: x and z across the bar (-0.5.
 varying vec4 vState;
 varying float vTop, vDepth;
 void main() {
-  float h = max(aState.x, 0.008) * uSize.z * breath(aCell);
+  // Near 1 (setProgress) the columns away from the peaks sink to two fifths, so the peaks stand clear.
+  float sink = uFocus.z * smoothstep(0.35, 1.3, distance(aCell, uFocus.xy)) * (1.0 - aState.z);
+  float h = max(aState.x, 0.008) * uSize.z * breath(aCell) * (1.0 - 0.6 * sink);
   h = (h + aState.y * (0.25 * h + 0.06 * uSize.z)) * aState.w;   // hover lifts it by about a quarter
   float foot = aState.w * smoothstep(0.004, 0.07, aState.x + aState.y);   // values near zero shrink into the floor
   vec3 p = vec3(aCell.x + position.x * uSize.x * foot, position.y * h, aCell.y + position.z * uSize.y * foot);
@@ -139,8 +147,9 @@ void main() {
   gl_Position = projectionMatrix * mv;
 }`;
 
-// The key light comes from the front left (uLight, leaning with the pointer). uDark switches
-// between light on a dark page and tinted paper on a light one; every colour mixes stage tokens.
+// The key light comes from over the camera's right shoulder (uLight, leaning with the pointer).
+// uDark switches between light on a dark page and tinted paper on a light one; every colour mixes
+// stage tokens.
 const barFragment = `${pieces}
 varying vec3 vLocal, vNormal, vWorld;
 varying vec4 vState;
@@ -148,16 +157,20 @@ varying float vTop, vDepth;
 // The colour of a column: the base tone, or the peak tone for the tallest values. A column that
 // changes group does not pass through a grey mix of the two: it dims in its old colour and comes
 // back up in the new one.
+// Colours are mixed in display space (as a designer mixes them) and turned back into linear light
+// at the end, so a 10 percent tint looks like 10 percent, also in the dark. The stage colours come
+// in display space already (uShown..., worked out once in mount()).
+uniform vec3 uShownBg, uShownSurface, uShownBorder, uShownText, uShownTone, uShownPeak;
 vec3 toneOf(float peak, vec3 bg) {
-  vec3 tone = shown(peak > 0.5 ? uPeak : uTone);
+  vec3 tone = peak > 0.5 ? uShownPeak : uShownTone;
   return mix(mix(bg, tone, 0.4), tone, abs(2.0 * peak - 1.0));
 }
 void main() {
   vec3 n = normalize(vNormal);
-  vec3 bg = shown(uBg), surface = shown(uSurface), border = shown(uBorder), text = shown(uText);
+  vec3 bg = uShownBg, surface = uShownSurface, border = uShownBorder, text = uShownText;
   float height = vState.x, hover = vState.y, peak = vState.z;
-  float lit = lightAt(vWorld, height, peak) + 0.8 * hover, glowing = clamp(lit, 0.0, 1.0), hot = clamp(lit - 1.0, 0.0, 1.0);
-  float stand = smoothstep(0.02, 0.16, height);     // near-zero values sink into the floor
+  float lit = lightAt(vWorld, height, peak) + 1.6 * haloAt() * uSize.w + 0.8 * hover, glowing = clamp(lit, 0.0, 1.0), hot = clamp(lit - 1.0, 0.0, 1.0);
+  float stand = smoothstep(0.01, 0.07, height);     // near-zero values sink into the floor
   vec3 tone = toneOf(peak, bg), color;
   vec3 flare = mix(tone, text, mix(0.25, 0.6, uDark));   // white-hot on a dark page, deeper on paper
   float fromTop = vTop - vLocal.y, rise = clamp(vLocal.y / max(vTop, 0.0001), 0.0, 1.0);
@@ -170,11 +183,12 @@ void main() {
     // A side: turned to the key light or away from it (the shaded side clearly darker). On a dark
     // page tinted glass that fades into the floor; on paper a tint that deepens towards the floor.
     float facing = smoothstep(0.15, 0.85, clamp(dot(n, normalize(uLight)) * 0.5 + 0.5, 0.0, 1.0));
-    vec3 glass = mix(surface, tone, 0.08 + 0.16 * glowing);
+    float passed = passedAt(vWorld) * smoothstep(0.05, 0.3, uProgress) * (1.0 - uFocus.z);   // at full accent behind the front
+    vec3 glass = mix(surface, tone, 0.08 + 0.16 * glowing + 0.3 * passed);
     vec3 night = mix(bg, glass, (0.04 + 0.85 * pow(rise, 2.4)) * mix(0.4, 1.0, facing));
     vec3 deep = mix(tone, text, 0.35);
-    vec3 face = mix(mix(surface, tone, 0.34 + 0.2 * glowing), mix(tone, deep, 0.3), 0.8 * pow(1.0 - rise, 1.4));
-    vec3 paper = mix(mix(face, deep, 0.45), face, facing);
+    vec3 face = mix(mix(surface, tone, 0.12 + 0.12 * glowing + 0.3 * passed), mix(tone, deep, 0.4), 0.9 * pow(1.0 - rise, 0.9));
+    vec3 paper = mix(mix(face, deep, 0.5), face, facing);
     color = mix(paper, night, uDark);
     // The cap's light runs a little way down the column (all of it when hovered); a bright lip
     // where the side meets the cap.
@@ -221,7 +235,7 @@ varying vec3 vWorld;
 varying float vDepth;
 void main() {
   float field = vWorld.y - vRidge.x;         // 0 on the line, below 0 in the fill
-  float hover = vRidge.w, peak = vRidge.z, lit = lightAt(vWorld, vRidge.y, peak);
+  float hover = vRidge.w, peak = vRidge.z, lit = lightAt(vWorld, vRidge.y, peak) + haloAt() * uSize.w;
   float glowing = clamp(lit, 0.0, 1.0), hot = clamp(lit - 1.0, 0.0, 1.0);
   vec3 tone = mix(uTone, uPeak, peak);
   float lineA = lineAlpha(field, (mix(1.7, 1.3, uDark) + 0.9 * glowing + 1.2 * hover) * uPixelRatio);
@@ -238,8 +252,9 @@ void main() {
 
 // The floor: a faint lattice of dots around the sculpture (every second cell corner, fading out),
 // a soft pool of light (dark page) or a contact shadow (light page) under it, a sheen where the
-// front and the band cross it (only on and just around the field), and a pool of accent under
-// the pointer.
+// progress front crosses it (on and just around the field), and a pool of accent under the
+// pointer. The travelling band lights the columns only: on the open floor it would show as a
+// streak running out of the frame.
 const floorFragment = `${pieces}
 varying vec3 vWorld;
 varying float vDepth;
@@ -256,7 +271,7 @@ void main() {
   float pool = (1.0 - smoothstep(-0.25, 0.9, away)) * mix(0.15, 0.07, uDark);
   vec3 poolColor = mix(mix(uText, uTone, 0.3), uTone, uDark);
   float spot = spotAt(w) * mix(0.14, 0.24, uDark) * uSize.w;
-  float sheen = (1.5 * frontAt(w) * step(0.05, uProgress) + bandAt(w)) * (1.0 - smoothstep(0.0, 0.35, away)) * mix(0.07, 0.16, uDark) * uSize.w;
+  float sheen = 3.0 * frontAt(w) * smoothstep(0.05, 0.2, uProgress) * (1.0 - smoothstep(0.2, 1.1, away)) * mix(0.07, 0.16, uDark) * uSize.w;
   vec3 dotColor = mix(mix(uBorder, uMuted, 0.55), uTone, clamp(light, 0.0, 1.0) * 0.8);
   vec3 color = (dotColor * dots + poolColor * pool + uTone * (spot + sheen)) / max(dots + pool + spot + sheen, 0.0001);
   float fade = 1.0 - max(fogLinear(vDepth, uFog.x, uFog.y), focusFade(w));
@@ -339,7 +354,9 @@ export function mount(container, options = {}) {
   const number = (v, low, high, fallback) => Math.min(high, Math.max(low, Number.isFinite(Number(v)) ? Number(v) : fallback));
   [o.gap, o.height, o.intensity] = [number(o.gap, 0, 0.9, 0.18), number(o.height, 0.2, 3, 1), number(o.intensity, 0, 3, 1)];
   const ridges = o.mode === "ridges";
-  const stage = createStage(container, { stillTime: 6, fade: 200, camera: { fov: 30, near: 0.5, far: 80 }, ...options });
+  // A weak device (low quality) draws at three quarters of the resolution: the field fills much of
+  // the screen, and its glow hides the softer edges.
+  const stage = createStage(container, { stillTime: 6, fade: 200, renderScale: [0.75, 1, 1], camera: { fov: 30, near: 0.5, far: 80 }, ...options });
   if (stage.failed) return stage.handle();
   const { scene, camera } = stage;
 
@@ -350,11 +367,12 @@ export function mount(container, options = {}) {
     uFocus: { value: new THREE.Vector4() },    // x and z of the peaks, how far the rest has fallen back, breathing amount
     uFloor: { value: new THREE.Vector4() },    // half width, half depth, lattice step x (0: no dots), z
     uSpot: { value: new THREE.Vector4() },     // x and z of the pool under the pointer, its strength
-    uLight: { value: new THREE.Vector3(-0.55, 0, 0.85) },   // the key light's direction
+    uLight: { value: new THREE.Vector3(0, 0, 1) },   // the key light's direction
     uTone: { value: new THREE.Color() },       // the colour of the field, and of the tallest values
     uPeak: { value: new THREE.Color() },
     uFog: { value: new THREE.Vector2() },      // fog from, fog full (distance from the camera)
   };
+  for (const name of ["Bg", "Surface", "Border", "Text", "Tone", "Peak"]) uniforms["uShown" + name] = { value: new THREE.Color() };
   const material = (vertexShader, fragmentShader, extra) => new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader, ...extra });
   const see = { transparent: true, depthWrite: false };
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material(plainVertex, floorFragment, see));
@@ -375,13 +393,16 @@ export function mount(container, options = {}) {
       uniforms.uTone.value.copy(tokens.accent);
       uniforms.uPeak.value.copy(tokens.accent2);
     }
+    // The bars mix their colours in display space: turn them once here, not in every pixel.
+    const display = { Bg: tokens.bg, Surface: tokens.surface, Border: tokens.border, Text: tokens.text, Tone: uniforms.uTone.value, Peak: uniforms.uPeak.value };
+    for (const [name, c] of Object.entries(display)) uniforms["uShown" + name].value.setRGB(c.r ** (1 / 2.2), c.g ** (1 / 2.2), c.b ** (1 / 2.2));
   });
 
   // The data as given, and per column of the field the height on screen, a spring to the goal.
   let data = { rows: 0, columns: 0, values: [] }, grid = { rows: 0, columns: 0, values: [], source: new Int32Array(0), k: 1 };
   let shown, speed, goal, wait, hover, peak, peakGoal, present;
   const span = { pitchX: 0.25, pitchZ: 0.25, depth: 3, tall: 2 }, focus = new THREE.Vector3();
-  let moving = true, hovered = -1, reported = -1, sub = 6, every = 6, samples = 0;
+  let moving = true, hovered = -1, reported = -1, sub = 6, every = 6, samples = 0, slot = new Int32Array(0);
   const rowZ = (r) => (r + 0.5 - grid.rows / 2) * span.pitchZ;
   const barX = (c) => (c + 0.5 - grid.columns / 2) * span.pitchX;
   const ridgeX = (s) => -WIDTH / 2 + (s + TAIL) * span.pitchX;
@@ -408,11 +429,12 @@ export function mount(container, options = {}) {
     const bar = span.pitchX * (1 - o.gap);
     uniforms.uSize.value.set(bar, span.pitchZ * (1 - o.gap), span.tall, o.intensity);
     uniforms.uFloor.value.set(WIDTH / 2, span.depth / 2, ridges ? 0 : 2 * span.pitchX, 2 * span.pitchZ);
-    floor.scale.set(WIDTH + 3, 1, span.depth + 3);
+    floor.scale.set(WIDTH + 2.6, 1, span.depth + 2.6);
     build();
   }
 
   function setValues(input) {
+    const first = !grid.values.length;   // the first numbers rise from a low relief, so the first frame is a picture
     data = shapeOf(input, o);
     const next = fieldOf(data, !ridges);
     if (next.rows !== grid.rows || next.columns !== grid.columns) reshape(next);
@@ -429,6 +451,7 @@ export function mount(container, options = {}) {
       peakGoal[i] = peaks.has(i) && high > low ? 1 : 0;
       // The rise runs as a wave from the front-left corner (the first column of the nearest row).
       wait[i] = (RISE * Math.hypot(c * span.pitchX, (grid.rows - 1 - r) * span.pitchZ)) / corner;
+      if (first) [shown[i], peak[i]] = [0.3 * goal[i], peakGoal[i]];
       if (peaks.has(i)) focus.add({ x: cellX(c), y: goal[i], z: rowZ(r) });
     });
     focus.divideScalar(peaks.size);   // where the camera goes at the end: the middle of the peaks
@@ -442,8 +465,13 @@ export function mount(container, options = {}) {
     let mesh;
     if (!ridges) {
       const geometry = new THREE.InstancedBufferGeometry().copy(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0));
-      const cells = new Float32Array(n * 2);
-      for (let i = 0; i < n; i++) cells.set([barX(i % grid.columns), rowZ(Math.floor(i / grid.columns))], i * 2);
+      geometry.setIndex(Array.from(geometry.index.array).filter((_, k) => k < 18 || k >= 24));   // no bottom face: it stands on the floor
+      // The columns are stored nearest first (as the camera usually sees them), so the depth test
+      // skips what nearer columns hide instead of shading it again; slot[i] is where cell i went.
+      const cells = new Float32Array(n * 2), near = (i) => barX(i % grid.columns) * 0.84 + rowZ(Math.floor(i / grid.columns)) * 0.54;
+      const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => near(b) - near(a));
+      slot = new Int32Array(n);
+      order.forEach((i, j) => { slot[i] = j; cells.set([barX(i % grid.columns), rowZ(Math.floor(i / grid.columns))], j * 2); });
       geometry.setAttribute("aCell", new THREE.InstancedBufferAttribute(cells, 2));
       geometry.setAttribute("aState", new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4).setUsage(THREE.DynamicDrawUsage));
       geometry.instanceCount = n;
@@ -483,7 +511,7 @@ export function mount(container, options = {}) {
   function write() {
     if (!ridges) {
       const state = bars.geometry.attributes.aState;
-      for (let i = 0; i < shown.length; i++) state.array.set([Math.max(0, shown[i]), hover[i], peak[i], present[i]], i * 4);
+      for (let i = 0; i < shown.length; i++) state.array.set([Math.max(0, shown[i]), hover[i], peak[i], present[i]], slot[i] * 4);
       state.needsUpdate = true;
       return;
     }
@@ -514,7 +542,8 @@ export function mount(container, options = {}) {
     for (let i = 0; !ridges && i < shown.length; i++) {
       const x = barX(i % grid.columns), z = rowZ(Math.floor(i / grid.columns));
       box.min.set(x - span.pitchX / 2, 0, z - span.pitchZ / 2);
-      box.max.set(x + span.pitchX / 2, Math.max(shown[i], 0.015) * span.tall, z + span.pitchZ / 2);
+      const fall = uniforms.uFocus.value.z * smooth(Math.min(1, Math.max(0, (Math.hypot(x - focus.x, z - focus.z) - 0.35) / 0.95))) * (1 - peak[i]);
+      box.max.set(x + span.pitchX / 2, Math.max(shown[i] * (1 - 0.6 * fall), 0.015) * span.tall, z + span.pitchZ / 2);   // as drawn, sunk or not
       const d = present[i] && ray.intersectBox(box, hit) ? hit.distanceTo(ray.origin) : Infinity;
       if (d < nearest) { nearest = d; best = i; }
     }
@@ -536,17 +565,21 @@ export function mount(container, options = {}) {
     return d2 === 0 ? 1 : d2 > 9 * k2 ? 0 : Math.exp(-d2 / (0.9 * k2));
   }
 
-  // The camera: a low view with the near end to the right, close enough that the field runs off
-  // the bottom and the right edge, fitted to the free part of the screen. setViewOffset slides the
-  // picture over without turning the camera.
+  // The camera has three states (setProgress 0, 0.5 and 1), each [turn round the field, height
+  // above the floor (both in radians), distance (a share of the one that fits the free part of the
+  // screen), slide right, slide down (shares of the screen)]. Bars: at rest low and close, the far
+  // end of the field clear of the headline, the near rows running off the bottom and the right edge;
+  // at 0.5 turned and raised to watch the front cross; at 1 up and in on the peaks. Ridges keep a
+  // calmer path. setViewOffset slides the picture over without turning the camera.
+  const VIEWS = ridges
+    ? [[0.525, 0.27, 0.86, 0.19, 0.02], [0.8, 0.3, 0.86, 0.19, 0.02], [1.075, 0.47, 0.757, 0.19, 0.02]]
+    : [[1.15, 0.26, 0.46, 0.275, 0.1], [0.95, 0.58, 0.6, 0.275, 0.1], [1.075, 0.63, 0.67, 0.19, 0.02]];
+  const AIM = ridges ? [0, 0] : [0.5, 0.3];   // x and z the camera looks at in the middle state
   let fit = 1;
   stage.onResize((size) => {
-    const narrow = size.aspect < 0.9;
-    const across = narrow ? 0 : { right: 0.24, left: -0.24 }[o.side] || 0, down = narrow ? 0.29 : 0.09;
-    const room = narrow ? [1, 0.36] : [o.side === "center" ? 0.8 : 0.52, 0.72];   // share of width, height
+    const room = size.aspect < 0.9 ? [1, 0.36] : [o.side === "center" ? 0.8 : 0.52, 0.72];   // share of width, height
     const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     fit = 1 / Math.min(tan * room[1], tan * size.aspect * room[0]);
-    camera.setViewOffset(size.width, size.height, -across * size.width, -down * size.height, size.width, size.height);
   });
 
   stage.onQuality((quality) => {
@@ -559,13 +592,16 @@ export function mount(container, options = {}) {
   let spot = 0;
   function place(time, delta) {
     const still = stage.still, p = stage.progressEased, pointer = still ? { x: 0, y: 0 } : stage.pointer;
-    const half = smooth(Math.min(1, p / 0.5));                                // the first half: round to the front's side
+    const half = smooth(Math.min(1, p / 0.5));                                // the first half: to the middle state
     const rise = smooth(Math.min(1, Math.max(0, (p - 0.45) / 0.55)));          // the last part: up and in, onto the peaks
-    const az = 0.42 + 0.38 * half + 0.28 * rise + (still ? 0 : Math.sin(time * 0.09) * 0.04) + pointer.x * 0.3;   // round the sculpture
-    const el = 0.24 + 0.09 * half + (ridges ? 0.14 : 0.3) * rise + pointer.y * 0.14;                               // above the floor
-    const radius = 0.5 * Math.hypot(WIDTH, Math.max(span.depth, 3.6), span.tall * 0.7);
-    const distance = radius * fit * (ridges ? 0.86 * (1 - 0.12 * rise) : 0.52 + 0.12 * rise);
-    target.set(0.35 * (1 - rise), span.tall * 0.2, 0.3 * (1 - rise)).lerp(close.set(focus.x, span.tall * (0.25 + 0.3 * focus.y), focus.z), rise);
+    const blend = (k) => { const m = VIEWS[0][k] + (VIEWS[1][k] - VIEWS[0][k]) * half; return m + (VIEWS[2][k] - m) * rise; };
+    const turn = blend(0) + (still ? 0 : Math.sin(time * 0.09) * 0.04);
+    const az = turn + pointer.x * 0.25, el = blend(1) + pointer.y * 0.14;     // the pointer turns it a few degrees
+    const { width, height, aspect } = stage.size, narrow = aspect < 0.9;   // a tall, narrow screen: further off, in the lower third
+    const radius = 0.5 * Math.hypot(WIDTH, Math.max(span.depth, 3.6), span.tall * 0.7), distance = radius * fit * blend(2) * (narrow ? 1.43 : 1);
+    const across = narrow ? 0 : ({ right: 1, left: -1 }[o.side] || 0) * blend(3), down = narrow ? 0.33 : blend(4);
+    camera.setViewOffset(width, height, -across * width, -down * height, width, height);
+    target.set(AIM[0] * half, span.tall * 0.2, AIM[1] * half).lerp(close.set(focus.x, span.tall * (0.25 + 0.3 * focus.y), focus.z), rise);
     camera.position.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).multiplyScalar(distance).add(target);
     camera.lookAt(target);
     camera.updateMatrixWorld();
@@ -575,8 +611,11 @@ export function mount(container, options = {}) {
     const band = still ? 0.62 : 0.5 - 0.48 * Math.cos((time * 2 * Math.PI) / BAND_PERIOD);
     uniforms.uMotion.value.set(band, 0.13, 0.95 * (1 - 0.5 * smooth(Math.min(1, p / 0.4))), -0.15 + 1.3 * p);
     uniforms.uFocus.value.set(focus.x, focus.z, 0.92 * smooth(Math.min(1, Math.max(0, (p - 0.55) / 0.45))), still ? 0 : 0.045);
-    // The key light leans with the pointer; the pool of light sits where the pointer meets the field.
-    uniforms.uLight.value.set(-0.55 + pointer.x * 0.75, 0, 0.85 - pointer.y * 0.35);
+    // The key light comes from over the camera's right shoulder, so the faces turned most to the
+    // camera are lit and the others clearly shaded; it leans with the pointer. The pool of light
+    // sits where the pointer meets the field.
+    const key = turn + 0.7 + pointer.x * 0.6;
+    uniforms.uLight.value.set(Math.sin(key), 0, Math.cos(key));
     raycaster.setFromCamera(at.set(pointer.x, pointer.y), camera);
     plane.constant = -span.tall * 0.2;
     const ground = raycaster.ray.intersectPlane(plane, hit);

@@ -18,7 +18,7 @@
  *
  * Options (all optional; the stage's own options, see stage.js, pass straight through):
  *   levels         16: contour intervals over the height range. More is a denser chart.
- *   lineWidth      1: CSS pixels of a contour line. Index lines are 1.7 times as wide.
+ *   lineWidth      1: CSS pixels of a contour line (index lines: see indexStrength).
  *   indexEvery     5: every so many lines is an index line. 0 makes them all the same.
  *   indexStrength  1: how much index lines stand out, 0..2. 0 draws them with the width, colour
  *                  and strength of the others (they only still survive on a cliff); 1 is 1.7
@@ -133,9 +133,8 @@ vec2 frameSize() { return 0.5 * uResolution / unitPixels(); }
 // The flow carried in the direction dir: dir times the flow at first, turning with the circle.
 vec2 drift(vec2 dir) { return mat2(dir, vec2(-dir.y, dir.x)) * uFlow; }
 
-// Layers of noise, each twice as fine and 0.42 as strong (a little rougher than half, so the land
-// keeps some grain), and the slope of their sum. Layer i is
-// read at A q (A doubles and turns 37 degrees each time, so the grids never line up), and by the
+// Layers of noise, each twice as fine and 0.42 as strong (a little under half: smooth land, with the
+// fine layers only as grain), and the slope of their sum. Layer i is read at A q (A doubles and turns 37 degrees each time, so the grids never line up), and by the
 // chain rule its slope with respect to q is A-transposed times the slope the noise reports. Each
 // layer slides its own way, slowly, finer ones faster: their sum keeps changing shape, which costs
 // far less than noise in three dimensions with time as the third.
@@ -144,7 +143,7 @@ vec3 layers(vec2 q) {
   float weight = 0.5;
   mat2 A = mat2(1.0);
   for (int i = 0; i < OCTAVES; i++) {
-    float turn = float(i) * 2.4;
+    float turn = float(i) * 2.4;   // 2.4 radians apart, near the golden angle: no two slide alike
     vec3 n = snoiseGrad(A * q + drift(vec2(cos(turn), sin(turn))) * SLIDE * float(i + 1));
     sum += weight * vec3(n.x, transpose(A) * n.yz);
     A = mat2(1.6, 1.2, -1.2, 1.6) * A;

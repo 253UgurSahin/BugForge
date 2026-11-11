@@ -683,7 +683,7 @@ the values only in the bars (keep the numbers as labels or a table), and a line 
 animating `d`, which only some browsers do: draw the new line with `m-draw` instead.
 
 **Tilt card with depth.js.** Cards that lean toward the pointer, with layers inside at their own
-depth: the kit's `depth.js` and `depth.css` (no three, about 6 KB), copied into the app's
+depth: the kit's `depth.js` and `depth.css` (no three, about 6 KB minified and gzipped), copied into the app's
 `scenes/` folder. The markup says what moves. Its options and the other behaviours (`stack`,
 `fold`, `scene`) are the comment at the top of `../forge-design/scenes/depth.js`; the markup per
 behaviour is section 7 of `../forge-design/scenes.md`.
@@ -1036,7 +1036,7 @@ for any stack whose dev server and build share an output folder.
 | --- | --- | --- | --- | --- |
 | 1 Subtle | motion.css, about 4 KB; scripts none or under 2 KB | nothing | 60 a second | no layout shift |
 | 2 Polished | under 15 KB for all motion code | nothing | 60 a second on a mid-range phone (390px, 4x CPU slowdown) | CLS under 0.1, no long task over 50ms |
-| 3 Expressive | under 25 KB, the kit's depth.js (about 6 KB) and the story script included | nothing | the same, also while a sticky scene scrolls | no library |
+| 3 Expressive | under 25 KB minified and gzipped, the kit's depth.js and depth.css (about 6 KB) and the story script included | nothing | the same, also while a sticky scene scrolls | no library |
 | 4 Showpiece | the same as level 3: nothing of three | the hero (three after tree-shaking, the kit and one scene) under 200 KB, only on the screens that show it, after the page is idle; a poster under 100 KB | 60 on a mid-range laptop; 30 or more on a mid-range phone at low quality | the largest paint is the heading or the poster, never later than before |
 | 5 Cinematic | the same as level 3 | the scenes, the journey and the shaders together under 300 KB; one WebGL context per page | the same as level 4, also during the journey | GPU particles at the count the stage's quality picks |
 

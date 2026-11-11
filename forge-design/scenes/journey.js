@@ -29,7 +29,8 @@
  *   scene       a mounted scene of this kit, or a factory (element) => scene, called with the stage
  *               element. Mount a scene of your own with progressEase: 0.05: the journey eases itself.
  *   chapters    keyframes { at, until, camera, phone, still, progress, params, via, alt }:
- *     at        0..1 on the section's scroll. Default: where its [data-chapter] is centred on screen.
+ *     at        0..1 on the section's scroll. Default: where its [data-chapter] is centred on screen,
+ *               measured again whenever the section, a chapter or the stage changes size.
  *     until     0..1: the chapter stays the current one up to here, for a long chapter whose text
  *               stays while the camera rides on toward the next keyframe (default: at).
  *     camera    { position: [0, 0, 9], target: [0, 0, 0], fov: the one before (32), roll: 0 degrees }.
@@ -49,15 +50,26 @@
  *   narrow      0.8. Below this width/height the phone keyframes are used.
  *   stillWidth  880, stillRatio 0.62: CSS size of a still. focus [0, 0, 0]: the subject's middle.
  *   keepScene   false. true: destroy() leaves a scene you mounted yourself alive.
- *   onUpdate    fn({ progress, target, index, params }) after every frame.
+ *   onUpdate    fn({ progress, target, index, params }) after every frame, and also before the first
+ *               frame (index -1, mount() has not returned yet) and before each still is drawn, so a
+ *               page can pass the other params on to the scene in time (form's setThread, say).
  *
  * While live, the section also carries --journey-x and --journey-y (0..1 across the stage element,
  * y down, eased with the camera's lean) and --journey-pointer (0..1, eased: is there a pointer), so
  * page CSS can light the side of the scene the pointer is on.
  *
- * The section gets data-journey="live" | "still" | "fallback" and data-chapter="<index>", and a
- * "chapter" event (detail { index, direction: 1, -1, or 0 the first time, chapter }) each time
- * the current chapter changes. The page lights the text and does the layout.
+ * The section gets data-journey="live" | "still" | "fallback" and data-journey-chapter="<index>"
+ * (data-chapter stays the mark of a chapter), and a "chapter" event (detail { index, direction: 1,
+ * -1, or 0 the first time, chapter }) each time the current chapter changes. The page lights the
+ * text and does the layout.
+ *
+ * The camera is the journey's while it runs. It keeps the view on screen from one frame to the
+ * next, so whatever the scene works out from it in its own frame, which runs first (a hover
+ * raycast, say), matches what the visitor sees, and a scene's own moves of the camera do not move
+ * the picture. Between frames its fov is the scene's own, so the scene's layout on a resize does
+ * not follow the trip. A scene that sets its own projection in its frame before it raycasts
+ * (datascape.js does, for its slide) aims that ray with its own fov: give its chapters that fov
+ * (30 for datascape.js) and the hover is exact; with another fov it is off by the ratio of the two.
  *
  * Reduced motion: no pin and no trip. Each chapter gets its own still, rendered from its keyframe
  * into an <img> in its [data-chapter-still] element (a <figure class="journey-still"> is appended
@@ -165,7 +177,7 @@ export function mount(section, options = {}) {
   const undo = () => {
     for (const off of offs.splice(0).reverse()) off();
     root.removeAttribute("data-journey");
-    root.removeAttribute("data-chapter");
+    root.removeAttribute("data-journey-chapter");
     for (const name of ["--journey-x", "--journey-y", "--journey-pointer"]) root.style.removeProperty(name);
   };
   if (!stage || stage.failed || !stage.camera) {
@@ -243,12 +255,24 @@ export function mount(section, options = {}) {
   const camera = stage.camera, eye = new THREE.Vector3(), look = new THREE.Vector3();
   const forward = new THREE.Vector3(), right = new THREE.Vector3(), up = new THREE.Vector3();
   const focus = new THREE.Vector3(...[0, 1, 2].map((k) => finite((o.focus || [])[k], 0))), toFocus = new THREE.Vector3();
-  // The camera is borrowed for each frame and given back after it is drawn, so whatever the scene
-  // works out from it outside a frame (its layout on a resize, from viewSize) sees its own camera.
-  const home = { position: camera.position.clone(), quaternion: camera.quaternion.clone(), up: camera.up.clone(), fov: camera.fov };
+  const turn = new THREE.Matrix4();
+  // The camera is the journey's while it runs. Its matrices are set in place() and nowhere else
+  // (three's own updates of them are off), so from one frame to the next they hold the view on
+  // screen: a scene's own frame, which runs before the journey's, works out what it needs from the
+  // camera (a hover raycast, say) against what the visitor sees, and a scene that moves the camera
+  // itself no longer moves the picture. Only the fov is the scene's own again after each frame (the
+  // projection matrix keeps the drawn view), so a layout worked out from it on a resize (viewSize)
+  // does not change with the trip. destroy() gives the scene its camera back as it was.
+  const home = { position: camera.position.clone(), quaternion: camera.quaternion.clone(), up: camera.up.clone(),
+                 fov: camera.fov, matrix: camera.matrixAutoUpdate, world: camera.matrixWorldAutoUpdate };
+  let ownFov = camera.fov, lent = false;
+  camera.matrixAutoUpdate = camera.matrixWorldAutoUpdate = false;
+  const fovBack = () => { if (lent) camera.fov = ownFov; lent = false; };
   const giveBack = () => {
+    fovBack();
+    camera.matrixAutoUpdate = home.matrix; camera.matrixWorldAutoUpdate = home.world;
     camera.position.copy(home.position); camera.quaternion.copy(home.quaternion); camera.up.copy(home.up);
-    camera.fov = home.fov; camera.updateProjectionMatrix();
+    camera.fov = home.fov; camera.updateMatrixWorld(true); camera.updateProjectionMatrix();
   };
   let leanX = 0, leanY = 0, present = 0;
   function place(i, u, time, delta, moving) {
@@ -287,10 +311,17 @@ export function mount(section, options = {}) {
       look.add(toFocus);
     }
     camera.up.copy(THREE.Object3D.DEFAULT_UP);
-    camera.lookAt(look);
+    turn.lookAt(camera.position, look, camera.up); // camera.lookAt() would read the held matrixWorld
+    camera.quaternion.setFromRotationMatrix(turn);
     camera.rotateZ(monotone(p.roll, i, u) - (moving ? leanX * o.parallax * 0.3 : 0));
+    if (!lent) ownFov = camera.fov; // the scene may have changed its own since the last frame
+    lent = true;
     camera.fov = monotone(p.fov, i, u);
     camera.updateProjectionMatrix();
+    camera.updateMatrix();
+    if (camera.parent) camera.matrixWorld.multiplyMatrices(camera.parent.matrixWorld, camera.matrix);
+    else camera.matrixWorld.copy(camera.matrix);
+    camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
   }
 
   // 4. The moving trip.
@@ -305,9 +336,14 @@ export function mount(section, options = {}) {
     }
     return params;
   }
+  // The page's onUpdate, outside a frame (before the first one, before a still): a mistake in it
+  // is reported, and the journey goes on.
+  function tell(state) {
+    try { if (o.onUpdate) o.onUpdate(state); } catch (error) { console.error(error); }
+  }
   function announce(index, direction) {
     current = index;
-    root.setAttribute("data-chapter", String(index));
+    root.setAttribute("data-journey-chapter", String(index)); // not data-chapter: that marks the chapters
     root.dispatchEvent(new CustomEvent("chapter", { detail: { index, direction, chapter: raw[told2key[index]] } }));
   }
   // Put the scene where the scroll already is before its first frame, so a page that opens half
@@ -316,7 +352,7 @@ export function mount(section, options = {}) {
     target = lastRead = progressOf(root, "contain");
     trip = follower.snap(target);
     const { i, u } = locate(trip);
-    applyScene(i, u);
+    tell({ progress: trip, target, index: -1, params: applyScene(i, u) });
   }
   offs.push(stage.onFrame((time, delta) => {
     if (stage.still) { // a still being made: its chapter's camera, nothing else
@@ -370,8 +406,9 @@ export function mount(section, options = {}) {
     });
   }
   function renderStill() {
-    const { i, u } = locate(ats[told2key[stillIndex]]);
-    applyScene(i, u); // before the frame: the stage eases progress before the scene sees it
+    const at = ats[told2key[stillIndex]], { i, u } = locate(at);
+    // Before the frame: the stage eases progress, and the scene its own params, before it draws.
+    tell({ progress: at, target: at, index: stillIndex, params: applyScene(i, u) });
     stage.invalidate();
   }
   function makeStills() {
@@ -382,7 +419,7 @@ export function mount(section, options = {}) {
     renderStill();
   }
   stage.scene.onAfterRender = () => {
-    giveBack();
+    fovBack();
     if (!stage.still || !rendering) return;
     const img = stills[stillIndex];
     if (img) {
@@ -415,6 +452,13 @@ export function mount(section, options = {}) {
     }
   }
   offs.push(stage.onResize(() => { measure(); if (stage.still && stills.length) makeStills(); }));
+  // The chapters' places also move while the pinned stage keeps its size: a web font that loads,
+  // content added, a <details> opened. Measuring changes no layout, so this cannot feed itself.
+  if (typeof ResizeObserver === "function") {
+    const layout = new ResizeObserver(() => measure());
+    for (const element of [root, ...steps]) if (element && element.nodeType === 1) layout.observe(element);
+    offs.push(() => layout.disconnect());
+  }
   offs.push(stage.onTokens(() => { if (stage.still && stills.length) makeStills(); }));
   measure();
   setMode(stage.still);

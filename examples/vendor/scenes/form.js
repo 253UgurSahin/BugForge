@@ -41,6 +41,11 @@
  *                   where they are low; [] or null takes it back. Eased. The loop has 32 places;
  *                   each takes the highest value of the part of the list it covers, so a single
  *                   peak in a long list is never lost.
+ * setThread(amount) 0..1, eased: follow one thread. The longest strand on the skin moves to the
+ *                   middle of the tube and is drawn there as one unbroken line in the second accent
+ *                   (a soft glow on dark, a firm line of ink on light), while every other strand
+ *                   falls back to under a fifth, the nodes to about a third, and the pulses rest.
+ *                   0 (the default) is the form as it is.
  * setPointer(x, y)  -1..1, y up: lean toward that point as the real pointer would.
  * pause(), resume(), destroy(), stage: as stage.js describes.
  *
@@ -190,14 +195,20 @@ uniform vec2 uFade;      // depth where the form is nearest and farthest
 uniform float uIntensity;  // brightness times density: a thin tube packs its strands tighter
 uniform float uHalo;     // pixels of soft glow on each side, on dark only
 uniform float uPulses;   // the share of strands that carry a pulse
+uniform float uThread;   // 0..1: how far the one followed strand stands out from the rest
 // vAcross: pixels from the middle of the ribbon; vCore: half the line's width in pixels.
-varying float vAcross, vCore, vAlpha, vKind, vFar, vHead, vLoop, vLength;
+varying float vAcross, vCore, vAlpha, vKind, vFar, vHead, vLoop, vLength, vThread;
 void main() {
+  // aSpan.z: the colour (0 or 1), plus 2 on the one strand setThread follows.
+  float mark = step(1.5, aSpan.z), picked = mark * uThread, dim = (1.0 - mark) * uThread;
+  // As it is followed, that strand leaves the skin for the middle of the tube: one smooth line
+  // through the bundle instead of a helix round it.
+  vec4 strand = vec4(aStrand.x, mix(aStrand.y, 0.08, picked), aStrand.zw);
   float span = aSpan.y * uReach;
   float s = aSpan.x + aLocal.x * span;
   vec3 skin, unused;
-  vec3 p0 = strandPoint(s, aStrand, skin);
-  vec3 p1 = strandPoint(s + 0.002, aStrand, unused);
+  vec3 p0 = strandPoint(s, strand, skin);
+  vec3 p1 = strandPoint(s + 0.002, strand, unused);
   vec4 m0 = modelViewMatrix * vec4(p0, 1.0);
   vec4 c0 = projectionMatrix * m0;
   vec4 m1 = modelViewMatrix * vec4(p1, 1.0);
@@ -211,8 +222,9 @@ void main() {
   float endOn = smoothstep(0.2, 0.6, seen);
   // Some strands carry a pulse that runs their length every 9 seconds. The fragment shader draws
   // it sharp; here a wide version of it makes the ribbon room to swell and glow.
+  // While one strand is followed the pulses rest: nothing flashes across it.
   vHead = -10.0;
-  if (fract(aStrand.w * 7.31) < uPulses) vHead = fract(uClock / 9.0 + aStrand.w * 5.3) * 1.3 - 0.15;
+  if (fract(aStrand.w * 7.31) < uPulses * (1.0 - uThread)) vHead = fract(uClock / 9.0 + aStrand.w * 5.3) * 1.3 - 0.15;
   float pulse = vHead > -5.0 ? pulseAt((aLocal.x - vHead) * span, 0.01, 0.035) : 0.0;
   // Width follows depth like a real thread: near strands about three times as wide as far ones,
   // but never under about a pixel: a thinner line would flicker, so it gets fainter instead.
@@ -226,9 +238,10 @@ void main() {
   // On light a pulse is a heavier stroke of ink, so it swells more than the glow does on dark.
   float pixels = uWidth * data * (1.0 + mix(1.8, 0.7, uDark) * pulse) * (1.0 + 0.6 * lead)
                * mix(mix(2.1, 1.75, uDark), mix(0.5, 0.6, uDark), far) * taper
+               * mix(1.0, 1.45, picked) * mix(1.0, 0.8, dim)
                * projectionMatrix[1][1] * uResolution.y * 0.5 / depth;
   float core = max(pixels, uPixelRatio);
-  float halo = uDark * uHalo * uPixelRatio * (1.0 + 1.5 * pulse) * mix(1.2, 0.6, far);
+  float halo = uDark * uHalo * uPixelRatio * (1.0 + 1.5 * pulse) * mix(1.2, 0.6, far) * (1.0 + 0.6 * picked);
   float extent = core * 0.5 + uPixelRatio + halo * 1.8; // room for the soft edge and the glow
   c0.xy += across * aLocal.y * extent * 2.0 / uResolution * c0.w;
   gl_Position = c0;
@@ -238,11 +251,14 @@ void main() {
   // light the back keeps more of its ink: thinner lines of the same colour, not a pale haze.
   vec3 normal = normalize(normalMatrix * skin);
   float rim = 1.0 - abs(dot(normal, normalize(-m0.xyz)));
-  vAlpha = uIntensity * (pixels / core) * mix(mix(0.55, 0.3, uDark), 1.0, rim * rim)
-         * mix(1.0, mix(0.34, 0.16, uDark), far) * (1.0 + 0.5 * lead)
-         * mix(1.0, mix(0.06, 2.0, level), uSwell)
+  // The followed strand keeps most of its weight at the back and where it faces the camera, so it
+  // reads as one unbroken line; every other strand falls back to under a fifth.
+  vAlpha = uIntensity * (pixels / core) * mix(mix(mix(0.55, 0.3, uDark), 0.85, picked), 1.0, rim * rim)
+         * mix(1.0, mix(mix(0.34, 0.16, uDark), 0.6, picked), far) * (1.0 + 0.5 * lead)
+         * mix(1.0, mix(0.06, 2.0, level), uSwell) * mix(1.0, 0.17, dim) * (1.0 + 0.9 * picked)
          * smoothstep(0.0, 0.16, aLocal.x) * smoothstep(1.0, 0.84, aLocal.x) * endOn;
-  vKind = aSpan.z;
+  vKind = aSpan.z - 2.0 * mark;
+  vThread = picked;
   vFar = far;
   vLoop = aLocal.x;
   vLength = span;
@@ -254,7 +270,7 @@ ${grain}
 ${pulseShape}
 uniform float uHalo;
 ${calm}
-varying float vAcross, vCore, vAlpha, vKind, vFar, vHead, vLoop, vLength;
+varying float vAcross, vCore, vAlpha, vKind, vFar, vHead, vLoop, vLength, vThread;
 void main() {
   // The pulse, sharp: a head about 20 pixels long, a tail of about 60 on a desktop hero, and a
   // faint wake behind that, so the strand it runs on lights up for a while.
@@ -262,13 +278,15 @@ void main() {
   float pulse = vHead > -5.0 ? pulseAt(x, 0.0045, 0.016) + 0.22 * pulseAt(x, 0.001, 0.09) : 0.0;
   float d = abs(vAcross);
   float lineCover = 1.0 - smoothstep(vCore - 0.5 * uPixelRatio, vCore + 0.5 * uPixelRatio, d);
-  float haloWidth = max(uHalo, 0.01) * uPixelRatio * (1.0 + 1.5 * pulse) * mix(1.2, 0.6, vFar);
-  float glow = uDark * (0.18 + 0.5 * pulse) * exp(-d * d / (haloWidth * haloWidth)) * step(0.01, uHalo);
+  float haloWidth = max(uHalo, 0.01) * uPixelRatio * (1.0 + 1.5 * pulse) * mix(1.2, 0.6, vFar) * (1.0 + 0.6 * vThread);
+  float glow = uDark * (0.18 + 0.5 * pulse + 0.2 * vThread) * exp(-d * d / (haloWidth * haloWidth)) * step(0.01, uHalo);
   float calm = calmAt(gl_FragCoord.xy);
-  vec3 ink = vKind > 0.5 ? uAccent2 : uAccent;
+  // The followed strand is drawn in the second accent: a warm line that stays a colour and never
+  // burns white.
+  vec3 ink = mix(vKind > 0.5 ? uAccent2 : uAccent, uAccent2, vThread);
   // The far side recedes. On dark it turns darker and cooler, toward the muted text colour. On light
   // it keeps its colour and the near side gets the weight: a deeper ink in front.
-  ink = mix(ink, uMuted * 0.5, vFar * 0.55 * uDark);
+  ink = mix(ink, uMuted * 0.5, vFar * 0.55 * uDark * (1.0 - 0.7 * vThread));
   ink *= mix(mix(0.7, 1.0, vFar), 1.0, uDark);
   // On dark, a pulse runs white-hot toward the text colour; on light it is a dark, heavy stroke.
   vec3 color = mix(ink, mix(ink * 0.35, uText, uDark), min(pulse * mix(0.9, 0.85, uDark), 1.0));
@@ -303,7 +321,7 @@ const nodeFragment = `
 ${stageUniforms}
 ${grain}
 ${calm}
-uniform float uIntensity;
+uniform float uIntensity, uThread;
 varying float vAlpha, vSize;
 void main() {
   float r = length(gl_PointCoord - 0.5) * vSize;   // pixels from the middle
@@ -316,7 +334,7 @@ void main() {
   float ring = 1.0 - smoothstep(0.9 * px, 1.7 * px, abs(r - 0.27 * vSize));
   float inkDot = max(ring, 0.8 * (1.0 - smoothstep(0.9 * px, 1.7 * px, r)));
   float calm = calmAt(gl_FragCoord.xy);
-  float alpha = mix(inkDot * 0.9, min(light, 1.0), uDark) * vAlpha * calm * min(uIntensity * 2.2, 1.0);
+  float alpha = mix(inkDot * 0.9, min(light, 1.0), uDark) * vAlpha * calm * min(uIntensity * 2.2, 1.0) * (1.0 - 0.7 * uThread);
   vec3 color = mix(uAccent * 0.5, mix(uAccent, uText, 0.35 + 0.6 * core), uDark);
   gl_FragColor = vec4(color, alpha);
   #include <colorspace_fragment>
@@ -349,6 +367,14 @@ function makeStrands(count, seed) {
     // Most strands cover most of the loop; a few short ones break the regularity.
     const length = rand() < 0.2 ? 0.25 + rand() * 0.3 : 0.6 + rand() * 0.38;
     list.push({ family, angle, depth, turns, seed: rand(), start: rand(), length, kind: rand() < 1 / 7 ? 1 : 0 });
+  }
+  // The strand setThread follows: the longest one on the skin, so it runs (nearly) the whole loop.
+  // It goes last, so on light it is drawn over the others.
+  const skin = list.filter((s) => s.family === 0);
+  if (skin.length) {
+    const thread = skin.reduce((a, b) => (b.length > a.length ? b : a));
+    thread.thread = true;
+    list.push(...list.splice(list.indexOf(thread), 1));
   }
   return list;
 }
@@ -388,7 +414,7 @@ function buildStrandGeometry(strands, segments) {
       for (const side of [-1, 1]) {
         local.set([j / segments, side], v * 2);
         strand.set([s.angle, s.depth, s.turns, s.seed], v * 4);
-        span.set([s.start, s.length, s.kind], v * 3);
+        span.set([s.start, s.length, s.kind + (s.thread ? 2 : 0)], v * 3);
         v += 1;
       }
       if (j < segments) {
@@ -439,7 +465,7 @@ export function mount(container, options = {}) {
     uSeed: { value: new THREE.Vector3(seedRand() * 40, seedRand() * 40, seedRand() * 40) },
     uFade: { value: new THREE.Vector2(7, 11) }, uCalm: { value: new THREE.Vector4(1, 0, 0.3, 0.52) },
     uIntensity: { value: 1 }, uWidth: { value: 0.01 }, uNodeSize: { value: 30 }, uHalo: { value: 2 },
-    uPulses: { value: 0.11 }, uReach: { value: 1 },
+    uPulses: { value: 0.11 }, uReach: { value: 1 }, uThread: { value: 0 },
   };
   // One uniforms object for both materials, so a value set once reaches both.
   const strandMaterial = new THREE.ShaderMaterial({ uniforms: shared, vertexShader: strandVertex,
@@ -509,7 +535,7 @@ export function mount(container, options = {}) {
   });
 
   // Eased state: the morph, the lean and the data, each its own pace.
-  let morph = 0, leanX = 0, leanY = 0, swell = 0, swellTarget = 0;
+  let morph = 0, leanX = 0, leanY = 0, swell = 0, swellTarget = 0, thread = 0, threadTarget = 0;
   const data = shared.uData.value, dataTarget = new Array(DATA_SLOTS).fill(0.5);
   stage.onFrame((time, delta) => {
     const jump = stage.still || stage.clock.frame === 0;
@@ -539,6 +565,7 @@ export function mount(container, options = {}) {
     leanX = ease(leanX, stage.pointer.x, 1.6);
     leanY = ease(leanY, stage.pointer.y, 1.6);
     shared.uSwell.value = swell = ease(swell, swellTarget, 2.5);
+    shared.uThread.value = thread = ease(thread, threadTarget, 2.5);
     for (let i = 0; i < DATA_SLOTS; i++) data[i] = ease(data[i], dataTarget[i], 2.5);
     const clock = (shared.uClock.value = time * speed);
     // One turn in 75 seconds round its own axis, a slow sway of the tilt, and a lean of up to
@@ -549,6 +576,10 @@ export function mount(container, options = {}) {
   });
 
   return stage.handle({
+    setThread(amount) {
+      threadTarget = clamp(num(amount, 0), 0, 1);
+      stage.invalidate();
+    },
     setData(values) {
       const list = Array.from(values || [], Number).filter(Number.isFinite).map((v) => Math.min(1, Math.max(0, v)));
       swellTarget = list.length ? 1 : 0;

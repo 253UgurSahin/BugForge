@@ -68,7 +68,10 @@
   opacity: var(--depth-lift);
 }
 /* Light where the pointer is: a soft spot larger than the card, moved by transform only, so the
-   browser composites it and never repaints it. */
+   browser composites it and never repaints it. Its box is 180% of the card, so moving it 28% of its
+   own size is half the card: with the pointer at an edge (--depth-gx 1) the light sits on that edge.
+   The light fills 64% of the box, about 1.15 card widths: one soft pool, not a beam. Its middle is
+   11% of the text colour: seen on a dark surface, while text over it keeps its AA contrast. */
 .depth-glare::before {
   content: "";
   position: absolute;
@@ -80,7 +83,8 @@
   background: radial-gradient(closest-side, color-mix(in oklab, var(--color-text) 11%, transparent), transparent) center / 64% 64% no-repeat;
 }
 /* On a dark page a raised surface is a touch lighter, as it is nearer the light: a faint wash that
-   comes with the lift (the glare element's opacity). */
+   comes with the lift (the glare element's opacity). 2.5% of the text colour is about one step of a
+   dark theme's surface scale: felt more than seen, and never a grey film over the card. */
 [data-depth-tone="dark"] > .depth-glare {
   background: color-mix(in oklab, var(--color-text) 2.5%, transparent);
 }

@@ -228,7 +228,7 @@ direction; one WebGL scene per page, so a page with a journey makes it its hero.
 
 ## 7. depth.js: real depth from level 3
 
-No WebGL, no three, about 6 KB, driven by attributes in the app's own markup: `data-depth-layer="1|2|3"`
+No WebGL, no three, about 5 KB minified and gzipped (12 KB minified), driven by attributes in the app's own markup: `data-depth-layer="1|2|3"`
 lifts a child (negative lies behind); `data-depth-<option>` on one element overrides an option.
 ```html
 <link rel="stylesheet" href="/js/scenes/depth.css">
@@ -262,7 +262,7 @@ filter on a tilt card (it flattens the layers). Reduced motion or the toggle: fl
 
 | level | first load | loaded later | frames |
 | --- | --- | --- | --- |
-| 3 | depth.js and depth.css, about 6 KB plus the CSS, inside the 25 KB of all motion code | nothing | 60 a second, also while a stack scrolls |
+| 3 | depth.js and depth.css, about 5 KB plus 1 KB minified and gzipped, inside the 25 KB of all motion code | nothing | 60 a second, also while a stack scrolls |
 | 4 | nothing of three | three after tree-shaking, the kit and one scene under 200 KB, only on the screens with it, after the page is idle; a poster under 100 KB | 60 on a mid-range laptop, 30 or more on a mid-range phone at low quality |
 | 5 | the same as level 4 | scenes, journey and shaders together under 300 KB; one WebGL context per page | the same, also during the journey |
 
