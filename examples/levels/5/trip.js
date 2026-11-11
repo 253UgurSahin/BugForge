@@ -15,8 +15,9 @@
      tide rises over the banks, the window opens at 10:58 and its band lights up along the course; the
      slip says the hour and the water.
    - Callouts follow the buoys and fixes as the camera passes them; the sounder rides with the boat.
-   - Tools: "Plain chart" (the drawn chart instead of the 3D, Alt+Shift+C), "Tide table" (Alt+Shift+T),
-     and the kit's motionToggle, which pauses the scene and depth.js and is remembered.
+   - Tools: "Plain chart" (the drawn chart instead of the 3D, Alt+Shift+C), "Tide table" (Alt+Shift+T:
+     to the week, with the table open), and the kit's motionToggle, which pauses the scene and
+     depth.js and is remembered.
    Nothing of three.js loads before the page is idle (lazyScene). Reduced motion: no pin and no trip;
    each chapter shows a still of its own view beside its text, and the clock stands at now. Without
    WebGL the drawn chart stays pinned under the chapters. */
@@ -25,7 +26,6 @@ import { mount as mountDepth } from "../../vendor/scenes/depth.js";
 
 const section = document.getElementById("trip");
 const root = document.documentElement;
-const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
 const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 
@@ -95,7 +95,7 @@ const STORY = [
   { p: 0, hour: NOW, lamp: [1.6, 0.2], lampY: 3.6, reachLamp: 2.9, night: 0, boat: 0, hatch: 0, follow: 1, reach: EDGE + legs[3] },
   { p: 0.25, hour: HOURS[1], lamp: [2.15, -0.45], lampY: 2.6, reachLamp: 1.9, night: 0, boat: boatAt(HOURS[1]) + 2, hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
   { p: 0.5, hour: HOURS[2], lamp: [0.6, 1.2], lampY: 2.4, reachLamp: 1.9, night: 0, boat: boatAt(HOURS[2]), hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
-  { p: 0.75, hour: HOURS[3], lamp: [-2.2, 2.4], lampY: 2.2, reachLamp: 1.8, night: 0.12, boat: boatAt(HOURS[3]), hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
+  { p: 0.75, hour: HOURS[3], lamp: [-2.2, 2.4], lampY: 2.2, reachLamp: 1.8, night: 0.05, boat: boatAt(HOURS[3]), hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
   { p: 1, hour: HOURS[4], lamp: [-3.4, 3.0], lampY: 3.6, reachLamp: 3.3, night: 1, boat: EDGE + legs[3], hatch: 1, follow: 0.6, reach: EDGE + legs[3] },
 ];
 
@@ -111,34 +111,33 @@ const CHAPTERS = [
     phone: { position: [1.4, 3.1, 4.6], target: [0.1, 0, 2.15], fov: 52 },
     still: { position: [1.8, 1.8, 3.6], target: [0.3, 0, 1.45], fov: 40 } },
   { camera: { position: [0.45, 2.75, 3.95], target: [-2.85, -0.25, 2.6], fov: 40 },     // down the Wielingen
-    phone: { position: [0.4, 3.0, 4.4], target: [-2.4, 0, 2.9], fov: 54 },
-    still: { position: [0.0, 1.8, 3.7], target: [-2.6, -0.1, 2.5], fov: 42 } },
+    phone: { position: [0.9, 5.3, 4.7], target: [-2.0, -0.25, 2.9], fov: 54 },
+    still: { position: [0.3, 2.6, 4.0], target: [-2.6, -0.25, 2.55], fov: 42 } },
   { camera: { position: [0.2, 10.2, 9.2], target: [-1.6, -0.5, 0.6], fov: 32 },         // the landfall, the whole sheet by night
-    phone: { position: [-0.4, 10.4, 7.0], target: [-1.4, 0, -1.6], fov: 48 },
+    phone: { position: [-1.4, 8.6, 10.6], target: [-2.6, -0.3, 4.6], fov: 50 },
     still: { position: [0.0, 10.0, 9.4], target: [-0.6, -0.5, 0.5], fov: 33 } },
 ].map((c, i) => ({ ...c, progress: STORY[i].p, params: { hour: HOURS[i], night: STORY[i].night, data: dataAt(HOURS[i]) } }));
-if (/debug/.test(location.hash) && window.__poses) window.__poses.forEach((pose, i) => { if (pose && CHAPTERS[i]) Object.assign(CHAPTERS[i], pose); });   // DEBUG-REMOVE
 
 /* ---- callouts: buoys and fixes, named as the camera passes them ------------------------------ */
 const CALLOUTS = [
   { at: [720, 412], text: "<b>14:20</b> off the pier" },
-  { at: [580, 398], text: "<b>SG1</b> green", kind: "green" },
-  { at: [752, 466], text: "<b>SP2</b> red", kind: "red" },
+  { at: [580, 398], text: "<b>SG1</b> green" },
+  { at: [752, 466], text: "<b>SP2</b> red" },
   { at: [524, 594], text: "<b>14:40</b> fix" },
-  { at: [468, 560], text: "<b>W10</b> red", kind: "red" },
-  { at: [548, 632], text: "<b>Songa</b> green", kind: "green" },
-  { at: [340, 632], text: "<b>W8</b> red", kind: "red" },
-  { at: [410, 708], text: "<b>W9</b> green", kind: "green" },
+  { at: [468, 560], text: "<b>W10</b> red" },
+  { at: [548, 632], text: "<b>Songa</b> green" },
+  { at: [340, 632], text: "<b>W8</b> red" },
+  { at: [410, 708], text: "<b>W9</b> green" },
   { at: [258.6, 694.4], text: "<b>15:00</b> fix" },
-  { at: [196, 690], text: "<b>W6</b> red", kind: "red" },
-  { at: [262, 762], text: "<b>W7</b> green", kind: "green" },
+  { at: [196, 690], text: "<b>W6</b> red" },
+  { at: [262, 762], text: "<b>W7</b> green" },
 ];
 
 function callouts(scene, layer) {
   if (!layer || !scene.onCamera) return () => {};
   const made = CALLOUTS.map((c) => {
     const el = document.createElement("span");
-    el.className = "callout" + (c.kind === "red" ? " callout--red" : "");
+    el.className = "callout";
     el.innerHTML = c.text;
     layer.appendChild(el);
     return { ...c, el, shown: 0 };
@@ -146,7 +145,6 @@ function callouts(scene, layer) {
   const sounder = document.createElement("span");
   sounder.className = "callout callout--sounder";
   layer.appendChild(sounder);
-  const v = { x: 0, y: 0, z: 0 };
   let last = 0, lastText = "";
   const off = scene.onCamera((camera) => {
     const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000 || 0.016);
@@ -157,7 +155,6 @@ function callouts(scene, layer) {
     const box = card ? card.getBoundingClientRect() : null;
     const under = (x, y) => box && x > box.left - 160 && x < box.right + 12 && y > box.top - 16 && y < box.bottom + 16;
     const project = (wx, wy, wz) => {
-      v.x = wx; v.y = wy; v.z = wz;
       const p = camera.position, e = camera.matrixWorldInverse.elements, m = camera.projectionMatrix.elements;
       const x = e[0] * wx + e[4] * wy + e[8] * wz + e[12], y = e[1] * wx + e[5] * wy + e[9] * wz + e[13], z = e[2] * wx + e[6] * wy + e[10] * wz + e[14];
       const cw = m[3] * x + m[7] * y + m[11] * z + m[15];
@@ -198,7 +195,8 @@ function callouts(scene, layer) {
 const steps = section ? [...section.querySelectorAll("[data-chapter]")] : [];
 const marks = section ? [...section.querySelectorAll("[data-go]")] : [];
 const gauge = document.getElementById("slip-gauge");
-let live = null, current = -1, tripHour = NOW, idle = { hour: NOW, last: 0, frame: 0 };
+let live = null, current = -1, tripHour = NOW;
+const idle = { hour: NOW };
 
 function showChapter(index) {
   current = index;
@@ -229,30 +227,25 @@ function fillReadings() {
   });
 }
 
-function idleClock(scene) {
-  // the hero's clock: while the trip waits at its first chapter, the hours run on from now toward
-  // the casting off (about four seconds an hour), then start again. Not under reduced motion.
-  const run = (t) => {
-    idle.frame = 0;
-    const dt = idle.last ? Math.min(0.1, (t - idle.last) / 1000) : 0;
-    idle.last = t;
-    const resting = current <= 0 && live && live.stage && live.stage.running && !document.hidden;
-    if (resting) {
-      idle.hour += dt / 4.2;
-      if (idle.hour > HOURS[1] + 0.9) idle.hour = NOW;
-      const hour = Math.min(idle.hour, HOURS[1]);
-      const data = dataAt(hour);
-      CHAPTERS[0].params.data.splice(0, 3, ...data);          // the journey blends from where the clock is
-      CHAPTERS[0].params.hour = hour;
-      scene.setStory({ idleHatch: smooth(WINDOW[0] - 0.05, WINDOW[0] + 0.35, hour) });
-      scene.setData(data);
-      tellGauge(hour);
-    }
-    if (live && !reduce.matches) idle.frame = requestAnimationFrame(run);
-  };
-  if (!idle.frame && !reduce.matches) idle.frame = requestAnimationFrame(run);
+// the hero's clock: while the trip waits at its first chapter, the hours run on from now toward the
+// casting off (about four seconds an hour), then start again. It rides on the stage's own frames, so
+// it stops whenever the scene does (reduced motion, paused, out of sight).
+function idleClock(journeyHandle) {
+  const scene = journeyHandle.scene;
+  let shown = "";
+  return journeyHandle.stage.onFrame((time, delta) => {
+    if (current > 0 || journeyHandle.stage.still) return;
+    idle.hour += delta / 4.2;
+    if (idle.hour > HOURS[1] + 0.9) idle.hour = NOW;
+    const hour = Math.min(idle.hour, HOURS[1]);
+    const data = dataAt(hour);
+    CHAPTERS[0].params.data.splice(0, 3, ...data);            // the journey blends on from where the clock is
+    CHAPTERS[0].params.hour = hour;
+    scene.setStory({ idleHatch: smooth(WINDOW[0] - 0.05, WINDOW[0] + 0.35, hour) });
+    scene.setData(data);
+    if (clock(hour) !== shown) { shown = clock(hour); tellGauge(hour); }
+  });
 }
-document.addEventListener("visibilitychange", () => { idle.last = 0; });
 
 if (section && steps.length) {
   fillReadings();
@@ -262,6 +255,11 @@ if (section && steps.length) {
     const [journey, table, bed, paper] = await Promise.all([
       import("../../vendor/scenes/journey.js"), import("./table.js"), import("./seabed.js"), import("./paper.js"),
     ]);
+    // without WebGL 2 the stage will not start: skip the work below, the journey shows the poster
+    const probe = document.createElement("canvas").getContext("webgl2");
+    if (!probe) return { mount: (el, options) => journey.mount(el, { ...options, scene: (stageEl) => table.mount(stageEl, {}) }) };
+    const lose = probe.getExtension("WEBGL_lose_context");
+    if (lose) lose.loseContext();
     // the relief and the two printed sheets are made before the stage, between other work
     const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
     const relief = bed.reliefGrid(coarse ? 288 : 384, coarse ? 260 : 346, 4);
@@ -304,9 +302,7 @@ if (section && steps.length) {
   section.addEventListener("chapter", (event) => showChapter(event.detail.index));
   trip.ready.then((journeyHandle) => {
     live = journeyHandle;
-    if (!journeyHandle || !journeyHandle.scene || !journeyHandle.scene.setStory) return;
-    if (!reduce.matches) idleClock(journeyHandle.scene);
-    reduce.addEventListener("change", () => { if (!reduce.matches) idleClock(journeyHandle.scene); });
+    if (journeyHandle && journeyHandle.stage && journeyHandle.scene && journeyHandle.scene.setStory) idleClock(journeyHandle);
   });
 
   // the chapter marks: a table of contents that flies there
@@ -315,10 +311,13 @@ if (section && steps.length) {
     event.preventDefault();
     live.goTo(Number(a.getAttribute("data-go")));
   }));
-  // no journey (no WebGL, or before it loads): the slips are still lit as they pass
+  // no journey running (no WebGL, before it loads, paused, or the plain chart): the slips are still
+  // lit as they pass
   if ("IntersectionObserver" in window) {
     const seen = new IntersectionObserver((entries) => {
-      if (section.getAttribute("data-journey") === "live") return;
+      const runs = section.getAttribute("data-journey") === "live" && !section.hasAttribute("data-plain")
+        && root.getAttribute("data-motion") !== "paused";
+      if (runs) return;
       const best = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
       if (best) showChapter(steps.indexOf(best.target));
     }, { threshold: [0.35, 0.6] });
@@ -338,6 +337,14 @@ if (section && steps.length) {
   if (toTable) toTable.addEventListener("click", () => {
     const table = document.getElementById("tide-table"), toggle = document.getElementById("table-toggle");
     if (table && table.hidden && toggle) toggle.click();
+  });
+  // one key press away, from anywhere on the page (not while typing in a field): Alt+Shift+T for the
+  // tide table, Alt+Shift+C for the plain chart
+  document.addEventListener("keydown", (event) => {
+    if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
+    if (event.target.closest && event.target.closest("input, select, textarea, [contenteditable]")) return;
+    if (event.code === "KeyT" && toTable) { event.preventDefault(); toTable.click(); }
+    if (event.code === "KeyC" && plain && section.getAttribute("data-journey") === "live") { event.preventDefault(); plain.click(); plain.focus(); }
   });
   motionToggle(document.getElementById("motion"));
   showChapter(0);

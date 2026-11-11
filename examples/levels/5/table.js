@@ -15,25 +15,27 @@
    the points, on one stage (field.js makes it). Colours come from the page's tokens only.
 
    mount(container, options) -> { stage, setProgress, setData, setPointer, setStory, pause, resume,
-   destroy, lamp, project }. options.relief: seabed.js reliefGrid(); options.day, options.night: the
-   chart pictures (canvases); options.course: chart points of the pencil line.
+   destroy, onCamera, bedAt, level, surfaceAt, boatPoint, course }. Options: relief (seabed.js
+   reliefGrid()), day and night (the chart pictures of paper.js), course (chart points of the pencil
+   line), story (what the scene shows along the journey: { p, lamp: [x, z], lampY, reachLamp, night,
+   boat, hatch, follow, reach } at points p of it), window (the stretch of the course, in chart units,
+   sailed inside the safe window).
+   setProgress(p): the journey's progress; the scene blends its story there, so a still shows it too.
    setData([level, wind, from]): the tide (0..1 of 6 m), the wind (0..1 of 40 kn), where it comes
-   from (0..1 of 360 degrees): read from the page's own tide table and readings (trip.js).
-   setStory({ hour, lamp: [x, z], night, reach }): the hour of the passage (hatch and boat), where the
-   lamp hangs, how far into the night the chart is (0..1), how much of the pencil line is drawn. */
+   from (0..1 of 360 degrees), read from the page's own tide table and readings (trip.js).
+   setStory({ idleHatch }): the hero's clock, while the trip waits at its start: how lit the window is.
+   onCamera(fn): fn(camera) as each frame is drawn, for labels that follow the chart (trip.js). */
 import * as THREE from "three";
 import { mount as mountField } from "../../vendor/scenes/field.js";
-import { stageUniforms, common, simplex2D, simplex3D, grain, line } from "../../vendor/scenes/glsl.js";
+import { stageUniforms, common, simplex2D, grain, line } from "../../vendor/scenes/glsl.js";
 
 export const SHEET = { w: 10, d: 9 };             // world units: 100 chart units each
 const VS = 0.024;                                 // world units per metre of height (about 37 x)
 const DEPTH = 8;                                  // metres: depths are softened past this
 const WATER_MAX = 6;                              // metres: setData's level 1
 const WIND_MAX = 40;                              // knots: setData's wind 1
-const SPEED = 5.5 * 120 / 60;                     // chart units a minute at 5.5 knots (120 units a mile)
 
 export const toWorld = (x, y, h = 0) => [(x - 500) / 100, h * VS, (y - 450) / 100];
-export const toChart = (wx, wz) => [wx * 100 + 500, wz * 100 + 450];
 
 const reliefGLSL = `
 uniform sampler2D uRelief;
@@ -165,8 +167,8 @@ void main() {
     sheet = mix(sheet, uNightLamp, smoothstep(0.35, 1.0, glow));
     sheet *= 0.92 + 0.08 * room;
     // the room light goes out first, then the red lamp comes up: never a muddy mix of the two
-    color = color * (1.0 - 0.88 * smoothstep(0.0, 0.55, uNightMix))
-          + (sheet * (1.0 - night.a) + night.rgb * (0.35 + 0.65 * glow)) * smoothstep(0.3, 1.0, uNightMix);
+    color = color * (1.0 - 0.92 * smoothstep(0.0, 0.3, uNightMix))
+          + (sheet * (1.0 - night.a) + night.rgb * (0.35 + 0.65 * glow)) * smoothstep(0.15, 0.75, uNightMix);
   }
 
   // ---- the pencil line and its fixes: graphite, a little broken by the grain of the paper. One
@@ -215,7 +217,7 @@ void main() {
   }
 
   // the far side of the sheet melts a little into the room, so a low view has depth and no hard edge
-  float haze = smoothstep(uHaze.x, uHaze.y, distance(cameraPosition, vWorld)) * 0.55;
+  float haze = smoothstep(uHaze.x, uHaze.y, distance(cameraPosition, vWorld)) * 0.42;
   color = mix(color, mix(uBg, uNightBg, uNightMix), haze);
   gl_FragColor = vec4(color, 1.0);
   #include <colorspace_fragment>
@@ -233,7 +235,9 @@ void main() {
   vec2 away = normalize(vWorld.xz - uLampPos.xz + 1e-4) * 0.12;
   vec2 q = abs(vWorld.xz - away) - vec2(${(SHEET.w / 2).toFixed(2)}, ${(SHEET.d / 2).toFixed(2)});
   float outside = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
-  float a = (1.0 - smoothstep(-0.05, 0.75, outside)) * 0.22 * (1.0 - uNightMix) * (1.0 - uDark);
+  vec2 q0 = abs(vWorld.xz) - vec2(${(SHEET.w / 2).toFixed(2)}, ${(SHEET.d / 2).toFixed(2)});
+  float under = smoothstep(-0.004, 0.02, max(q0.x, q0.y));   // only past the paper: the sheet hides the rest
+  float a = (1.0 - smoothstep(-0.05, 0.75, outside)) * 0.22 * (1.0 - uNightMix) * (1.0 - uDark) * under;
   gl_FragColor = vec4(uText * 0.6, a);
   #include <colorspace_fragment>
 }`;
@@ -328,15 +332,17 @@ void main() {
   vec2 at = gl_FragCoord.xy / uResolution;
   vec4 pts = vec4(0.0);
   float wsum = 0.0;
+  // only the sharp cores of the points make a streak: field.js's soft wash and its haze of far
+  // motes stay out, so the water carries lines and never blots
   for (int i = 0; i < 10; i++) {
     float k = float(i);
     float wgt = 1.0 - k / 10.0;
-    pts += texture(uWindTex, at + uStreak * k) * wgt;
+    pts.a += smoothstep(0.07, 0.24, texture(uWindTex, at + uStreak * k).a) * wgt;
     wsum += wgt;
   }
-  float foam = clamp(pts.a * 4.0 / wsum, 0.0, 0.6) * uWindOn * smoothstep(0.1, 1.2, depth);
-  vec3 foamCol = mix(uAccent2, uNightLamp * (0.6 + 1.6 * pool), uNightMix);
-  foam *= mix(0.85, 0.6 + 0.7 * pool, uNightMix);
+  float foam = clamp(pts.a * 1.5 / wsum, 0.0, 0.3) * uWindOn * smoothstep(0.1, 1.2, depth);
+  vec3 foamCol = mix(uAccent2, uNightLamp * (0.55 + 0.9 * pool), uNightMix);
+  foam *= mix(0.85, 0.45 + 0.35 * pool, uNightMix);
   acc = acc * (1.0 - foam) + vec4(foamCol * foam, foam);
   acc *= edge;
   gl_FragColor = vec4(acc.rgb / max(acc.a, 1e-4), acc.a);
@@ -396,7 +402,7 @@ export function shownHeight(h) { return (h >= 0 ? h : -DEPTH * (1 - Math.exp(h /
 export function mount(container, options = {}) {
   const o = { course: [[720, 412], [524, 594], [258.6, 694.4], [96, 756], [-140, 846]], ...options };
   const wind = mountField(container, {
-    formation: "wave", spread: 0.5, speed: 0.6, intensity: 0.4, count: 14000, side: "center", renderScale: [0.8, 1, 1],
+    formation: "wave", spread: 0.5, speed: 0.6, intensity: 0.4, count: 7000, side: "center", renderScale: [0.8, 1, 1],
     camera: { fov: 32, near: 0.05, far: 160, position: [0, 9, 13], lookAt: [0, 0, 0] },
     stillTime: 9, fade: 900,
     ...o.stage,
@@ -444,7 +450,7 @@ export function mount(container, options = {}) {
   const shadow = new THREE.Mesh(new THREE.PlaneGeometry(SHEET.w + 2.4, SHEET.d + 2.4, 1, 1).rotateX(-Math.PI / 2),
     new THREE.ShaderMaterial({ uniforms: { ...stage.uniforms, ...shared }, vertexShader: waterVertex, fragmentShader: shadowFragment,
                                transparent: true, depthWrite: false }));
-  shadow.position.y = -0.01;
+  shadow.position.y = -0.004;
   shadow.renderOrder = -1;
   scene.add(shadow);
 
@@ -531,6 +537,7 @@ export function mount(container, options = {}) {
   let ripple = 0, opening = stage.still ? 1 : 0, aim = null, started = false;
   const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3(), ndc = new THREE.Vector2();
   const onCamera = [];                             // functions that need the camera of this frame
+  const lookDir = new THREE.Vector3();
 
   // the mesh carries the relief and its light, so its density follows the quality; so does the
   // sharpness of the printed sheet at a slant (anisotropic filtering)
@@ -544,12 +551,11 @@ export function mount(container, options = {}) {
 
   stage.onTokens((tokens) => { want.dark = tokens.dark; });
 
-  const lookDir = new THREE.Vector3();
   // where the hand points on the table, with the camera this frame is drawn with
   scene.onBeforeRender = (renderer, _scene, camera) => {
     camera.getWorldDirection(lookDir);
     const toTable = lookDir.y < -0.05 ? camera.position.y / -lookDir.y : 30;
-    paper.uniforms.uHaze.value.set(toTable * 1.35, toTable * 3.2);
+    paper.uniforms.uHaze.value.set(toTable * 1.5, toTable * 3.4);
     if (stage.pointer.active && !stage.still) {
       ndc.set(stage.pointer.x, stage.pointer.y);
       ray.setFromCamera(ndc, camera);
@@ -568,7 +574,11 @@ export function mount(container, options = {}) {
       const u = points.material.uniforms;
       u.uCalmAmount.value = 0;                     // the page keeps its own text clear
       u.uFocus.value = 0.4;                        // every point behind the focus: small and sharp, no soft discs
-      u.uSize.value = 0.02;
+      // the points keep about the same size on screen however close the camera comes: a streak is a
+      // fine line in a close view too, not a pill
+      stage.camera.getWorldDirection(lookDir);
+      const toTable = lookDir.y < -0.05 ? stage.camera.position.y / -lookDir.y : 14;
+      u.uSize.value = 0.021 * Math.min(1, Math.max(0.22, toTable / 13));
     }
     // the opening, on the first frames at the top of the page: the relief rises out of the paper and
     // the pencil draws the course. Opened half way down the page, the table is simply there.
@@ -581,7 +591,7 @@ export function mount(container, options = {}) {
     const hatchGoal = s.hatch + ((want.idleHatch ?? s.hatch) - s.hatch) * idle;
     now.level = ease(now.level, want.level, 1.6);
     now.wind = ease(now.wind, want.wind, 1.2);
-    now.night = ease(now.night, want.dark ? 1 : s.night, 2.4);
+    now.night = ease(now.night, want.dark ? 1 : s.night, 3.6);
     now.boat = ease(now.boat, s.boat, 4);
     now.hatch = ease(now.hatch, hatchGoal, 2.4);
     now.lampY = ease(now.lampY, s.lampY, 2.4);
@@ -635,7 +645,7 @@ export function mount(container, options = {}) {
     onCamera(fn) { onCamera.push(fn); return () => { const at = onCamera.indexOf(fn); if (at !== -1) onCamera.splice(at, 1); }; },
     bedAt: bed,
     level: () => now.level,
-    // world height at a chart point: the paper, or the water over it
+    // world height of the printed paper at a chart point (what a callout points at)
     surfaceAt(x, y) { return shownHeight(bed(x, y)) * shared.uRise.value; },
     boatPoint() {
       const c = along(now.boat), w = toWorld(c[0], c[1]);
@@ -651,8 +661,5 @@ export function mount(container, options = {}) {
       wind.destroy();
     },
   });
-  if (/debug/.test(location.hash)) window.__table = { THREE, stage, paper, waterMat, water, sheet, dayTex, nightTex, points, windTarget, rig };   // DEBUG-REMOVE
-  handle.courseLength = course[course.length - 1][2];
-  handle.speed = SPEED;
   return handle;
 }
