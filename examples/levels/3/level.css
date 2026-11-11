@@ -1,0 +1,520 @@
+/* Tidewatch, level 3: Expressive. Loaded after ../shared/tokens.css, ../shared/base.css and the scene kit's
+   ../../vendor/scenes/depth.css. Everything of level 2 stays (the first part of this file, unchanged); the
+   second part, from "level 3: Expressive" down, adds:
+   - the chart as a sheet lying on the table at a slight angle, in plates at their own depth (the sea below,
+     the land, the ink, the pencil, the slip on top), moved by the kit's depth.js with the hand and the scroll;
+   - the signature: the lamp hangs over the chart and follows the hand. Its pool lights the paper, the land
+     throws a shadow away from it and so does the slip; at night it is the red lamp, and the chart is only
+     there where it shines. It also walks down the pencil line as the hero scrolls away;
+   - the week told as you scroll: the tide curve stays pinned, a cursor walks through the days, each safe
+     window is hatched in as it passes, and the day under the lamp flows into the next;
+   - the passage slips lean toward the lamp with its glare (depth.js tilt) and are dealt with a spring; their
+     strips draw the day's tide; the three notes rise as a pile, deal out and step forward (depth.js stack);
+   - springs from the Web Animations API (level.js): the slip, the passage slips, the lamp switch.
+   Reduced motion: base.css stops every CSS animation, level.js runs no spring and no loop, depth.js lays
+   everything flat, the story is a plain list and the notes a plain row. */
+
+/* ---------------------------------------------------------------- level-2 tokens */
+:root {
+  --duration-slow: 320ms;                       /* a dialog, a toast, a card arriving */
+  --duration-slower: 480ms;                     /* a line of text arriving, a count-up step */
+  --duration-draw: 800ms;                       /* a line drawing itself: the course, the tide curve */
+  --duration-lamp: 640ms;                       /* the lamp light spreading over the page */
+  --duration-stagger: 45ms;                     /* between items of one group */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-move: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-pencil: cubic-bezier(0.45, 0, 0.4, 1); /* a hand drawing a ruled line: steady, soft at both ends */
+  --size-shift-sm: 4px;
+  --size-shift: 12px;
+  --size-shift-lg: 24px;
+
+  /* the opening, as moments built from those tokens */
+  --m-word: calc(var(--duration-stagger) * 1.6);                               /* one word after the next */
+  --m-lead: calc(var(--duration-stagger) * 9);                                 /* about 400 ms */
+  --m-actions: calc(var(--duration-stagger) * 11);                             /* about 500 ms */
+  --m-course: calc(var(--duration-slower) + var(--duration-fast));             /* 600 ms: the pencil sets down */
+  --m-notes: calc(var(--m-course) + var(--duration-draw));                     /* 1400 ms: the line is done */
+  --m-slip: calc(var(--m-notes) - var(--duration-fast));                       /* the slip lands as it ends */
+  --m-press: 0.97;
+  --m-lift: -3px;
+}
+
+/* ---------------------------------------------------------------- 2. movement */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes l2-fade { from { opacity: 0; } }
+  @keyframes l2-rise { from { opacity: 0; transform: translateY(var(--size-shift)); } }
+  @keyframes l2-rise-sm { from { opacity: 0; transform: translateY(var(--size-shift-sm)); } }
+  @keyframes l2-word { from { opacity: 0; transform: translateY(0.32em); } }
+  @keyframes l2-sheet { from { opacity: 0; transform: scale(1.018); } }
+  @keyframes l2-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes l2-pop { from { opacity: 0; transform: scale(0.2); } }
+  @keyframes l2-rule { from { transform: scaleX(0); } }
+  @keyframes l2-land {
+    0% { opacity: 0; transform: translate(var(--size-shift-sm), calc(var(--size-shift-lg) * -1)) rotate(-4.5deg) scale(1.05); }
+    45% { opacity: 1; }
+  }
+  @keyframes l2-lifted { from { opacity: 1; } to { opacity: 0; } }
+
+  /* ---- the opening: text first ---- */
+  .topbar { animation: l2-fade var(--duration-slow) var(--ease-standard) backwards; }
+  [data-enter="eyebrow"] { animation: l2-rise var(--duration-slower) var(--ease-standard) backwards; }
+  [data-enter="words"] .w { display: inline-block; animation: l2-word var(--duration-slower) var(--ease-standard) backwards; }
+  [data-enter="words"] .w:nth-child(1) { animation-delay: calc(var(--duration-stagger) + var(--m-word) * 0); }
+  [data-enter="words"] .w:nth-child(2) { animation-delay: calc(var(--duration-stagger) + var(--m-word) * 1); }
+  [data-enter="words"] .w:nth-child(3) { animation-delay: calc(var(--duration-stagger) + var(--m-word) * 2); }
+  [data-enter="words"] .w:nth-child(4) { animation-delay: calc(var(--duration-stagger) + var(--m-word) * 3); }
+  [data-enter="words"] .w:nth-child(5) { animation-delay: calc(var(--duration-stagger) + var(--m-word) * 4.6); animation-duration: calc(var(--duration-slower) * 1.4); }
+  [data-enter="lead"] { animation: l2-rise var(--duration-slower) var(--ease-standard) var(--m-lead) backwards; }
+  [data-enter="actions"] > * { animation: l2-rise var(--duration-slower) var(--ease-standard) var(--m-actions) backwards; }
+  [data-enter="actions"] > :nth-child(2) { animation-delay: calc(var(--m-actions) + var(--duration-stagger) * 2); }
+
+  .eyebrow__sep { transform-origin: left; animation: l2-rule var(--duration-slower) var(--ease-move) var(--duration-fast) backwards; }
+
+  /* ---- then the chart: the sheet settles, the lamp comes on ---- */
+  [data-enter="chart"] { animation: l2-sheet var(--duration-draw) var(--ease-move) var(--duration-stagger) backwards; }
+  .hero::after { animation: l2-fade var(--duration-draw) var(--ease-move) var(--duration-fast) backwards; }
+
+  /* ---- the pencil draws today's course, fix by fix ---- */
+  .chart .course { stroke-dasharray: 1; animation: l2-draw var(--duration-draw) var(--ease-pencil) var(--m-course) backwards; }
+  .chart .fix { transform-box: fill-box; transform-origin: center; animation: l2-pop var(--duration-slow) var(--ease-spring) backwards; }
+  .chart .fix--1 { animation-delay: calc(var(--m-course) - var(--duration-fast)); }
+  .chart .fix--2 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.38 - var(--duration-stagger)); }
+  .chart .fix--3 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.59 - var(--duration-stagger)); }
+  .chart .c-pencil .time,
+  .chart .c-pencil .arrow,
+  .chart .c-pencil .crs,
+  .chart .c-pencil .pencil-note { animation: l2-fade var(--duration-slow) var(--ease-standard) backwards; }
+  .chart .c-pencil .time--1 { animation-delay: var(--m-course); }
+  .chart .c-pencil .time--2 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.38); }
+  .chart .c-pencil .time--3 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.59); }
+  .chart .c-pencil .arrow--1, .chart .c-pencil .crs--1 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.22); }
+  .chart .c-pencil .arrow--2, .chart .c-pencil .crs--2 { animation-delay: calc(var(--m-course) + var(--duration-draw) * 0.5); }
+  .chart .c-pencil .pencil-note { animation-delay: var(--m-notes); animation-duration: var(--duration-slower); }
+
+  /* ---- and the slip is laid on the chart: it comes down from the lamp, its shadow tightens ---- */
+  [data-enter="slip"] { animation: l2-land var(--duration-slower) var(--ease-standard) var(--m-slip) backwards; }
+  [data-enter="slip"]::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    box-shadow: var(--shadow-sheet); opacity: 0;
+    animation: l2-lifted var(--duration-slower) var(--ease-standard) var(--m-slip) backwards;
+  }
+
+  /* ---- sections arrive once (level.js adds .arrive, then .is-visible) ---- */
+  html[data-motion] .arrive:not(.is-visible) { opacity: 0; }
+  html[data-motion] .arrive.is-visible { animation: l2-rise var(--duration-slower) var(--ease-standard) var(--m-delay, 0ms) backwards; }
+  html[data-motion] .tide.arrive.is-visible { animation-name: l2-fade; animation-duration: var(--duration-slow); }
+  /* a section head: the ink rule is drawn across, then the words */
+  html[data-motion] .arrive-head { position: relative; border-top-color: transparent; }
+  html[data-motion] .arrive-head::before {
+    content: ""; position: absolute; left: 0; right: 0; top: calc(var(--size-rule) * -1); height: var(--size-rule);
+    background: var(--color-rule); transform-origin: left; transform: scaleX(0);
+  }
+  html[data-motion] .arrive-head:not(.is-visible) > * { opacity: 0; }
+  html[data-motion] .arrive-head.is-visible::before { transform: none; animation: l2-rule var(--duration-draw) var(--ease-move) backwards; }
+  html[data-motion] .arrive-head.is-visible > * { animation: l2-rise var(--duration-slower) var(--ease-standard) var(--duration-fast) backwards; }
+  html[data-motion] .arrive-head.is-visible > :nth-child(2) { animation-name: l2-fade; animation-delay: calc(var(--duration-fast) + var(--duration-stagger) * 3); }
+
+  /* the four readings: the trend line draws while the figure counts */
+  html[data-motion] .stat .spark__line { stroke-dasharray: 1; }
+  html[data-motion] .stat:not(.is-visible) .spark__line { stroke-dashoffset: 1; }
+  html[data-motion] .stat:not(.is-visible) .spark__now,
+  html[data-motion] .stat:not(.is-visible) .spark__next { opacity: 0; }
+  html[data-motion] .stat.is-visible .spark__line { animation: l2-draw var(--duration-slower) var(--ease-move) calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
+  html[data-motion] .stat.is-visible .spark__now { transform-box: fill-box; transform-origin: center; animation: l2-pop var(--duration-slow) var(--ease-spring) calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-slower)) backwards; }
+  html[data-motion] .stat.is-visible .spark__next { animation: l2-fade var(--duration-slower) linear calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-slower)) backwards; }
+
+  /* the tide curve draws itself across the week; the marks appear as it passes; then the windows */
+  html[data-motion] .tide__curve { stroke-dasharray: 1; }
+  html[data-motion] .tide:not(.is-visible) .tide__curve { stroke-dashoffset: 1; }
+  html[data-motion] .tide:not(.is-visible) :is(.tide__area, .tide__mark, .tide__window, .tide__safe, .tide__times > span, .tide__nowlabel, .tide__now) { opacity: 0; }
+  html[data-motion] .tide.is-visible .tide__curve { animation: l2-draw var(--duration-draw) var(--ease-pencil) var(--duration-fast) backwards; }
+  html[data-motion] .tide.is-visible .tide__area { animation: l2-fade var(--duration-draw) linear var(--duration-base) backwards; }
+  html[data-motion] .tide.is-visible :is(.tide__mark, .tide__now, .tide__nowlabel) {
+    animation: l2-fade var(--duration-base) var(--ease-standard) calc(var(--duration-fast) + var(--duration-draw) * var(--x, 6) / 100) backwards;
+  }
+  html[data-motion] .tide.is-visible .tide__safe { animation: l2-fade var(--duration-slower) linear calc(var(--duration-fast) + var(--duration-draw)) backwards; }
+  html[data-motion] .tide.is-visible .tide__window { transform-origin: top; animation: l2-fade var(--duration-slower) var(--ease-standard) calc(var(--duration-fast) + var(--duration-draw) + var(--duration-stagger) * var(--n, 0)) backwards; }
+  html[data-motion] .tide.is-visible .tide__times > span { animation: l2-rise-sm var(--duration-slow) var(--ease-standard) calc(var(--duration-fast) + var(--duration-draw) + var(--duration-stagger) * var(--n, 0)) backwards; }
+  /* --n, the place of a window or a day in the week, is set by level.js */
+
+  /* the three notes: in A the conditions are laid in and the window is hatched over them; in C the
+     log writes its four lines */
+  html[data-motion] .note:not(.is-visible) :is(.ov__track i, .ov__window, .log div) { opacity: 0; }
+  html[data-motion] .note.is-visible .ov__track i {
+    transform-origin: left;
+    animation: l2-rule var(--duration-slower) var(--ease-move) calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards;
+  }
+  html[data-motion] .note.is-visible .ov__track:nth-child(2) i { animation-delay: calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-stagger)); }
+  html[data-motion] .note.is-visible .ov__track:nth-child(3) i { animation-delay: calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-stagger) * 2); }
+  html[data-motion] .note.is-visible .ov__track:nth-child(4) i { animation-delay: calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-stagger) * 3); }
+  html[data-motion] .note.is-visible .ov__window { animation: l2-fade var(--duration-slower) var(--ease-standard) calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-slower)) backwards; }
+  html[data-motion] .note.is-visible .log div { animation: l2-rise-sm var(--duration-slow) var(--ease-standard) calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
+  html[data-motion] .note.is-visible .log div:nth-child(2) { animation-delay: calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-stagger) * 3); }
+  html[data-motion] .note.is-visible .log div:nth-child(3) { animation-delay: calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-stagger) * 6); }
+  html[data-motion] .note.is-visible .log div:nth-child(4) { animation-delay: calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-stagger) * 9); }
+
+  /* ---- the tide table, the dialog and the plan note move in and out ---- */
+  html[data-motion] .tt:not([hidden]) { animation: l2-rise var(--duration-slow) var(--ease-standard) backwards; }
+  html[data-motion] .tt:not([hidden]) tbody tr { animation: l2-rise-sm var(--duration-slow) var(--ease-standard) backwards; }
+  html[data-motion] .tt tbody tr:nth-child(2) { animation-delay: calc(var(--duration-stagger) * 1); }
+  html[data-motion] .tt tbody tr:nth-child(3) { animation-delay: calc(var(--duration-stagger) * 2); }
+  html[data-motion] .tt tbody tr:nth-child(4) { animation-delay: calc(var(--duration-stagger) * 3); }
+  html[data-motion] .tt tbody tr:nth-child(5) { animation-delay: calc(var(--duration-stagger) * 4); }
+  html[data-motion] .tt tbody tr:nth-child(6) { animation-delay: calc(var(--duration-stagger) * 5); }
+  html[data-motion] .tt tbody tr:nth-child(7) { animation-delay: calc(var(--duration-stagger) * 6); }
+
+  /* the plan dialog: a slip laid on the chart. It comes down slowly and goes fast. */
+  .plan[open], .plan[open]::backdrop { animation: none; }
+  .plan {
+    opacity: 0; transform: translateY(var(--size-shift-sm)) scale(0.98);
+    transition: opacity var(--duration-fast) var(--ease-exit), transform var(--duration-fast) var(--ease-exit),
+                overlay var(--duration-fast) allow-discrete, display var(--duration-fast) allow-discrete;
+  }
+  .plan[open] {
+    opacity: 1; transform: none;
+    transition: opacity var(--duration-base) var(--ease-standard), transform var(--duration-slow) var(--ease-standard),
+                overlay var(--duration-slow) allow-discrete, display var(--duration-slow) allow-discrete;
+  }
+  .plan::backdrop { opacity: 0; transition: opacity var(--duration-fast) var(--ease-exit), overlay var(--duration-fast) allow-discrete, display var(--duration-fast) allow-discrete; }
+  .plan[open]::backdrop { opacity: 1; transition: opacity var(--duration-slow) var(--ease-standard), overlay var(--duration-slow) allow-discrete, display var(--duration-slow) allow-discrete; }
+  @starting-style {
+    .plan[open] { opacity: 0; transform: translateY(var(--size-shift-lg)) rotate(-0.6deg) scale(1.02); }
+    .plan[open]::backdrop { opacity: 0; }
+  }
+  .plan[open] .field, .plan[open] .plan__foot { animation: l2-rise-sm var(--duration-slow) var(--ease-standard) backwards; }
+  .plan[open] .field:nth-child(1) { animation-delay: calc(var(--duration-fast) + var(--duration-stagger) * 0); }
+  .plan[open] .field:nth-child(2) { animation-delay: calc(var(--duration-fast) + var(--duration-stagger) * 1); }
+  .plan[open] .field:nth-child(3) { animation-delay: calc(var(--duration-fast) + var(--duration-stagger) * 2); }
+  .plan[open] .field:nth-child(4) { animation-delay: calc(var(--duration-fast) + var(--duration-stagger) * 3); }
+  .plan[open] .plan__foot { animation-delay: calc(var(--duration-fast) + var(--duration-stagger) * 4); }
+
+  /* the plan note at the foot of the screen rises in; level.js lets it sink away */
+  .slip { animation: l2-rise var(--duration-slow) var(--ease-standard) backwards; }
+
+  /* ---- a reaction on every control ---- */
+  /* buttons: pressed in, not pushed down; the arrow points the way on hover */
+  .btn {
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard),
+                border-color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard),
+                outline-offset var(--duration-base) var(--ease-standard);
+  }
+  .btn:active { transform: scale(var(--m-press)); }
+  .btn .icon { transition: transform var(--duration-base) var(--ease-spring); }
+  .hero__actions .btn--line:hover .icon { transform: translateY(var(--size-shift-sm)); }
+  .btn--accent:hover .icon { transform: rotate(90deg); }
+  #table-toggle[aria-expanded="true"] .icon { transform: rotate(90deg); }
+
+  /* links in the bar: the underline is ruled in from the left, and taken away to the right */
+  .nav a::after { opacity: 1; transform: scaleX(0); transform-origin: right; transition: transform var(--duration-base) var(--ease-move); }
+  .nav a:hover::after { transform: none; transform-origin: left; }
+  .brand__mark { transition: transform var(--duration-slow) var(--ease-spring); }
+  .brand:hover .brand__mark { transform: rotate(90deg); }
+
+  /* the lamp switch: the knob glides with a small overshoot and stretches while it is held */
+  .lamp__thumb { transition: transform var(--duration-slow) var(--ease-spring), background-color var(--duration-base) var(--ease-standard); }
+  .lamp:active .lamp__thumb { transform: scaleX(1.4); transform-origin: left; transition-duration: var(--duration-fast); }
+  .lamp[aria-checked="true"]:active .lamp__thumb { transform: translateX(var(--space-4)) scaleX(1.4); transform-origin: right; }
+  .lamp { transition: outline-offset var(--duration-base) var(--ease-standard); }
+
+  /* a passage card lifts off the chart; the paper shadow is a layer that only fades */
+  .pass {
+    overflow: clip; overflow-clip-margin: var(--space-6);
+    transition: border-color var(--duration-fast) var(--ease-standard), transform var(--duration-base) var(--ease-standard),
+                outline-offset var(--duration-base) var(--ease-standard);
+  }
+  .pass::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+    box-shadow: var(--shadow-slip), 0 18px 36px -22px rgba(48, 34, 10, 0.45);
+    opacity: 0; transition: opacity var(--duration-base) var(--ease-standard);
+  }
+  .pass { isolation: isolate; }
+  .pass:hover { box-shadow: none; transform: translateY(var(--m-lift)); }
+  .pass:hover::before, .pass:has(.pass__open:focus-visible)::before { opacity: 1; }
+  .pass:active { transform: translateY(calc(var(--m-lift) / 3)) scale(0.995); transition-duration: var(--duration-fast); }
+  .pass .strip__window { transition: opacity var(--duration-base) var(--ease-standard); opacity: 0.85; }
+  .pass:hover .strip__window { opacity: 1; }
+
+  /* fields, the dialog's close, the note's close, the footer links */
+  .field input, .field select {
+    transition: border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard),
+                outline-offset var(--duration-base) var(--ease-standard);
+  }
+  .plan__close { transition: background-color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), outline-offset var(--duration-base) var(--ease-standard); }
+  .plan__close svg { transition: transform var(--duration-slow) var(--ease-spring); }
+  .plan__close:hover svg { transform: rotate(90deg); }
+  .plan__close:active, .slip button:active { transform: scale(var(--m-press)); }
+  .slip button { transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), outline-offset var(--duration-base) var(--ease-standard); }
+  .footer__col a { display: inline-block; transition: color var(--duration-fast) var(--ease-standard), transform var(--duration-base) var(--ease-standard), outline-offset var(--duration-base) var(--ease-standard); }
+  .footer__col a:hover { transform: translateX(var(--size-shift-sm)); }
+
+  /* focus rings: they show at once, and only their distance settles, from wide to close */
+  :where(a, button, input, select, [tabindex]) { outline-offset: calc(var(--size-ring) * 4); }
+  .pass { outline-offset: calc(var(--size-ring) * 5); }
+  :where(.nav a, .brand, .skip, .plan__close) { transition: outline-offset var(--duration-base) var(--ease-standard); }
+
+  /* the night lamp: the new page is revealed in a circle that grows from the switch (level.js runs it) */
+  html[data-vt="lamp"]::view-transition-old(root),
+  html[data-vt="lamp"]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+  html[data-vt="lamp"]::view-transition-old(root) { z-index: 0; }
+  html[data-vt="lamp"]::view-transition-new(root) { z-index: 1; }
+  /* where View Transitions are missing: the colours cross-fade instead */
+  html.is-relamping body, html.is-relamping body * {
+    transition: background-color var(--duration-slow) var(--ease-move), color var(--duration-slow) var(--ease-move),
+                border-color var(--duration-slow) var(--ease-move), fill var(--duration-slow) var(--ease-move),
+                stroke var(--duration-slow) var(--ease-move);
+  }
+}
+
+/* the passage card's shadow layer needs overflow-clip-margin; without it the old shadow stays */
+@supports not (overflow-clip-margin: 1px) {
+  @media (prefers-reduced-motion: no-preference) {
+    .pass { overflow: hidden; transition: border-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-base) var(--ease-standard), transform var(--duration-base) var(--ease-standard); }
+    .pass:hover { box-shadow: var(--shadow-slip); }
+    .pass::before { display: none; }
+  }
+}
+
+/* ---------------------------------------------------------------- 3. reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  /* base.css already stops every animation and transition. The night lamp keeps one plain
+     cross-fade of the whole page (a View Transition's own fade; no movement). */
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation-duration: var(--duration-base); }
+}
+
+/* ================================================================ level 3: Expressive */
+:root {
+  --l3-tilt: 14deg;                             /* the sheet lies on the table, seen at a slight angle */
+  --l3-perspective: 1500px;
+  --l3-edge: 2.5rem;                            /* table round the sheet, for its shadow */
+  --l3-sheet-scale: 1.06;
+  --shadow-table: 0 1px 1px rgba(48, 34, 10, 0.18), 0 10px 18px -8px rgba(48, 34, 10, 0.36), 4px 16px 26px -14px rgba(48, 34, 10, 0.3);   /* stays inside --l3-edge */
+  --size-pool: clamp(34rem, 60vw, 62rem);       /* the pool of lamp light on the chart */
+  --color-relief: rgba(74, 52, 14, 0.5);        /* the shadow the raised land throws on the sea */
+  --color-pool-shade: rgba(96, 70, 30, 0.44);   /* the paper outside the pool, multiplied */
+  --color-pool-warm: rgba(255, 228, 176, 0.5);  /* the paper inside it: lamp light is warm */
+  --color-lamp-core: var(--color-lamp);         /* the hot middle of the pool */
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --color-relief: rgba(0, 0, 0, 0.66); --color-pool-shade: rgba(4, 1, 0, 0.4); --color-pool-warm: transparent; --color-lamp-core: #c8411f; --shadow-table: 0 12px 24px -10px rgba(0, 0, 0, 0.75); }
+}
+:root[data-theme="dark"] { --color-relief: rgba(0, 0, 0, 0.66); --color-pool-shade: rgba(4, 1, 0, 0.4); --color-pool-warm: transparent; --color-lamp-core: #c8411f; --shadow-table: 0 12px 24px -10px rgba(0, 0, 0, 0.75); }
+
+/* ---- the chart as plates: the sea below, the land, the ink, the pencil, each at its own depth ---- */
+.chart .tint { stroke: none; }
+.chart .tint--deep, .chart .tint--two { fill: none; }
+.chart .tint--shoal2 { fill: var(--color-chart-shoal-2); }
+.chart .tint--shoal { fill: var(--color-chart-shoal); }
+.chart .tint--dry { fill: var(--color-chart-dry); }
+.chart .line { fill: none; stroke: var(--color-chart-contour); stroke-width: 0.8; }
+.chart .line--deep { stroke-width: 0.7; stroke-opacity: 0.55; }
+.chart .line--shoal2 { stroke-opacity: 0.8; }
+.chart .line--two { stroke-width: 0.7; stroke-dasharray: 1 3; stroke-linecap: round; }
+.chart .line--dry { stroke: var(--color-chart-ink); stroke-width: 0.7; stroke-opacity: 0.5; stroke-dasharray: 0.6 2.4; stroke-linecap: round; }
+.chart .c-shadow { fill: var(--color-relief); }
+
+/* ---- the sheet: lying on the table at a slight angle, with the fold it has always had ---- */
+.hero__scene { perspective: var(--l3-perspective); perspective-origin: 58% 30%; }
+.sheet { position: absolute; inset: 0; overflow: hidden; transform-origin: 50% 100%; transform: rotateX(var(--l3-tilt)) scale(var(--l3-sheet-scale)); }
+.hero__scene::after { display: none; }        /* level 2's fold lies on the screen; here it lies on the sheet */
+.sheet::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to right, transparent calc(57% - 56px), var(--color-fold-shade) calc(57% - 0.5px), var(--color-fold-light) calc(57% + 0.5px), transparent calc(57% + 64px)); }
+@media (min-width: 60.0625rem) {
+  /* a strip of table right and below the sheet, where its shadow falls */
+  .hero__scene { right: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) - var(--l3-edge)); bottom: calc(var(--space-7) - var(--l3-edge)); }
+  .sheet { inset: 0 var(--l3-edge) var(--l3-edge) 0; box-shadow: var(--shadow-table); }
+}
+
+/* ---- the lamp: a pool of light behind the chart (it shows through the paper and, at night, is all the
+   light there is) and a shade on the sheet around it. level.js moves both, and the shadows. ---- */
+.hero::after { display: none; }               /* level 2's lamp is fixed; this one hangs free */
+.hero__light { position: absolute; z-index: -1; inset: 0; pointer-events: none; }
+@media (min-width: 60.0625rem) {
+  /* the lamp lights the chart, not the bare table past its right edge */
+  .hero__light {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - max(var(--size-gutter), (100% - var(--size-content)) / 2) - 2rem), transparent calc(100% - max(var(--size-gutter), (100% - var(--size-content)) / 2) + 2.5rem));
+    mask-image: linear-gradient(to right, #000 calc(100% - max(var(--size-gutter), (100% - var(--size-content)) / 2) - 2rem), transparent calc(100% - max(var(--size-gutter), (100% - var(--size-content)) / 2) + 2.5rem));
+  }
+}
+.hero__lamp {
+  position: absolute; left: 0; top: 0; width: var(--size-pool); height: var(--size-pool);
+  margin: calc(var(--size-pool) / -2) 0 0 calc(var(--size-pool) / -2); border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, var(--color-lamp-core) 0%, var(--color-lamp) 24%, var(--color-lamp-mid) 56%, var(--color-lamp-edge) 100%);
+  transform: translate3d(68vw, 51vh, 0);
+}
+.hero__shade {
+  position: absolute; left: 0; top: 0; width: calc(var(--size-pool) * 3); height: calc(var(--size-pool) * 3);
+  margin: calc(var(--size-pool) * -1.5) 0 0 calc(var(--size-pool) * -1.5); pointer-events: none; mix-blend-mode: multiply;
+  background: radial-gradient(closest-side, var(--color-pool-warm) 0%, transparent 15%, var(--color-pool-shade) 44%, var(--color-pool-shade) 100%);
+}
+:root[data-theme="dark"] .hero__shade { mix-blend-mode: normal; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hero__shade { mix-blend-mode: normal; } }
+
+/* ---- the slip: depth.js owns its transform, so its resting turn moves to rotate; its shadow falls away
+   from the lamp (level.js writes --slip-sx and --slip-sy) ---- */
+.hero__slip { transform: none; rotate: -1.6deg; box-shadow: 0 1px 0 rgba(14, 42, 59, 0.05), calc(var(--slip-sx, 0) * 1px) calc(var(--slip-sy, 4) * 1px + 8px) 22px -12px var(--color-relief); }
+
+/* what moves every frame gets a layer of its own, made once, so the chart is never drawn again mid-motion */
+.hero__lamp, .hero__shade, .plate--shadow { will-change: transform; }
+@media (hover: hover) and (pointer: fine) { .plate, .hero__slip { will-change: transform; } }
+.story.is-live :is(.tide__cursor, .tide__shade, .tide__pool, .dayc__dot) { will-change: transform; }
+
+/* ---- the week, told as you scroll. level.js marks the story .is-live (motion on, script running), pins its
+   stage, walks a cursor through the week and writes which day is current; without it the steps are a list. ---- */
+:root { --color-veil: rgba(242, 235, 221, 0.8); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --color-veil: rgba(13, 7, 6, 0.8); } }
+:root[data-theme="dark"] { --color-veil: rgba(13, 7, 6, 0.8); }
+
+.tt { margin: 0 0 var(--space-7); }
+.story__day { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); margin: var(--space-7) 0 0 var(--tide-gutter, var(--space-6)); }
+.story__steps { display: grid; margin: 0; padding: 0; list-style: none; }
+.step { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-4); padding-block: var(--space-3); border-top: var(--size-border) solid var(--color-border); }
+.step__day { font: 500 var(--text-xs)/1.4 var(--font-mono); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--color-text-muted); }
+.step__day b { display: block; font: 400 var(--text-xl)/1.1 var(--font-display); letter-spacing: -0.01em; text-transform: none; color: var(--color-text); }
+.step__line { max-width: 38em; color: var(--color-text-muted); }
+.step--none .step__day b { font-style: italic; }
+.tide__veil, .tide__cursor, .dayc { display: none; }
+
+.story.is-live { height: calc(100vh + 7 * 44vh); height: calc(100svh + 7 * 44svh); }
+.story.is-live .story__stage { position: sticky; top: 0; display: grid; align-content: center; height: 100vh; height: 100svh; }
+.story.is-live .tide__plot { height: min(var(--size-plot), 36vh); }
+.story.is-live .story__day { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: end; gap: var(--space-5) var(--space-8); margin-top: var(--space-6); }
+.story.is-live .story__steps > .step { grid-area: 1 / 1; display: block; padding: 0; border: 0; opacity: 0; translate: 0 var(--size-shift); }
+.story.is-live .story__steps > .step[data-current] { opacity: 1; translate: none; }
+.story.is-live .story__steps > .step[data-past] { translate: 0 calc(var(--size-shift) * -1); }
+.story.is-live .step__day b { display: inline; margin-right: var(--space-3); font-size: var(--text-3xl); font-weight: 300; line-height: 1; }
+.story.is-live .step__line { margin-top: var(--space-3); max-width: 30em; color: var(--color-text); }
+
+/* over the week: the future lies under a veil, the cursor rides the curve, the windows are hatched as it passes */
+.story.is-live .tide__veil { display: block; position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.tide__shade, .tide__pool { position: absolute; top: 0; bottom: 0; left: 0; }
+.tide__shade { width: 200%; background: linear-gradient(to right, transparent 0 50%, var(--color-veil) 53%, var(--color-veil)); }
+/* at night the lamp hangs over the hour the cursor reads: a red pool that lights the curve under it */
+.tide__pool { display: none; width: 34%; margin-left: -17%; background: radial-gradient(closest-side, var(--color-lamp-mid), transparent); mix-blend-mode: screen; }
+:root[data-theme="dark"] .tide__pool { display: block; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tide__pool { display: block; } }
+.tide__read.is-flipped { left: auto; right: var(--space-1); }
+.story.is-live .tide__days span[data-current] { font-weight: 700; }
+.story.is-live .tide__cursor { display: block; position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-left: var(--size-border) solid var(--color-text); pointer-events: none; }
+.tide__dot { position: absolute; top: 0; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: var(--color-text); box-shadow: 0 0 0 2px var(--color-sunk); }
+.tide__read { position: absolute; bottom: var(--space-2); left: var(--space-1); padding: 3px var(--space-1); background: var(--color-text); color: var(--color-bg); font: 500 var(--text-xs)/1 var(--font-mono); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.story.is-live .tide__window { border-top-color: transparent; background: none; }
+.story.is-live .tide__window::before,
+.story.is-live .tide__window::after { content: ""; position: absolute; inset: 0; }
+.story.is-live .tide__window::before { border-top: var(--size-border) dashed var(--color-hatch); opacity: 0.7; }
+.story.is-live .tide__window::after {
+  border-top: var(--size-bar) solid var(--color-accent);
+  background: repeating-linear-gradient(-45deg, var(--color-hatch) 0 var(--size-border), transparent var(--size-border) var(--size-hatch));
+  clip-path: inset(0 calc(100% - var(--lit, 1) * 100%) 0 0);
+}
+.story.is-live .tide__days span[data-current], .story.is-live .tide__times > span[data-current] { color: var(--color-text); }
+.story.is-live .tide__times > span[data-current] { box-shadow: inset 0 var(--size-bar) 0 var(--color-text); }
+
+/* the day under the lamp: one day's curve, which flows into the next one as the week goes by */
+.story.is-live .dayc { display: block; margin: 0; }
+.dayc__plot { position: relative; height: clamp(6.5rem, 10vw, 9rem); border-block: var(--size-border) solid var(--color-rule); background: var(--color-sunk); overflow: hidden; }
+.dayc__svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dayc__svg path { fill: none; vector-effect: non-scaling-stroke; }
+.dayc__svg .dayc__area { fill: var(--color-water); }
+.dayc__curve { stroke: var(--color-text); stroke-width: 1.75; stroke-linejoin: round; }
+.dayc__need { stroke: var(--color-text); stroke-opacity: 0.6; stroke-width: 1; stroke-dasharray: 5 4; }
+.dayc__day, .dayc__win { position: absolute; inset: 0; clip-path: inset(0 100% 0 0); }
+.dayc__day { background: var(--color-day); }
+.dayc__win { border-top: var(--size-bar) solid var(--color-accent); background: repeating-linear-gradient(-45deg, var(--color-hatch) 0 var(--size-border), transparent var(--size-border) var(--size-hatch)); }
+.dayc__dot { position: absolute; top: 0; left: -4px; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--color-text); box-shadow: 0 0 0 2px var(--color-sunk); }
+.dayc__hours { display: flex; justify-content: space-between; margin-top: var(--space-2); font: 500 var(--text-xs)/1 var(--font-mono); color: var(--color-text-muted); }
+
+/* ---- the passage slips: paper that leans toward the lamp (depth.js tilt), with the lamp's glare on it ---- */
+.pass { overflow: visible; isolation: auto; cursor: pointer; }
+.pass::before { display: none; }              /* level 2's shadow layer: depth.css lays the shadow here */
+.pass:hover, .pass:active { transform: none; box-shadow: var(--depth-shadow); }
+.pass .strip { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+/* on paper by day the lamp's glare is warm, not white: a faint yellow that leaves the ink dark */
+.pass[data-depth-tone="light"] > .depth-glare::before { display: block; background: radial-gradient(closest-side, rgba(255, 210, 128, 0.2), rgba(255, 210, 128, 0)) center / 70% 70% no-repeat; }
+:root[data-theme="dark"] .pass > .depth-glare::before { background: radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 16%, transparent), transparent) center / 64% 64% no-repeat; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .pass > .depth-glare::before { background: radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 16%, transparent), transparent) center / 64% 64% no-repeat; }
+}
+
+/* ---- three notes in the margin: index cards that rise off the table as one pile, deal out into a row
+   and step forward (depth.js stack; the deal follows the scroll where the browser can) ---- */
+.notes[data-depth="stack"] { padding-top: var(--space-5); }
+.notes[data-depth="stack"] > .note { padding: var(--space-5) var(--space-5) var(--space-6); border: var(--size-border) solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
+.notes[data-depth="stack"] > :nth-child(2) { translate: calc(100% + var(--space-7)) 0 44px; }
+.notes[data-depth="stack"] > :nth-child(3) { translate: calc(200% + var(--space-7) * 2) 0 88px; }
+.notes[data-depth="stack"] > *::after { opacity: calc(var(--depth-dim, 0) * 0.3); }
+html[data-motion] .notes > .note.arrive { opacity: 1; animation: none; }
+
+/* ---- level 3 movement: what follows the scroll, what draws, what is dealt ---- */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes l3-wipe { from { clip-path: inset(0 100% 0 0); } }
+  @keyframes l3-swell { from { opacity: 0; transform: translateY(40%); } }
+  @keyframes l3-deal { from { translate: 0 0 0; } }
+  @keyframes l3-rule { from { transform: scaleX(0); } }
+
+  /* the lamp comes on; the slip lands with a spring (level.js), only its fade is CSS */
+  .hero__lamp { animation: l2-fade var(--duration-draw) var(--ease-move) var(--duration-fast) backwards; }
+  [data-enter="slip"] { animation: l2-fade var(--duration-slow) var(--ease-standard) var(--m-slip) backwards; }
+
+  /* the days of the story come and go */
+  .story.is-live .story__steps > .step { transition: opacity var(--duration-slow) var(--ease-standard), translate var(--duration-slow) var(--ease-standard); }
+  .story.is-live .tide__days span { transition: color var(--duration-base) var(--ease-standard); }
+
+  /* the passage slips: dealt with a spring (level.js); then their strip draws the day's tide */
+  html[data-motion] .pass.arrive.is-visible { animation: none; }
+  .pass { transition: border-color var(--duration-fast) var(--ease-standard), outline-offset var(--duration-base) var(--ease-standard); }
+  html[data-motion] .pass .strip__curve { stroke-dasharray: 1; }
+  html[data-motion] .pass:not(.is-visible) .strip__curve { stroke-dashoffset: 1; }
+  html[data-motion] .pass:not(.is-visible) :is(.strip__area, .strip__window, .strip__day) { opacity: 0; }
+  html[data-motion] .pass.is-visible .strip__area { transform-origin: bottom; animation: l3-swell var(--duration-slower) var(--ease-standard) calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
+  html[data-motion] .pass.is-visible .strip__curve { animation: l2-draw var(--duration-draw) var(--ease-pencil) calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
+  html[data-motion] .pass.is-visible .strip__day { animation: l2-fade var(--duration-slower) linear calc(var(--m-delay, 0ms) + var(--duration-slow)) backwards; }
+  html[data-motion] .pass.is-visible .strip__window { animation: l3-wipe var(--duration-slower) var(--ease-move) calc(var(--m-delay, 0ms) + var(--duration-slow) + var(--duration-draw) * 0.6) backwards; }
+
+  /* the lamp switch: the knob is thrown with a spring (level.js), so it has no transition of its own */
+  .lamp__thumb { transition: background-color var(--duration-base) var(--ease-standard); }
+
+  /* the notes rise as one pile and deal out into a row, following the scroll where the browser can */
+  @supports (animation-timeline: view()) {
+    .notes[data-depth="stack"] { view-timeline-name: --notes; }
+    .notes[data-depth="stack"] > :nth-child(n + 2) { animation: l3-deal linear both; animation-timeline: --notes; animation-range: entry 0% cover 42%; }
+    /* the scale bar at the foot is ruled as the page arrives at it */
+    .scalebar__bar { transform-origin: left; animation: l3-rule linear both; animation-timeline: view(); animation-range: entry 10% cover 30%; }
+  }
+}
+
+/* ---- narrower screens ---- */
+@media (max-width: 60rem) {
+  /* the chart shows below the words: a wider pool, so the whole strip of it is lit as in level 2 */
+  :root { --size-pool: 50rem; }
+  :root[data-theme="dark"] { --color-pool-shade: rgba(4, 1, 0, 0.24); }
+  /* the notes: one column; each card still steps forward in turn as the pile scrolls in */
+  .notes[data-depth="stack"] > * { grid-area: auto; }
+  .notes[data-depth="stack"] > :nth-child(2) { translate: 0 0 44px; }
+  .notes[data-depth="stack"] > :nth-child(3) { translate: 0 0 88px; }
+  .story.is-live .story__day { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
+}
+@media (max-width: 60rem) and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --color-pool-shade: rgba(4, 1, 0, 0.24); }
+}
+@media (max-width: 44rem) {
+  .story__day { margin-left: var(--tide-gutter, var(--space-5)); }
+  .step { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .story.is-live .step__line { font-size: var(--text-sm); }
+}
+
+/* ---- reduced motion: the page stands still, and the notes lie in a plain row (depth.js lays everything
+   flat; the row needs no step back to read, so its offsets go too) ---- */
+@media (prefers-reduced-motion: reduce) {
+  .notes[data-depth="stack"] > * { transform: none !important; translate: none !important; }
+  .notes[data-depth="stack"] > *::after { opacity: 0; }
+  .notes[data-depth="stack"] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .notes[data-depth="stack"] > * { grid-area: auto; }
+}
+@media (prefers-reduced-motion: reduce) and (max-width: 60rem) {
+  .notes[data-depth="stack"] { grid-template-columns: minmax(0, 1fr); }
+}
+/* without the script the lamp hangs where level 2 has it: over the middle of the chart */
+@media (max-width: 60rem) {
+  html:not(.js) .hero__lamp { top: auto; bottom: 9rem; margin: 0 0 calc(var(--size-pool) / -2) calc(var(--size-pool) / -2); transform: translateX(58vw); }
+}
