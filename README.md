@@ -112,8 +112,20 @@ type stay the same at every level; what changes is how much it moves and how dee
 | 5 Cinematic | "Sail the pencil line": a 3D journey along the course as you scroll, the wind as moving streaks | [`examples/levels/5/`](examples/levels/5/index.html) |
 
 [`examples/levels/README.md`](examples/levels/README.md) explains the concept, the type, the
-colours and what each level adds. [`examples/scenes/`](examples/scenes/index.html) shows every scene
-of the kit, in light and dark, with its options.
+colours and what each level adds.
+
+**The 3D scene kit** on its own page, [`examples/scenes/`](examples/scenes/index.html): every scene
+of the kit, with its colours taken from the page, in light and dark, following the pointer. These
+clips were recorded from that page:
+
+| | |
+| --- | --- |
+| ![form.js: strands of light that breathe, turn and lean toward the pointer](examples/previews/scene-form.webp) | ![field.js: tens of thousands of points in a slow current](examples/previews/scene-field.webp) |
+| `form.js`: an object made of strands of light | `field.js`: points adrift in a current |
+| ![aurora.js in water mode: clear shallow water seen from above](examples/previews/scene-water.webp) | ![aurora.js: soft curtains of light in the app's colours](examples/previews/scene-aurora.webp) |
+| `aurora.js`, mode water: shallow water with caustics | `aurora.js`, mode aurora: curtains of light |
+| ![contour.js: living contour lines, as on a sea chart](examples/previews/scene-contour.webp) | ![datascape.js: the app's numbers as columns of light](examples/previews/scene-datascape.webp) |
+| `contour.js`: living contour lines | `datascape.js`: the app's numbers as a sculpture |
 
 ## How /forge works
 
