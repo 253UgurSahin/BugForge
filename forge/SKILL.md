@@ -5,9 +5,10 @@ description: >-
   checkpoint and the user's go after each, or in auto mode straight through,
   fixing what fails on its own. Starts from the URL of an app to rebuild
   (clone mode), an idea (idea mode) or the user's own repo (improve mode).
-  Each phase is a forge skill: recon, compare, plan, design, build,
-  dashboard, motion, test, diff, brand, launch, secure and pack, or audit,
-  inspect, improve, test and secure. gate.py keeps the record in
+  Each phase is a forge skill or a part of one (recon is /forge-research
+  recon): recon, compare, plan, design, build, dashboard, motion, test,
+  diff, brand, launch, secure and pack, or audit, inspect, improve, test
+  and secure. gate.py keeps the record in
   forge-work/state.json, runs each phase's exit checks and marks a phase
   done only in order and with the user's own words. secure is never
   skipped, its go is always the user's, nothing is deployed. Use when the
@@ -18,9 +19,8 @@ description: >-
 ---
 # forge
 
-Runs a project through the forge skills, one phase at a time, with a checkpoint and the user's go
-after each, or straight through in auto mode. Keeps its record in `forge-work/state.json`, which
-only `../forge/gate.py` writes; the work itself happens in the skill each phase belongs to.
+Runs a project through the forge skills phase by phase, with a checkpoint and the user's go after each,
+or straight through in auto mode. Only `../forge/gate.py` writes its record, `forge-work/state.json`.
 
 ## Ground rules
 
@@ -79,13 +79,13 @@ files, so run status first, in the project root). Show the user an exit 2 messag
 
 - Someone else's app, by its URL: **clone**. An idea in words: **idea**. The user's own repo,
   folder or live app: **improve** (inspect reads the URL). Unclear, or more than one fits: ask.
-- Clone and idea build a new app: ask where, and use a new, empty folder outside any other git
-  repo as the project root (`git rev-parse --show-toplevel` there fails or prints this folder; else
-  the build's git commands hit the outer repo). Improve: the root of a repo the user owns.
+- Clone and idea build a new app in a new, empty folder outside any other git repo (`git rev-parse
+  --show-toplevel` there fails or prints it; else git hits the outer repo): ask where; in auto mode,
+  with none named, one named after the idea beside this one, said in the plan. Improve: their own repo.
 - Tell the user in two lines what comes: the phases, a checkpoint after each, nothing deployed.
   Then ask, in one message, the two things only they can say (skip what their request answered):
-  1. **How far**, from 1 to 5 (rules.md section 10): one level for everything or one per part.
-     Show the lines of `python3 ../forge/level.py show` and where the examples are.
+  1. **How far**, from 1 to 5 (rules.md section 10), for each part their request left open: one level
+     for those or one each, with `python3 ../forge/level.py show <part>` and where the examples are.
   2. **How to work**: a go after every phase, or auto mode (below).
 
 ## Step 2: start
@@ -93,8 +93,9 @@ files, so run status first, in the project root). Show the user an exit 2 messag
 1. In the project root: `python3 ../forge/gate.py init --mode <mode> --about '<the URL, idea or repo, as
    the user said it>'`. Exit 1: a forge state is there already, so resume (below). `--force` (only when
    the user asks) forgets every approval, and test, diff, secure, audit, inspect and improve run again.
-2. Record the level: `python3 ../forge/level.py set all <n> --said '<their words>'`, or per part
-   (look, dashboard, test, secure). Inside a project, secure is never below 3.
+2. Record each level in the user's words, the request's first: `python3 ../forge/level.py set all <n> --said
+   '<their words>'` for one with no part, else `set <part> <n>` ("uiterlijk niveau 5" is the look's alone). Then
+   the answer: `set <part> <n>` for each part asked. In a project, secure is never below 3 and test never below 2.
 3. `forge-work/` holds notes, reports and screenshots and never ships: `init` writes its `.gitignore`.
 4. Scope: when the user says a domain is theirs (their live app, a staging site), ask the question
    in rules.md section 3. Only after a clear yes, write `forge-work/scope.json`
@@ -105,11 +106,11 @@ files, so run status first, in the project root). Show the user an exit 2 messag
 Repeat until `status` says all phases are done:
 
 1. `python3 ../forge/gate.py status`. It names the next phase and the skill to run for it.
-2. An optional phase (`*`): say in one line what it adds and ask: run it or skip it? Skip only on
-   the user's say-so: `skip <phase> --reason '<their reason>'`, then back to 1.
+2. An optional phase (`*`): say in one line what it adds and ask: run it or skip it? Skip only on the
+   user's say-so (`skip <phase> --reason '<their reason>'`), motion only at look level 1 (rules.md 10).
 3. Run the phase with that skill (for example `/forge-check secure`), every step of its steps file.
-   A stop in the middle of a skill (the three concepts, the vertical slice, the name pick) waits
-   for the user too, but it is not the phase's go.
+   A stop in the middle of a skill (the three concepts, the name pick and, outside auto mode, the
+   vertical slice) waits for the user too, but it is not the phase's go.
 4. `python3 ../forge/gate.py check <phase>`. Exit 1: not finished; fix what it names in the skill.
 5. One stop per phase: the skill's closing checkpoint is this one. Show it as the skill says, plus
    one line with the gate result, then stop and wait for the user's go. Never ask twice. A phase
@@ -126,15 +127,16 @@ zelf"), at the start or later. Keep those words: every `done <phase> --auto` rec
 - Steps 3.5 and 3.6 change: when `check` passes, run `done <phase> --auto '...'`, give the user the
   checkpoint's lines as a report, and go straight on to the next phase.
 - Optional phases run, unless the user said at the start which to leave out (then `skip`, with
-  their words as the reason). Choices that are cheap to change you make yourself and write down.
-- You still stop where `../forge/rules.md` section 7 says: secure's go, a FAIL, an accepted risk,
-  the scope question, the level, the pick from the three concepts, the app's name, prices.
+  their words as the reason). Choices that are cheap to change you make yourself and write down; a
+  fact only the user can give is a `TO-FILL` line, named under "For you" (rules.md section 7).
+- You still stop where `../forge/rules.md` section 7 says: secure's go, a `Verdict: FAIL` of secure, an
+  accepted risk, a `[wontfix]`, a rotated secret, the scope question, tests that can empty a database, a level
+  not given, the concept pick, the app's name, the stack profile if two fit, prices, a fix bigger than it looked.
 
 In every mode a failed test, check, scan or build inside a phase is yours to fix: the cause, never
-the check, up to three tries (rules.md section 7). Then stop and say what you tried.
-
-secure always runs `/forge-check secure` again in full, even when `check secure` would pass: the
-report the build's last step wrote is from before test, brand and launch changed the app.
+the check, up to three tries (rules.md section 7). Then stop and say what you tried. secure always
+runs `/forge-check secure` again in full, even when `check secure` would pass: the report and the
+files the build's last step wrote are from before test, brand and launch changed the app.
 
 ## When a later phase sends you back
 
@@ -149,7 +151,8 @@ report the build's last step wrote is from before test, brand and launch changed
 
 A new session, a break, or "where were we": first `python3 ../forge/gate.py status` in the project
 root. It shows what the user asked for, what is done (the user's words and the time) and the next
-step. Read the files the last phase wrote before you go on. "No forge state": ask for the project
+step. Read the files the last phase wrote before you go on. Auto mode does not carry over to a new
+chat, whatever status says: ask once if they want it again. "No forge state": ask for the project
 folder, or start at Step 1. "Damaged": show the user the message; never rebuild state.json by hand.
 
 ## Output
@@ -159,9 +162,8 @@ for a domain of the user's own. Everything else comes from the phases.
 
 ## The end
 
-When `status` says all phases are done, give the user a last summary, at most 5 plain lines: what
-they have now (the app in its containers, started as RUN.md says; or in improve mode the work on
-its branch) and how to open it; what is left (open bugs, could-haves not built, name checks "to
-run", `TO-FILL` lines, "For you"); and that shipping is their step: a server, merging, pushing,
-live Stripe keys. A new project starts at Step 1 in its own folder; later changes to this app:
-improve mode, `init --mode improve --force` in its root, after the user's go.
+When `status` says all phases are done, give the user a last summary, at most 5 plain lines: what they have now
+(the app in its containers, started as RUN.md says; or in improve mode the work on its branch) and how to open
+it; what is left (open bugs, could-haves not built, name checks "to run", `TO-FILL` lines, "For you"); and that
+shipping is their step: a server, merging, pushing, live Stripe keys. A new project starts at Step 1 in its own
+folder; later changes to this app: improve mode, `init --mode improve --force` in its root, after the user's go.

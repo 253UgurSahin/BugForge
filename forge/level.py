@@ -12,14 +12,14 @@ to it and says so, get and check refuse a lower one on record.
 Usage:
     python3 level.py show [DOMAIN] [--nl]            the table, to paste into a question (--nl: in Dutch)
     python3 level.py set DOMAIN LEVEL --said 'niveau 4 graag'       DOMAIN: one domain, or all
-    python3 level.py get DOMAIN                      the chosen number and name
-    python3 level.py check DOMAIN [--report FILE]    is the work at the chosen level?   (each takes --json)
+    python3 level.py get DOMAIN                      the chosen number and name      (each takes --json)
+    python3 level.py check DOMAIN [--report FILE] [--since TIME]   is the work at the chosen level?
 
 LEVEL: 1 to 5, or a name or alias from the table, English or Dutch, in any letter case; a name that only
-another domain has counts as its number. --said: the user's own words, as they typed them. check passes
-when a level is chosen, FILE has exactly one line `Level: N` for it (its name may follow: `Level: 2
-(Name)`) and every evidence pattern up to that level fits a file that holds something; links and
-node_modules do not count. Where levels.json allows it, a line in FILE that says why counts instead.
+another domain has counts as its number. --said: the user's own words, as typed. check passes when a
+level is chosen, FILE has exactly one line `Level: N` for it (`Level: 2 (Name)` too) and each evidence
+pattern up to that level fits a file that holds something: no link, none in node_modules, and with
+--since (the last go) none in forge-work/ older than TIME; or FILE says why, where levels.json allows it.
 
 Exit codes:
     0  shown, recorded, a level is chosen (get), every check passes (check)
@@ -73,7 +73,8 @@ def load_table(path):
             rows = domain["levels"]
             texts = [domain["about"], domain["about_nl"]] + [row[key] for row in rows for key in TEXTS]
             texts += [item for row in rows for key in LISTS for item in row[key] + []]
-            texts += [row.get(key, "-") for row in rows for key in ("evidence_how", "evidence_or")]
+            texts += [row["evidence_how"] for row in rows if row["evidence"]] + [words if set(files) <= set(row[
+                "evidence"]) else None for row in rows for words, files in row.get("evidence_or", {}).items()]
             if ([row["level"] for row in rows] != [1, 2, 3, 4, 5] or str(domain.get("floor", 1)) not in list("12345")
                     or not all(isinstance(text, str) and text for text in texts)):
                 raise ValueError("a domain needs about, about_nl and the levels 1 to 5 in order, each text a text")
@@ -144,18 +145,18 @@ def save(root, record):
                 os.unlink(temp)
 
 
-def find(folder, parts, shown=""):
-    """The first file below FOLDER that the pattern PARTS fit (** is any folders, also none) and that holds
-    something, as SHOWN plus its path, or None. Links, node_modules and over 30 folders deep do not count."""
-    found = find(folder, parts[1:], shown) if parts[0] == "**" and len(parts) > 1 else None  # ** as no folder
+def find(folder, parts, since=None, shown=""):
+    """The first file below FOLDER that the pattern PARTS fits (** is any folders, also none, never a .hidden one),
+    holding something and, in forge-work/, not older than SINCE: its path, or None. No link, node_modules, 30+ deep."""
+    found = find(folder, parts[1:], since, shown) if parts[0] == "**" and len(parts) > 1 else None  # ** as none
     for name in [] if found or not os.path.isdir(folder) else sorted(os.listdir(folder)):
         path = os.path.join(folder, name)
-        if os.path.islink(path) or name == "node_modules" or not (parts[0] == "**" or fnmatch.fnmatch(name, parts[0])):
+        if os.path.islink(path) or name == "node_modules" or not fnmatch.fnmatch(name, parts[0].replace("**", "[!.]*")):
             continue
         if os.path.isdir(path) and (parts[0] == "**" or len(parts) > 1) and shown.count("/") < 30:
-            found = find(path, parts if parts[0] == "**" else parts[1:], shown + name + "/")
-        elif len(parts) == 1 and os.path.isfile(path) and os.path.getsize(path):
-            found = shown + name
+            found = find(path, parts if parts[0] == "**" else parts[1:], since, shown + name + "/")
+        elif len(parts) == 1 and os.path.isfile(path) and os.path.getsize(path):  # a run's record: of this run
+            found = shown + name if shown[:11] != "forge-work/" or os.path.getmtime(path) >= (since or 0) else None
         if found:
             break
     return found
@@ -180,8 +181,7 @@ def report_says(root, name, row):
 
 
 def chosen(table, root, name):
-    """(the record of the domain NAME in ROOT or None, the table's row of its level, why ROOT cannot work at that
-    level and what to do, or None)."""
+    """(NAME's record in ROOT or None, its row in the table, why it cannot be worked at and what to do or None)."""
     entry = load_record(root, table).get(name)
     low = table[name].get("floor", 1) if os.path.lexists(os.path.join(root, STATE)) else 1
     if not entry:
@@ -231,7 +231,7 @@ def cmd_set(table, root, args):
 
 def cmd_check(table, root, args):
     """get: the chosen level. check: also that the report says the same one and the evidence up to it is there."""
-    name, text = args.domain, ""
+    name, text, fits = args.domain, "", lambda item: find(root, item.split("/"), args.since and args.since.timestamp())
     entry, top, problem = chosen(table, root, name)
     if args.command == "get":
         print(json.dumps(dict(entry or {"level": None}, domain=name, name=top and top["name"], problem=problem),
@@ -243,17 +243,18 @@ def cmd_check(table, root, args):
         text, check = report_says(root, args.report, top)
         checks.append(check)
     for row in table[name]["levels"][:0 if problem else entry["level"]]:
-        missing, words = [item for item in row["evidence"] if not find(root, item.split("/"))], row.get("evidence_or")
-        why = [line.strip() for line in text.splitlines()  # the words, then the reason: three words or more
-               if words and re.search(re.escape(words) + r"(\W+\w+){3}", line, re.I)]
-        if missing and not why:
+        missing, ways = [item for item in row["evidence"] if not fits(item)], row.get("evidence_or", {})
+        why = {item: [line.strip() for words in ways if item in ways[words] for line in text.splitlines()
+                      if re.search(re.escape(words) + r"(\W+\w+){3}", line, re.I)] for item in missing}
+        if left := [item for item in missing if not why[item]]:  # its words, then why: three words or more
             checks.append((False, "level %d asks for a file that holds something (links and node_modules do not "
-                           "count): %s" % (row["level"], ", ".join(missing)), list(filter(None, [
-                               row.get("evidence_how"), words and "Or a line in the report (--report FILE) with the "
-                               "words '%s' and then why." % words]))))
+                           "count%s): %s" % (row["level"], args.since and ", nor in forge-work/ one older than "
+                           "--since" or "", ", ".join(left)), [row["evidence_how"]] + ["Or a line in the report with "
+                           "the words '%s' and then why, for %s." % (way, " and ".join(ways[way])) for way in ways]))
         elif row["evidence"]:
-            checks.append((True, "level %d asks for %s: %s" % (row["level"], ", ".join(row["evidence"]),
-                           "not there, and the report says why: " + why[0][:120] if missing else "there"), []))
+            said = missing and "%s not there, the report says why: %s" % (", ".join(missing), why[missing[0]][0][:120])
+            checks.append((True, "level %d asks for %s: %s" % (row["level"], ", ".join(row["evidence"]), said or
+                           "there"), []))
     passed = all(ok for ok, _, _ in checks)
     if args.json:
         print(json.dumps({"domain": name, "level": entry["level"] if entry else None, "ok": passed, "checks": [
@@ -287,6 +288,7 @@ def main(argv=None):
         commands.choices["set"].add_argument("level", metavar="LEVEL", help="1 to 5, or a name in English or Dutch")
         commands.choices["set"].add_argument("--said", required=True, metavar="TEXT", help="the user's own words")
         commands.choices["check"].add_argument("--report", metavar="FILE", help="the report, with one line `Level: N`")
+        commands.choices["check"].add_argument("--since", metavar="TIME", type=datetime.datetime.fromisoformat)
         args = parser.parse_args(argv)
         return args.run(table, os.getcwd(), args)
     except (LevelError, OSError, UnicodeError, RecursionError) as error:  # OSError: forge-work cannot be written

@@ -5,6 +5,7 @@ every exit code, a damaged or linked record, a linked forge-work, a console that
 that forge/levels.md names what levels.json holds. Every test works in its own temporary project folder."""
 
 import contextlib
+import datetime
 import io
 import json
 import os
@@ -146,12 +147,15 @@ class TableTests(Project):
         self.assertEqual(evidence, {
             "look": {}, "dashboard": {},
             "test": {3: ["forge-work/test/walk.json"],
-                     4: ["e2e/**/edge*.spec.*", "forge-work/test/shots/r1/*.png", "forge-work/test/shots/r2/*.png"]},
+                     4: ["**/edge.spec.*", "forge-work/test/shots/r1/*.png", "forge-work/test/shots/r2/*.png"]},
             "secure": {3: ["forge-work/sbom.json"],
-                       4: ["forge-work/security/probe.json", "forge-work/security/authz.json"]}})
+                       4: ["forge-work/security/probe.json", "forge-work/security/authz.json"],
+                       5: ["forge-work/security/threats.md", "forge-work/security/access.md"]}})
         instead = {(name, row["level"]): row["evidence_or"] for name, domain in TABLE.items()
                    for row in domain["levels"] if "evidence_or" in row}
-        self.assertEqual(instead, {("secure", 4): "no running app"})
+        self.assertEqual(instead, {("secure", 4): {  # each words stand in for their own files only
+            "no running app": ["forge-work/security/probe.json", "forge-work/security/authz.json"],
+            "no accounts at all": ["forge-work/security/authz.json"]}})
         for domain in TABLE.values():
             for row in domain["levels"]:
                 self.assertEqual(bool(row["evidence"]), "evidence_how" in row, "how the evidence comes about")
@@ -184,7 +188,11 @@ class TableTests(Project):
                  broken(lambda domains: domains["test"]["levels"][2].update(evidence="forge-work/test/walk.json")),
                  broken(lambda domains: domains["secure"].update(floor=9)),
                  broken(lambda domains: domains["secure"].update(floor=3.0)),
-                 broken(lambda domains: domains["secure"]["levels"][3].update(evidence_or={"words": "x"}))]
+                 broken(lambda domains: domains["secure"]["levels"][3].update(evidence_or={"words": "x"})),
+                 broken(lambda domains: domains["secure"]["levels"][3].update(evidence_or="no running app")),
+                 broken(lambda domains: domains["secure"]["levels"][3].update(evidence_or={"no accounts": ["a.json"]})),
+                 broken(lambda domains: domains["secure"]["levels"][3].update(evidence_or={"": ["a.json"]})),
+                 broken(lambda domains: domains["test"]["levels"][2].pop("evidence_how"))]
         path = os.path.join(self.root, "levels.json")
         for text in cases:
             with self.subTest(text=str(text)[:60]), mock.patch.object(level, "TABLE", path):
@@ -246,7 +254,8 @@ class ShowTests(Project):
     def test_bad_usage_is_exit_2(self):
         for args in ([], ["show", "speed"], ["show", "all"], ["get"], ["get", "all"], ["check", "all"], ["check"],
                      ["set", "speed", "3", "--said", "x"], ["set", "look"], ["set", "look", "3"], ["list"],
-                     ["get", "look", "--report", "x.md"], ["check", "look", "--nl"]):
+                     ["get", "look", "--report", "x.md"], ["check", "look", "--nl"],
+                     ["check", "look", "--since", "yesterday"], ["get", "look", "--since", "2026-10-27"]):
             with self.subTest(args=args), self.assertRaises(SystemExit) as stop:
                 self.level(*args)
             self.assertEqual(stop.exception.code, 2)
@@ -660,19 +669,28 @@ class CheckTests(Project):
         self.write("forge-work/test/walk.json", " ")
         self.assertEqual(self.check("test")[0], 0)
 
-    def test_the_edge_spec_sits_anywhere_in_e2e_but_not_in_node_modules(self):
+    def test_the_edge_spec_sits_beside_the_other_specs_but_not_in_node_modules_or_a_dot_folder(self):
+        """In e2e/, or where the app's own Playwright setup keeps its specs (improve mode: tests/, apps/web/tests/).
+        A copy of the pack in .claude/skills holds edge.example.spec.ts: that is no spec of the app. The file is
+        edge.spec.* (forge-check test Step 3): a unit test of the app whose name starts with edge, such as Vercel's
+        lib/edge-config.spec.ts, is not it (VG4-N6)."""
         self.choose("test", 4)
         for name in ("forge-work/test/walk.json", "forge-work/test/shots/r1/a.png", "forge-work/test/shots/r2/a.png"):
             self.write(name)
         for name, counts in (("e2e/node_modules/pkg/edge.spec.js", False), ("e2e/edge.spec", False),
-                             ("e2e/forms/login.spec.ts", False), ("tests/edge.spec.ts", False),
+                             ("e2e/forms/login.spec.ts", False), ("tests/edge.spec.ts", True),
+                             ("apps/web/tests/edge.spec.ts", True), ("node_modules/kit/tests/edge.spec.ts", False),
                              ("e2e/edge.spec.ts/readme.md", False), ("e2e/edge.spec.ts", True),
-                             ("e2e/forms/deep/edge-login.spec.tsx", True), ("e2e/edge-cases.spec.mjs", True)):
+                             ("e2e/forms/deep/edge.spec.tsx", True), ("e2e/edge.spec.mjs", True),
+                             ("lib/edge-config.spec.ts", False), ("apps/web/tests/edge-forms.spec.ts", False),
+                             ("e2e/edge-cases.spec.mjs", False),
+                             (".claude/skills/forge-check/edge.example.spec.ts", False), (".git/edge.spec.ts", False),
+                             ("app/.next/server/edge.spec.js", False)):
             with self.subTest(name=name):
                 self.write(name)
                 code, data = self.check("test")
                 self.assertEqual(code, 0 if counts else 1, data)
-                shutil.rmtree(os.path.join(self.root, name.split("/")[0]))
+                shutil.rmtree(os.path.join(self.root, name.split("/")[0]))  # never forge-work: the record is there
 
     def test_secure_level_4_wants_the_probe_and_the_access_check_or_the_reason(self):
         self.choose("secure", 4)
@@ -683,7 +701,10 @@ class CheckTests(Project):
         self.assertEqual(data["checks"][3], {
             "ok": False, "what": MISSING % (4, "forge-work/security/probe.json, forge-work/security/authz.json"),
             "output": [TABLE["secure"]["levels"][3]["evidence_how"],
-                       "Or a line in the report (--report FILE) with the words 'no running app' and then why."]})
+                       "Or a line in the report with the words 'no running app' and then why, for "
+                       "forge-work/security/probe.json and forge-work/security/authz.json.",
+                       "Or a line in the report with the words 'no accounts at all' and then why, for "
+                       "forge-work/security/authz.json."]})
         reason = "- probe.py and authz.py: no running app, the user runs no containers here"
         for line, counts in ((reason, True), ("- probe and authz: No Running App (Docker is not installed)", True),
                              ("- probe.py and authz.py: no running app", False), ("- no running app.", False),
@@ -695,9 +716,9 @@ class CheckTests(Project):
                 self.assertEqual(code, 0 if counts else 1, data)
         self.write("forge-work/security.md", self.REPORT % reason)
         code, data = self.check("secure", "--report", "forge-work/security.md")
-        self.assertEqual(data["checks"][3], {"ok": True, "output": [], "what": "level 4 asks for forge-work/security/"
-                                             "probe.json, forge-work/security/authz.json: not there, and the report "
-                                             "says why: " + reason})
+        both = "forge-work/security/probe.json, forge-work/security/authz.json"
+        self.assertEqual(data["checks"][3], {"ok": True, "output": [], "what": "level 4 asks for %s: %s not there, the "
+                                             "report says why: %s" % (both, both, reason)})
         self.assertEqual(self.check("secure")[0], 1, "the reason is in the report: without --report nobody reads it")
         self.write("forge-work/security/probe.json", "{}\n")
         self.write("forge-work/security/authz.json", "{}\n")
@@ -711,8 +732,49 @@ class CheckTests(Project):
         report = self.REPORT % "- probe.py: no running app, the build fails on this machine"
         self.write("forge-work/security.md", report.replace("Level: 4 (Thorough)", "Level: 5 (Uitputtend)"))
         code, data = self.check("secure", "--report", "forge-work/security.md")
-        self.assertEqual((code, [check["ok"] for check in data["checks"]]), (1, [True, True, False, True]))
+        self.assertEqual((code, [check["ok"] for check in data["checks"]]), (1, [True, True, False, True, False]))
         self.assertEqual(data["checks"][2]["what"], MISSING % (3, "forge-work/sbom.json"))
+        self.assertEqual(data["checks"][4]["what"], MISSING % (5, "forge-work/security/threats.md, "
+                                                                  "forge-work/security/access.md"))
+        self.assertEqual(data["checks"][4]["output"], [TABLE["secure"]["levels"][4]["evidence_how"]])
+
+    def test_level_5_asks_for_the_threat_model_and_the_access_matrix(self):
+        """A level 4 run with a level 5 label does not pass: the review writes these two files."""
+        self.choose("secure", 5)
+        for name in ("forge-work/sbom.json", "forge-work/security/probe.json", "forge-work/security/authz.json"):
+            self.write(name, "{}\n")
+        self.write("forge-work/security.md", self.REPORT.replace("Level: 4 (Thorough)", "Level: 5 (Exhaustive)")
+                   % "- nothing")
+        code, data = self.check("secure", "--report", "forge-work/security.md")
+        self.assertEqual((code, data["checks"][4]["ok"]), (1, False))
+        self.write("forge-work/security/threats.md", "# Threat model\n")
+        self.assertEqual(self.check("secure", "--report", "forge-work/security.md")[0], 1, "access.md is missing")
+        self.write("forge-work/security/access.md", "# Access matrix\n")
+        self.assertEqual(self.check("secure", "--report", "forge-work/security.md")[0], 0)
+        self.write("forge-work/security.md", self.REPORT.replace("Level: 4 (Thorough)", "Level: 5 (Exhaustive)")
+                   % "- threats.md and access.md: no running app, the review only reads the code")
+        os.remove(os.path.join(self.work, "security", "access.md"))
+        self.assertEqual(self.check("secure", "--report", "forge-work/security.md")[0], 1, "no words stand in for it")
+
+    def test_no_accounts_stands_in_for_the_access_check_only(self):
+        """An app with no sign-in anywhere has no two users to compare; the probe still runs."""
+        self.choose("secure", 4)
+        self.write("forge-work/sbom.json", "{}\n")
+        self.write("forge-work/security.md", self.REPORT % "- authz.py: no accounts at all, the app has no sign-in")
+        code, data = self.check("secure", "--report", "forge-work/security.md")
+        self.assertEqual((code, data["checks"][3]["what"]), (1, MISSING % (4, "forge-work/security/probe.json")))
+        self.write("forge-work/security/probe.json", "{}\n")
+        code, data = self.check("secure", "--report", "forge-work/security.md")
+        self.assertEqual((code, data["checks"][3]["ok"]), (0, True), data)
+        self.assertEqual(data["checks"][3]["what"], "level 4 asks for forge-work/security/probe.json, forge-work/"
+                         "security/authz.json: forge-work/security/authz.json not there, the report says why: - authz.py:"
+                         " no accounts at all, the app has no sign-in")
+        for line in ("- authz.py: no sessions, no passwords in the .env file",  # accounts, but no two sessions
+                     "- X004 no accounts are locked after 50 wrong passwords",  # a finding, not the words
+                     "- authz.py: no accounts at all"):  # the words, but no reason after them
+            with self.subTest(line=line):
+                self.write("forge-work/security.md", self.REPORT % line)
+                self.assertEqual(self.check("secure", "--report", "forge-work/security.md")[0], 1)
 
     def test_check_json_shape(self):
         self.choose("test", 3)
@@ -723,6 +785,44 @@ class CheckTests(Project):
         for check in data["checks"]:
             self.assertEqual(sorted(check), ["ok", "output", "what"])
             self.assertIsInstance(check["output"], list)
+
+    def test_since_a_record_in_forge_work_from_before_the_last_go_does_not_count(self):
+        """The gate gives check the last go (--since). An SBOM, probe or access check from before it, such as the
+        one the build's own /forge-check secure left, says nothing of the app as it is now."""
+        go = "2026-10-27T09:51:44+00:00"
+        at = datetime.datetime.fromisoformat(go).timestamp()
+        self.choose("secure", 4)
+        self.write("forge-work/security.md", self.REPORT % "- composer audit: composer is not installed.")
+        names = ("forge-work/sbom.json", "forge-work/security/probe.json", "forge-work/security/authz.json")
+        for name in names:
+            os.utime(self.write(name, "{}\n"), (at - 60, at - 60))
+        self.assertEqual(self.check("secure", "--report", "forge-work/security.md")[0], 0, "without --since")
+        code, data = self.check("secure", "--report", "forge-work/security.md", "--since", go)
+        self.assertEqual((code, [check["ok"] for check in data["checks"]]), (1, [True, True, False, False]))
+        self.assertEqual(data["checks"][2]["what"], "level 3 asks for a file that holds something (links and "
+                         "node_modules do not count, nor in forge-work/ one older than --since): forge-work/sbom.json")
+        for name in names:
+            os.utime(os.path.join(self.root, *name.split("/")), (at, at))  # the same second passes
+        self.assertEqual(self.check("secure", "--report", "forge-work/security.md", "--since", go)[0], 0)
+
+    def test_since_keeps_the_edge_spec_and_finds_a_new_shot_next_to_an_old_one(self):
+        """The edge spec is the app's own code, not the record of a run: its age does not matter. A shot of a
+        screen that is gone stays in r1/ from an earlier round; the new shots still count."""
+        go = "2026-10-27T09:51:44+00:00"
+        at = datetime.datetime.fromisoformat(go).timestamp()
+        self.choose("test", 4)
+        for name in ("e2e/edge.spec.ts", "forge-work/test/shots/r1/0-gone.png"):
+            os.utime(self.write(name), (at - 60, at - 60))
+        for name in ("forge-work/test/walk.json", "forge-work/test/shots/r1/a.png", "forge-work/test/shots/r2/a.png"):
+            self.write(name)
+        self.assertEqual(self.check("test", "--since", go)[0], 0)
+        os.utime(os.path.join(self.work, "test", "shots", "r2", "a.png"), (at - 60, at - 60))
+        code, data = self.check("test", "--since", go)
+        self.assertEqual(code, 1)
+        self.assertTrue(data["checks"][2]["what"].endswith("than --since): forge-work/test/shots/r2/*.png"), data)
+        out = self.level("check", "test", "--since", go)[1]
+        for line in out.splitlines():  # phasecheck.py shows the first 200 characters of a line
+            self.assertLessEqual(len(line), 200, line)
 
 
 class FindTests(Project):
@@ -736,6 +836,19 @@ class FindTests(Project):
                  "a/*/c.txt": None, "d/*.txt": None, "a/node_modules/*.txt": None, "a/**/n.txt": None, "a": None,
                  "a/x": None, "b.txt": None, "../a/b.txt": None, "a/../a/b.txt": None, "/a/b.txt": None,
                  os.path.join(self.root, "a", "b.txt").replace(os.sep, "/"): None, "nowhere/**/x": None}
+        for pattern, found in cases.items():
+            with self.subTest(pattern=pattern):
+                self.assertEqual(level.find(self.root, pattern.split("/")), found)
+
+    def test_double_star_never_walks_into_a_folder_whose_name_starts_with_a_dot(self):
+        """.git, .next, .venv or a copy of the pack in .claude/skills are not the app's own files. A dot folder
+        named in the pattern itself is still read."""
+        for name in (".claude/skills/e.txt", "a/.next/e.txt", "a/.hidden-file.txt", ".git/x/f.txt"):
+            self.write(name)
+        cases = {"**/e.txt": None, "a/**/e.txt": None, ".claude/skills/e.txt": ".claude/skills/e.txt",
+                 ".claude/*/e.txt": ".claude/skills/e.txt", ".claude/**/e.txt": ".claude/skills/e.txt",
+                 "a/.next/*.txt": "a/.next/e.txt", "**/.hidden-file.txt": "a/.hidden-file.txt", "**/f.txt": None,
+                 ".git/**/f.txt": ".git/x/f.txt"}
         for pattern, found in cases.items():
             with self.subTest(pattern=pattern):
                 self.assertEqual(level.find(self.root, pattern.split("/")), found)
@@ -1020,7 +1133,7 @@ class DocsTests(Project):
             section = self.section(name)
             for row in domain["levels"]:
                 line = re.search(r"(?m)^\| %d \| .*$" % row["level"], section).group(0)
-                for text in row["evidence"] + [row[key] for key in ("evidence_or",) if key in row]:
+                for text in row["evidence"] + list(row.get("evidence_or", {})):
                     self.assertIn("`%s`" % text, line)
                 self.assertEqual("forge-work/" in line or "e2e/" in line, bool(row["evidence"]), line)
             self.assertEqual("floor" in section, "floor" in domain, name)

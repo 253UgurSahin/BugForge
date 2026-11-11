@@ -20,7 +20,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, symlink  # noqa: E402
-from test_phasecheck import HAS_GIT, OLD, PASSING, read, write  # noqa: E402
+from test_phasecheck import HAS_GIT, OLD, PASSING, levels, read, write  # noqa: E402
 
 gate = load("forge", "gate")
 phasecheck = load("forge", "phasecheck")
@@ -296,7 +296,7 @@ class CheckTests(Project):
         self.assertEqual(code, 1)
         self.assertIn("FAIL: the exit checks of plan did not finish within %d seconds." % gate.TIMEOUT, out)
         self.finish("plan")
-        with mock.patch.object(gate, "__file__", os.path.join(self.root, "nowhere", "forge", "gate.py")):
+        with mock.patch.object(gate, "HERE", os.path.join(self.root, "nowhere", "forge")):  # no phasecheck.py there
             code, _, err = self.gate("check", "plan")
         self.assertEqual(code, 1)
         self.assertIn("phasecheck.py", err)
@@ -514,6 +514,51 @@ class SkipTests(Project):
                 self.assertIn("REFUSED: %s cannot be skipped. Only compare, inspect, dashboard, motion may be." % phase, out)
         self.assertEqual(self.state()["phases"], {})
 
+    def test_motion_is_skipped_only_at_look_level_1(self):
+        """W-forge-1: `skip motion --reason 'doe alles zelf'` was recorded at look level 5, so the level was never
+        built. From look level 2 motion builds the level (rules.md section 10): the user first records look 1."""
+        go = {"status": "done", "approved": "go", "at": "2026-10-27T09:51:44+00:00"}
+        phases = dict({phase: go for phase in ("compare", "plan", "design", "build")},
+                      dashboard={"status": "skipped", "reason": "no data screens", "at": "2026-10-27T09:52:00+00:00"})
+        for record, refused in ((None, False), (levels(look=1), False), (levels(look=2), True), (levels(look=5), True)):
+            with self.subTest(record=record):
+                self.write_state({"version": 1, "mode": "idea", "phases": phases, "started": "2026-10-27T09:00:00+00:00"})
+                if record:
+                    write(self.root, "forge-work/levels.json", record)
+                _, out, _ = self.gate("status")
+                self.assertIn("/forge-design motion  (may be skipped, at look level 1 only)", out)
+                self.assertIn("Or, when the user says so, at look level 1 only: ", out)
+                code, out, _ = self.gate("skip", "motion", "--reason", "doe alles zelf")
+                self.assertEqual((code, "motion" in self.state()["phases"]), (1, False) if refused else (0, True), out)
+                if refused:
+                    self.assertIn("REFUSED: look level %s is on record, and from level 2 motion builds the level: it "
+                                  "is not skipped, in auto mode too" % json.loads(record)["look"]["level"], out)
+                    self.assertIn("first level.py set look 1 --said '<their words>'", out)
+
+    def test_motion_is_not_skipped_while_the_look_level_cannot_be_read(self):
+        """V3G1-N3: with look 5 on record and levels.json then damaged, level.py get look exits 2 and prints nothing
+        on stdout, and the skip was recorded. Only no record (exit 1) or look 1 lets it through; a linked record too
+        is never read (level.py)."""
+        go = {"status": "done", "approved": "go", "at": "2026-10-27T09:51:44+00:00"}
+        phases = dict({phase: go for phase in ("compare", "plan", "design", "build")},
+                      dashboard={"status": "skipped", "reason": "no data screens", "at": "2026-10-27T09:52:00+00:00"})
+        self.write_state({"version": 1, "mode": "idea", "phases": phases, "started": "2026-10-27T09:00:00+00:00"})
+        write(self.root, "forge-work/levels.json", levels(look=5)[:-3])  # cut short: no longer JSON
+        code, out, _ = self.gate("skip", "motion", "--reason", "doe alles zelf")
+        self.assertEqual((code, "motion" in self.state()["phases"]), (1, False), out)
+        self.assertIn("REFUSED: level.py get look cannot read the look level, so motion is not skipped (rules.md "
+                      "section 10). Show the user what it says, and change nothing yourself: error: forge-work", out)
+        self.assertIn("is damaged: not what level.py writes", out)
+        outside = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, outside, ignore_errors=True)
+        write(outside, "levels.json", levels(look=1))  # look 1 there, but a link is never read
+        os.remove(os.path.join(self.root, "forge-work", "levels.json"))
+        symlink(self, os.path.join(outside, "levels.json"), os.path.join(self.root, "forge-work", "levels.json"))
+        code, out, _ = self.gate("skip", "motion", "--reason", "doe alles zelf")
+        self.assertEqual((code, "motion" in self.state()["phases"]), (1, False), out)
+        self.assertIn("so motion is not skipped", out)
+        self.assertIn("is a link", out)
+
     def test_skip_refuses_no_reason_out_of_order_and_other_modes(self):
         self.gate("init", "--mode", "clone")
         code, out, _ = self.gate("skip", "compare", "--reason", "go")
@@ -540,11 +585,22 @@ class AutoModeTests(Project):
         code, out, err = self.gate("done", "audit", "--auto", self.ASK)
         self.assertEqual((code, err), (0, ""), out)
         self.assertEqual(self.state()["phases"]["audit"]["approved"], "auto mode: " + self.ASK)
-        self.assertIn("Next: inspect. Auto mode: run /forge-check inspect, fix what fails (rules.md 7)", out)
-        self.assertIn("done inspect --auto", out)
+        # W-forge-9: where it still stops, the checkpoint as a report, and that a new chat asks again (SKILL.md Resume)
+        self.assertIn("Next: inspect. Auto mode, if the user turned it on in this chat (a new chat asks again): run "
+                      "/forge-check inspect, fix what fails, stop where rules.md 7 says (the concept pick, the app's "
+                      "name, a Verdict: FAIL), give the checkpoint as a report, then ", out)
+        self.assertIn("done inspect --auto '<their words>'", out)
         self.assertIn("skip inspect --reason", out)
         self.assertNotIn("wait for their go", out)
-        self.assertIn("Auto mode", self.gate("status")[1])
+        self.assertIn("Auto mode, if the user turned it on in this chat", self.gate("status")[1])
+
+    def test_init_says_what_auto_mode_does_from_the_first_phase(self):
+        """W-forge-9: init printed only the plain next step, although the user may have asked for auto mode."""
+        code, out, _ = self.gate("init", "--mode", "idea")
+        self.assertEqual(code, 0)
+        self.assertIn("wait for their go", out)
+        self.assertIn("Auto mode, when the user asked for it in this chat: once check passes, done --auto '<their "
+                      "words>', the checkpoint as a report, and go on (rules.md 7).", out)
 
     def test_auto_still_needs_passing_checks_words_and_the_order(self):
         self.gate("init", "--mode", "improve")
@@ -588,11 +644,11 @@ class AutoModeTests(Project):
         self.finish("secure")
         code, out, _ = self.gate("done", "secure", "--approved", "go")
         self.assertEqual(code, 0, out)
-        self.assertIn("Next: pack. Auto mode:", out)  # the user's go for secure did not end auto mode
+        self.assertIn("Next: pack. Auto mode, if", out)  # the user's go for secure did not end auto mode
         self.gate("init", "--mode", "idea", "--force")
         self.finish("compare", "plan")
         self.gate("done", "compare", "--auto", self.ASK)
-        self.assertIn("Next: plan. Auto mode:", self.gate("status")[1])
+        self.assertIn("Next: plan. Auto mode, if", self.gate("status")[1])
         _, out, _ = self.gate("done", "plan", "--approved", "go, maar vanaf nu vraag je het weer")
         self.assertIn("Next: design. Run /forge-design", out)
         self.assertNotIn("Auto mode", out)

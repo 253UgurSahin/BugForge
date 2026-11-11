@@ -1,5 +1,5 @@
 {
-  "_about": "The forge levels, read by level.py: the one place for every level name and requirement. One scale, 1 to 5, in four domains; a level includes every level below it. Per domain: about and about_nl (the line above its table), floor (the lowest level inside a forge project, that is where forge-work/state.json exists; left out: no floor) and its five levels. Per level: name (English), nl (Dutch), aliases (other words that mean it, lower case, either language), summary and summary_nl (one line a non-expert understands), includes (what this level adds to the one below), built_with (look only), evidence (glob patterns from the project root, ** is any folders: level.py check wants a file that holds something for each one, of this level and of every level below it), evidence_how (how that evidence comes about) and evidence_or (words: a line of the report that holds them and then the reason, in three words or more, counts in place of this level's evidence).",
+  "_about": "The forge levels, read by level.py: the one place for every level name and requirement. One scale, 1 to 5, in four domains; a level includes every level below it. Per domain: about and about_nl (the line above its table), floor (the lowest level inside a forge project, that is where forge-work/state.json exists; left out: no floor) and its five levels. Per level: name (English), nl (Dutch), aliases (other words that mean it, lower case, either language), summary and summary_nl (one line a non-expert understands), includes (what this level adds to the one below), built_with (look only), evidence (glob patterns from the project root, ** is any folders: level.py check wants a file that holds something for each one, of this level and of every level below it), evidence_how (how that evidence comes about) and evidence_or (words, each with the evidence files it stands in for: a line of the report that holds them and then the reason, in three words or more, counts in place of those files only).",
   "domains": {
     "look": {
       "about": "design, motion and 3D. Each level includes the ones below it.",
@@ -63,7 +63,7 @@
             "cursor-reactive light and depth",
             "3D inside the interface: cards, objects, charts",
             "depth while scrolling",
-            "Three.js installed without asking again (npm, local, never a CDN), loaded lazily and only on the screens that use it",
+            "Three.js installed without asking again (through the app's own package manager, local, never a CDN), loaded lazily and only on the screens that use it",
             "a still poster for weak devices, for no WebGL and for reduced motion"
           ],
           "built_with": "+ Three.js (installed locally), the scene kit",
@@ -133,8 +133,8 @@
           "name": "Showpiece",
           "nl": "Showpiece",
           "aliases": ["show piece", "pronkstuk"],
-          "summary": "+ a dense control-room screen: live readouts, linked panels, one crosshair over all charts, charts with depth.",
-          "summary_nl": "+ een vol controlekamerscherm: live meetwaarden, gekoppelde panelen, een kruisdraad over alle grafieken, met diepte.",
+          "summary": "+ a dense screen in the app's own look: live readouts, linked panels, one crosshair over all charts, charts with depth.",
+          "summary_nl": "+ een vol scherm in de stijl van de app: live meetwaarden, gekoppelde panelen, kruisdraad over alle grafieken, diepte.",
           "includes": [
             "a dense HUD composition",
             "a readout strip",
@@ -171,8 +171,8 @@
           "name": "Quick",
           "nl": "Snel",
           "aliases": ["fast", "vlug", "smoke", "minimal", "minimaal", "minimum"],
-          "summary": "The app starts, the main flow works once, no error in the browser console. Takes minutes.",
-          "summary_nl": "De app start, de belangrijkste flow werkt een keer, geen fout in de browserconsole. Duurt minuten.",
+          "summary": "The app starts, the main flow works once, no console error. Minutes. Only on its own, never inside a forge project.",
+          "summary_nl": "De app start, de hoofdflow werkt een keer, geen consolefout. Duurt minuten. Alleen los, nooit binnen een forge-project.",
           "includes": ["the app starts", "the main flow works once", "no console error", "minutes"],
           "evidence": []
         },
@@ -215,7 +215,7 @@
             "offline and PWA",
             "a keyboard-only pass"
           ],
-          "evidence": ["e2e/**/edge*.spec.*", "forge-work/test/shots/r1/*.png", "forge-work/test/shots/r2/*.png"],
+          "evidence": ["**/edge.spec.*", "forge-work/test/shots/r1/*.png", "forge-work/test/shots/r2/*.png"],
           "evidence_how": "Write the edge spec from forge-check's edge example, one group per form. Walk twice: FORGE_ROUND=r1, and FORGE_ROUND=r2 after the fixes. Each round keeps its own screenshots."
         },
         {
@@ -294,8 +294,9 @@
             "the container checks"
           ],
           "evidence": ["forge-work/security/probe.json", "forge-work/security/authz.json"],
-          "evidence_how": "Run probe.py and authz.py with --json on the user's own running app, and save what each prints in its file.",
-          "evidence_or": "no running app"
+          "evidence_how": "Run probe.py and authz.py with --json on the user's own running app and save what each prints in its file (> file, never 2>&1): a run cut short prints nothing there.",
+          "evidence_or": {"no running app": ["forge-work/security/probe.json", "forge-work/security/authz.json"],
+                          "no accounts at all": ["forge-work/security/authz.json"]}
         },
         {
           "level": 5,
@@ -312,7 +313,8 @@
             "a licence review",
             "each finding with the attack told as a story"
           ],
-          "evidence": []
+          "evidence": ["forge-work/security/threats.md", "forge-work/security/access.md"],
+          "evidence_how": "Do the level 5 review of forge-check's frameworks.md: it writes the threat model per entry point in threats.md and the access matrix in access.md."
         }
       ]
     }

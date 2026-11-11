@@ -1,6 +1,7 @@
 """Tests for forge/workcheck.py, run on its own: the feature list as recon, plan and build need it, tokens that
-are still the template's, the end-to-end specs, the screenshots forge-check diff compared and the app's new name.
-The gate's use of each is tested in test_phasecheck.py. Every test works in its own folder."""
+are still the template's, the component specs, the end-to-end specs, the screenshots forge-check diff compared
+and the app's new name. The gate's use of each is tested in test_phasecheck.py; the look items of an improve
+run are lookcheck.py's (test_lookcheck.py). Every test works in its own folder."""
 
 import contextlib
 import io
@@ -13,7 +14,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252  # noqa: E402
-from test_phasecheck import FEATURES, SPEC, TOKENS, read, write  # noqa: E402
+from test_phasecheck import COMPONENTS, FEATURES, SPEC, TOKENS, read, write  # noqa: E402
 
 workcheck = load("forge", "workcheck")
 SCRIPT = os.path.join(ROOT, "forge", "workcheck.py")
@@ -127,6 +128,35 @@ class NamedTests(Work):
                                                     "has it"))
         write(self.root, "brand.json", '{"name": " ", "avoid": ["Groeiwijs"]}')
         self.assertEqual(self.check("named", "brand.json")[0], 1)
+
+
+class ComponentsTests(Work):
+    """T33: a components.md whose ## Components held one line ('Button: see the app.') passed the design gate. The
+    specs /forge-build builds from are a block per component (forge-design design Step 5), each with its states."""
+
+    def test_a_block_per_component(self):
+        write(self.root, "components.md", COMPONENTS)
+        code, check, _ = self.check("components", "components.md")
+        self.assertEqual((code, check["what"]), (0, "components.md: ## Components holds 1 component block(s), each "
+                                                    "with its states"))
+        for blocks in ("\n- **Card**: variants plain, raised\n  - **States:** default, hover\n",
+                       "\nToast\n  states   enter, rest, leave\n\nDialog\n  states   open, closed\n"):
+            write(self.root, "components.md", COMPONENTS + blocks)
+            self.assertEqual(self.check("components", "components.md")[0], 0, blocks)
+        self.assertIn("3 component block(s)", self.check("components", "components.md")[1]["what"])
+
+    def test_a_line_about_them_a_comment_or_another_section_is_no_block(self):
+        template = read(os.path.join(ROOT, "forge-design", "components.md"))
+        for text in (template, template + "\nButton: see the app.\n", template + "\n<!-- Button\n  states  hover -->\n",
+                     template + "\n  states:\n", template.replace("## Components", "## Theme notes\n  states  hover\n\n"
+                                                                   "## Components")):
+            with self.subTest(text=text[-60:]):
+                write(self.root, "components.md", text)
+                code, check, _ = self.check("components", "components.md")
+                self.assertEqual((code, check["what"]), (1, "components.md: ## Components holds no component block "
+                                                            "with a states line"))
+                self.assertIn("forge-design design Step 5", check["output"][0])
+        self.assertEqual(self.check("components", "nowhere.md")[0], 2)
 
 
 class CommandLineTests(Work):
