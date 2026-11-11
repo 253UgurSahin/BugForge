@@ -174,7 +174,31 @@ function hatchPattern(ctx, svg, scale) {
   return fill;
 }
 
-export function chartPicture(svg, theme, scale = 2, skip = ".c-pencil") {
+/* the paper's grain, the page's own (--texture-grain, an SVG noise in a token), laid over the sheet at
+   the size it has on the page; nothing when the theme has none */
+function grainOver(canvas, tokens, scale) {
+  const url = /url\(\s*["']?(data:[^"')]+)["']?\s*\)/.exec(tokens["--texture-grain"] || "");
+  if (!url) return Promise.resolve(canvas);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const ctx = canvas.getContext("2d");
+      const pattern = ctx.createPattern(img, "repeat");
+      if (pattern && pattern.setTransform) pattern.setTransform(new DOMMatrix().scale(scale));
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = pattern;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      resolve(canvas);
+    };
+    img.onerror = () => resolve(canvas);
+    img.src = url[1];
+  });
+}
+
+export async function chartPicture(svg, theme, scale = 2, skip = ".c-pencil") {
   const tokens = themeTokens()[theme] || {};
   const host = document.createElement("div");
   host.setAttribute("aria-hidden", "true");
@@ -204,5 +228,5 @@ export function chartPicture(svg, theme, scale = 2, skip = ".c-pencil") {
   } finally {
     host.remove();
   }
-  return canvas;
+  return grainOver(canvas, tokens, scale);
 }

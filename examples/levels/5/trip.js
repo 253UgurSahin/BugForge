@@ -256,9 +256,9 @@ if (section && steps.length) {
     await pause();
     const svg = section.querySelector("svg.trip__poster");
     const scale = coarse ? 1.6 : 2.2;
-    const day = paper.chartPicture(svg, "day", scale);
+    const day = await paper.chartPicture(svg, "day", scale);
     await pause();
-    const night = paper.chartPicture(svg, "night", scale);
+    const night = await paper.chartPicture(svg, "night", scale);
     await pause();
     return {
       mount: (el, options) => journey.mount(el, {

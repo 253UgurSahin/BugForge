@@ -60,16 +60,55 @@ float paperY(vec2 uv) {
 vec2 uvOfWorld(vec2 xz) { return vec2(xz.x / ${SHEET.w.toFixed(1)} + 0.5, xz.y / ${SHEET.d.toFixed(1)} + 0.5); }
 `;
 
+// The paper: the relief, its light and its shadows are worked out per vertex (the mesh is fine
+// enough that the light reads smooth), so each pixel only reads the printed sheet and draws the
+// pencil and the window band over it.
+const lightGLSL = `
+uniform vec3 uLampPos;
+uniform float uLampReach;
+// how much of the lamp's light reaches a point past the relief: a few steps toward the lamp
+float lampShadow(vec3 p, vec3 L) {
+  float lit = 1.0, t = 0.03;
+  for (int i = 0; i < 6; i++) {
+    vec3 q = p + L * t;
+    vec2 uv = uvOfWorld(q.xz);
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) break;
+    lit = min(lit, clamp((q.y - paperY(uv)) / (0.06 * t) + 0.35, 0.0, 1.0));
+    t *= 1.85;
+  }
+  return lit;
+}
+// the pool of the lamp: a wide soft cone round the point under it
+float poolAt(vec3 world) {
+  float across = length(world.xz - uLampPos.xz) / uLampReach;
+  return smoothstep(1.9, 0.2, across) / (1.0 + across * across * 1.6);
+}
+`;
+
 const paperVertex = `
 ${reliefGLSL}
+${lightGLSL}
 varying vec2 vUv;
 varying vec3 vWorld;
+varying vec4 vLight;              // the lamp by day, the room light, the lamp by night, the pool
 void main() {
   vUv = vec2(uv.x, 1.0 - uv.y);                   // chart uv: y runs south
+  vec4 bed = bedAt(vUv);
+  float edge = sheetEdge(vUv);
   vec3 p = position;
-  p.y = paperY(vUv);
+  p.y = shown(bed.x) * VS * uRise * edge + fold(vUv);
   vec4 world = modelMatrix * vec4(p, 1.0);
   vWorld = world.xyz;
+  // the slope of the paper as drawn, so the light follows the relief
+  float k = VS * 100.0 * uRise * edge * shownSlope(bed.x);
+  vec3 N = normalize(vec3(-(bed.y * k + foldSlope(vUv) * 100.0), 1.0, -bed.z * k));
+  vec3 L = normalize(uLampPos - world.xyz);
+  float pool = poolAt(world.xyz);
+  float facing = max(dot(N, L), 0.0);
+  float shadow = lampShadow(world.xyz + N * 0.004, L);
+  float room = 0.82 + 0.18 * dot(N, normalize(vec3(-0.55, 1.0, -0.6)));
+  vLight = vec4(pool * mix(0.55, 1.0, facing) * mix(0.45, 1.0, shadow), room,
+                pool * mix(0.4, 1.0, facing) * mix(0.25, 1.0, shadow), pool);
   gl_Position = projectionMatrix * viewMatrix * world;
 }`;
 
@@ -78,12 +117,8 @@ ${stageUniforms}
 ${common}
 ${simplex2D}
 ${grain}
-${line}
-${reliefGLSL}
 uniform sampler2D uDay;
 uniform sampler2D uNight;
-uniform vec3 uLampPos;
-uniform float uLampReach;
 uniform float uNightMix;
 uniform vec4 uCourse[8];          // xy: chart point, z: distance along the course to it
 uniform int uCourseN;
@@ -97,6 +132,7 @@ uniform vec3 uNightBg, uNightLamp, uNightLampMid, uNightAccent;
 uniform vec3 uPencil;
 varying vec2 vUv;
 varying vec3 vWorld;
+varying vec4 vLight;
 
 // distance (chart units) to the course, and how far along it the nearest point lies
 vec2 course(vec2 c) {
@@ -111,105 +147,73 @@ vec2 course(vec2 c) {
   return vec2(best, along);
 }
 
-// how much of the lamp's light reaches here past the relief (a few steps towards the lamp)
-float lampShadow(vec3 p, vec3 L) {
-  float lit = 1.0, t = 0.03;
-  for (int i = 0; i < 6; i++) {
-    vec3 q = p + L * t;
-    vec2 uv = uvOfWorld(q.xz);
-    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) break;
-    float y = paperY(uv);
-    lit = min(lit, clamp((q.y - y) / (0.06 * t) + 0.35, 0.0, 1.0));
-    t *= 1.85;
-  }
-  return lit;
-}
-
 void main() {
   vec2 uv = vUv;
   vec2 chart = uv * vec2(1000.0, 900.0);
-  vec4 bed = bedAt(uv);
-  float edge = sheetEdge(uv);
-  // the slope of the paper as drawn, so the light follows the relief
-  float k = VS * 100.0 * uRise * edge * shownSlope(bed.x);
-  vec3 N = normalize(vec3(-(bed.y * k + foldSlope(uv) * 100.0), 1.0, -bed.z * k));
-
-  // the lamp: a point over the table. Its pool is a wide soft cone round the point under it.
-  vec3 toLamp = uLampPos - vWorld;
-  float dist = length(toLamp);
-  vec3 L = toLamp / dist;
-  float across = length(vWorld.xz - uLampPos.xz) / uLampReach;
-  float pool = 1.0 / (1.0 + across * across * 1.6);
-  pool *= smoothstep(1.9, 0.2, across);
-  float facing = max(dot(N, L), 0.0);
-  float shadow = lampShadow(vWorld + N * 0.004, L);
-  float lamp = pool * mix(0.55, 1.0, facing) * mix(0.45, 1.0, shadow);
-  // the room: soft light from the upper left, so the relief reads outside the pool as well
-  float room = 0.82 + 0.18 * dot(N, normalize(vec3(-0.55, 1.0, -0.6)));
-
+  float lamp = vLight.x, room = vLight.y, glow = vLight.z, pool = vLight.w;
+  vec3 color = vec3(0.0);
   // ---- day: the printed sheet in room light, brighter and warmer in the pool
-  vec3 day = texture(uDay, uv).rgb;
-  float fibre = snoise(chart * vec2(0.9, 0.25)) * 0.5 + snoise(chart * 0.07) * 0.5;
-  day *= 1.0 + 0.018 * fibre;
-  vec3 dayLit = day * (room * 0.93 + 0.0) + day * uLamp * 0.16 * lamp - vec3(0.035) * (1.0 - pool) * day;
+  if (uNightMix < 0.999) {
+    vec3 day = texture(uDay, uv).rgb;
+    color = day * (0.86 * room + 0.2 * lamp * uLamp) * (1.0 - 0.05 * (1.0 - pool));
+  }
   // ---- night: ink on a sheet that glows where the lamp falls, as on the page at night
-  vec4 night = texture(uNight, uv);               // premultiplied: the chart's dark inks over nothing
-  float glow = pool * mix(0.4, 1.0, facing) * mix(0.25, 1.0, shadow);
-  vec3 sheet = mix(uNightBg, uNightLampMid, smoothstep(0.0, 0.55, glow));
-  sheet = mix(sheet, uNightLamp, smoothstep(0.35, 1.0, glow));
-  sheet *= 0.92 + 0.08 * room;
-  vec3 nightLit = sheet * (1.0 - night.a) + night.rgb * (0.35 + 0.65 * glow);
-  vec3 color = mix(dayLit, nightLit, uNightMix);
+  if (uNightMix > 0.001) {
+    vec4 night = texture(uNight, uv);             // premultiplied: the chart's dark inks over nothing
+    vec3 sheet = mix(uNightBg, uNightLampMid, smoothstep(0.0, 0.55, glow));
+    sheet = mix(sheet, uNightLamp, smoothstep(0.35, 1.0, glow));
+    sheet *= 0.92 + 0.08 * room;
+    color = mix(color, sheet * (1.0 - night.a) + night.rgb * (0.35 + 0.65 * glow), uNightMix);
+  }
 
   // ---- the pencil line and its fixes: graphite, a little broken by the grain of the paper
   vec2 c = course(chart);
-  float drawn = step(c.y, uReach + 0.5);
-  float pencilW = 1.05;
-  float pencil = (1.0 - smoothstep(pencilW - 0.6 * fwidth(c.x) - 0.15, pencilW + 0.6 * fwidth(c.x) + 0.15, c.x)) * drawn;
-  pencil *= 0.78 + 0.22 * smoothstep(-0.4, 0.6, snoise(chart * 1.7));
-  float fixes = 0.0;
-  for (int i = 0; i < 3; i++) {
-    if (i >= uCourseN - 1) break;
-    vec2 f = uCourse[i].xy;
-    float r = length(chart - f);
-    float ring = 1.0 - smoothstep(0.85, 0.85 + fwidth(r) + 0.2, abs(r - 6.2));
-    float dot_ = 1.0 - smoothstep(1.4, 1.4 + fwidth(r) + 0.2, r);
-    fixes = max(fixes, max(ring, dot_) * step(uCourse[i].z, uReach + 1.0));
-  }
-  vec3 graphite = mix(uPencil, vec3(0.02), uNightMix);
-  color = mix(color, graphite, max(pencil, fixes) * mix(0.85, 0.95, uNightMix));
-
-  // ---- the safe window: a band of hatched light along the course, from the casting off to where
-  // the boat is now (or to where the window closes), its solid edge where the boat is
-  float corridor = 1.0 - smoothstep(15.0, 21.0, c.x);
-  float sailed = smoothstep(uWinFrom - 2.0, uWinFrom + 2.0, c.y) * (1.0 - smoothstep(min(uBoat, uWinTo) - 1.5, min(uBoat, uWinTo) + 1.5, c.y));
-  float band = corridor * sailed * uHatchOn;
-  vec2 dir = vec2(cos(radians(38.0)), sin(radians(38.0)));
-  float stripe = dot(chart, dir) / 5.0;
-  float hatch = 1.0 - smoothstep(0.17 - fwidth(stripe), 0.17 + fwidth(stripe), abs(fract(stripe) - 0.5) * 2.0 - 0.66);
-  float bar = (1.0 - smoothstep(1.2, 1.2 + fwidth(c.y) * 1.5, abs(c.y - min(uBoat, uWinTo)))) * corridor * uHatchOn
-            * step(uWinFrom + 1.0, uBoat);
-  vec3 winDay = uWindow, winNight = uNightAccent;
-  vec3 win = mix(winDay, winNight, uNightMix);
-  float washA = band * mix(0.07, 0.14, uNightMix);
-  float lineA = band * hatch * mix(0.62, 0.8, uNightMix);
-  color = mix(color, win, washA);
-  color = mix(color, win, lineA);
-  color = mix(color, win, bar * 0.95);
-  // the boat: a small solid diamond at the head of the band, in the window's colour
-  vec2 boatAt = vec2(0.0);
-  for (int i = 0; i < 7; i++) {
-    if (i >= uCourseN - 1) break;
-    if (uBoat >= uCourse[i].z && uBoat <= uCourse[i + 1].z) {
-      float t = (uBoat - uCourse[i].z) / max(uCourse[i + 1].z - uCourse[i].z, 1e-3);
-      boatAt = mix(uCourse[i].xy, uCourse[i + 1].xy, t);
+  float fw = fwidth(c.x);
+  if (c.x < 30.0) {
+    float pencil = (1.0 - smoothstep(1.05 - 0.6 * fw - 0.15, 1.05 + 0.6 * fw + 0.15, c.x)) * step(c.y, uReach + 0.5);
+    pencil *= 0.78 + 0.22 * smoothstep(-0.4, 0.6, snoise(chart * 1.7));
+    float fixes = 0.0;
+    for (int i = 0; i < 3; i++) {
+      if (i >= uCourseN - 1) break;
+      float r = length(chart - uCourse[i].xy), fr = fwidth(r);
+      float ring = 1.0 - smoothstep(0.85, 0.85 + fr + 0.2, abs(r - 6.2));
+      float spot = 1.0 - smoothstep(1.4, 1.4 + fr + 0.2, r);
+      fixes = max(fixes, max(ring, spot) * step(uCourse[i].z, uReach + 1.0));
     }
-  }
-  vec2 rel = abs(chart - boatAt);
-  float diamond = 1.0 - smoothstep(4.2, 4.2 + fwidth(rel.x + rel.y) + 0.3, rel.x + rel.y * 1.15);
-  color = mix(color, win, diamond * uHatchOn * step(uWinFrom + 1.0, uBoat));
+    vec3 graphite = mix(uPencil, vec3(0.02), uNightMix);
+    color = mix(color, graphite, max(pencil, fixes) * mix(0.85, 0.95, uNightMix));
 
-  // the margin round the neat line: the paper continues a little past the print
+    // ---- the safe window: a band of hatched light along the course, from the casting off to where
+    // the boat is now (or to where the window closes), its solid edge where the boat is
+    float head = min(uBoat, uWinTo);
+    float corridor = 1.0 - smoothstep(15.0, 21.0, c.x);
+    float sailed = smoothstep(uWinFrom - 2.0, uWinFrom + 2.0, c.y) * (1.0 - smoothstep(head - 1.5, head + 1.5, c.y));
+    float band = corridor * sailed * uHatchOn;
+    float stripe = dot(chart, vec2(0.78801075, 0.61566148)) / 5.0;   // 38 degrees, every 5 units
+    float fs = fwidth(stripe);
+    float hatch = 1.0 - smoothstep(0.17 - fs, 0.17 + fs, abs(fract(stripe) - 0.5) * 2.0 - 0.66);
+    float moving = step(uWinFrom + 1.0, uBoat);
+    float bar = (1.0 - smoothstep(1.2, 1.2 + fwidth(c.y) * 1.5, abs(c.y - head))) * corridor * uHatchOn * moving;
+    vec3 win = mix(uWindow, uNightAccent, uNightMix);
+    color = mix(color, win, band * mix(0.07, 0.14, uNightMix));
+    color = mix(color, win, band * hatch * mix(0.62, 0.8, uNightMix));
+    color = mix(color, win, bar * 0.95);
+  }
+  // the boat: a small solid diamond at the head of the band, in the window's colour
+  if (uHatchOn > 0.01 && uBoat > uWinFrom + 1.0) {
+    vec2 boatAt = uCourse[0].xy;
+    for (int i = 0; i < 7; i++) {
+      if (i >= uCourseN - 1) break;
+      if (uBoat >= uCourse[i].z && uBoat <= uCourse[i + 1].z) {
+        float t = (uBoat - uCourse[i].z) / max(uCourse[i + 1].z - uCourse[i].z, 1e-3);
+        boatAt = mix(uCourse[i].xy, uCourse[i + 1].xy, t);
+      }
+    }
+    vec2 rel = abs(chart - boatAt);
+    float diamond = 1.0 - smoothstep(4.2, 4.2 + fwidth(rel.x + rel.y) + 0.3, rel.x + rel.y * 1.15);
+    color = mix(color, mix(uWindow, uNightAccent, uNightMix), diamond * uHatchOn);
+  }
+
   gl_FragColor = vec4(color, 1.0);
   #include <colorspace_fragment>
   gl_FragColor.rgb += dither(gl_FragCoord.xy);
@@ -232,9 +236,8 @@ ${simplex2D}
 ${grain}
 ${line}
 ${reliefGLSL}
+${lightGLSL}
 uniform float uLevel;             // metres above datum: the tide now
-uniform vec3 uLampPos;
-uniform float uLampReach;
 uniform float uNightMix;
 uniform vec2 uWind;               // where the wind blows to (chart xy, unit) times its strength 0..1
 uniform float uRipple;            // time, run at the wind's pace
@@ -336,7 +339,6 @@ function pictureTexture(canvas, renderer, premultiplied) {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.premultiplyAlpha = Boolean(premultiplied);
-  texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.generateMipmaps = true;
@@ -465,10 +467,14 @@ export function mount(container, options = {}) {
   const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3(), ndc = new THREE.Vector2();
   const onCamera = [];                             // functions that need the camera of this frame
 
+  // the mesh carries the relief and its light, so its density follows the quality; so does the
+  // sharpness of the printed sheet at a slant (anisotropic filtering)
   stage.onQuality((quality) => {
-    const [sx, sz] = quality.pick([150, 135], [240, 216], [340, 306]);
+    const [sx, sz] = quality.pick([120, 108], [240, 216], [340, 306]);
     sheet.geometry.dispose();
     sheet.geometry = new THREE.PlaneGeometry(SHEET.w, SHEET.d, sx, sz).rotateX(-Math.PI / 2);
+    const aniso = Math.min(quality.pick(1, 4, 8), stage.renderer.capabilities.getMaxAnisotropy());
+    for (const t of [dayTex, nightTex]) { if (t.anisotropy !== aniso) { t.anisotropy = aniso; t.needsUpdate = true; } }
   });
 
   stage.onTokens((tokens) => { want.dark = tokens.dark; });
@@ -585,6 +591,7 @@ export function mount(container, options = {}) {
       wind.destroy();
     },
   });
+  if (/debug/.test(location.hash)) window.__table = { THREE, stage, paper, waterMat, water, sheet, dayTex, nightTex, points, windTarget, rig };   // DEBUG-REMOVE
   handle.courseLength = course[course.length - 1][2];
   handle.speed = SPEED;
   return handle;
