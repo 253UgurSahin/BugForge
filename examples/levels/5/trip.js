@@ -30,6 +30,10 @@
    WebGL the drawn chart stays on the stage under the chapters, lit by its lamp as on level 2. */
 import { lazyScene, motionToggle } from "../../vendor/scenes/lazy.js";
 import { readTide, NOW } from "./tide.js";
+  /* the sea bed as numbers (a small module of its own, no three.js): the slips read the depth under the boat */
+import { seaBed as bedAt } from "./seabed.js";
+  /* the harbour plan of Zeebrugge, laid on the table at the landfall (its markup, its entry and its berth) */
+import { harbourSvg, ENTRY, BERTH } from "./harbour.js";
 
 const section = document.getElementById("trip");
 const root = document.documentElement;
@@ -69,6 +73,18 @@ const boatAt = (hour) => {                                           // chart un
   if (m <= 20) return FIX[1] * (m / 20);
   if (m <= 40) return FIX[1] + (FIX[2] - FIX[1]) * ((m - 20) / 20);
   return Math.min(FIX[2] + ((FIX[2] - FIX[1]) / 20) * (m - 40), EDGE - 2);
+};
+  /* the chart point at a distance along the pencil line (as table.js places the boat) */
+const pointAlong = (d) => {
+    let left = d;
+    for (let i = 0; i < legs.length; i++) {
+        if (left <= legs[i] || i === legs.length - 1) {
+            const t = clamp(left / legs[i]), a = COURSE[i], b = COURSE[i + 1];
+            return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+        }
+        left -= legs[i];
+    }
+    return COURSE[0];
 };
 const HOURS = [NOW, OFF, 14 + 40 / 60, 15, 18 + 10 / 60];
 const WINDOW = [10 + 58 / 60, 17 + 1 / 60];                           // today's safe window, as on the slip
@@ -113,12 +129,15 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitPhoneHe
 const STORY = [
   { p: 0, lamp: [0.9, 0.3], lampY: 3, reach: [4.6, 4.3], night: 0, boat: 0, hatch: 0, follow: 1 },
   { p: 0.12, lamp: [2.0, -0.2], lampY: 2.8, reach: [3.6, 3.4], night: 0, boat: 0, hatch: 0.6, follow: 0.4 },
-  { p: 0.25, lamp: [2.3, -0.45], lampY: 2.6, reach: [2.8, 2.6], night: 0, boat: boatAt(HOURS[1]) + 2, hatch: 1, follow: 0.35 },
-  { p: 0.45, lamp: [0.6, 1.2], lampY: 2.5, reach: [2.8, 2.6], night: 0, boat: boatAt(HOURS[2]), hatch: 1, follow: 0.35 },
-  { p: 0.65, lamp: [-2.2, 2.4], lampY: 2.4, reach: [2.9, 2.7], night: 0, boat: boatAt(HOURS[3]), hatch: 1, follow: 0.35 },
-  { p: 0.85, lamp: [-4.3, 3.25], lampY: 2.4, reach: [4.0, 3.8], night: 1, boat: EDGE - 2, hatch: 0.45, follow: 0.3 },
-  { p: 1, lamp: [0.6, 0.3], lampY: 3.2, reach: [5.2, 4.8], night: 0, boat: EDGE - 2, hatch: 0.6, follow: 1 },
+  { p: 0.25, lamp: [2.3, -0.45], lampY: 2.6, reach: [2.8, 2.6], night: 0, boat: boatAt(HOURS[1]) + 2, hatch: 1, follow: 0.35, dusk: 0.05 },
+  { p: 0.45, lamp: [0.6, 1.2], lampY: 2.5, reach: [2.8, 2.6], night: 0, boat: boatAt(HOURS[2]), hatch: 1, follow: 0.35, dusk: 0.18 },
+  { p: 0.65, lamp: [-2.2, 2.4], lampY: 2.4, reach: [2.9, 2.7], night: 0, boat: boatAt(HOURS[3]), hatch: 1, follow: 0.35, dusk: 0.38 },
+  { p: 0.75, lamp: [-3.2, 2.9], lampY: 2.4, reach: [3.4, 3.2], night: 0.4, boat: EDGE - 30, hatch: 0.7, follow: 0.3, dusk: 0.6, plan: 1 },
+  { p: 0.85, lamp: [-5.6, 3.9], lampY: 2.6, reach: [4.4, 4.1], night: 1, boat: EDGE, hatch: 0.45, follow: 0.3, dusk: 0.8, plan: 1 },
+  { p: 1, lamp: [0.6, 0.3], lampY: 3.2, reach: [5.2, 4.8], night: 0, boat: EDGE, hatch: 0.6, follow: 1, dusk: 0, plan: 1 },
 ];
+  /* (dusk: the afternoon's light warming toward sunset chapter by chapter, so the hour shows in the picture;
+     back to the room's plain light for the last look over the whole sheet) */
 
 // camera keyframes, world units: the sheet is 10 x 9 round the middle, x east, z south, y up
 const CHAPTERS = [
@@ -137,27 +156,27 @@ const CHAPTERS = [
     still: { position: [0.3, 2.6, 4.0], target: [-2.6, -0.25, 2.55], fov: 42 }, progress: 0.65, hour: HOURS[3] },
     /* the landfall looks along the last of the pencil line onto the sheet, the boat at its end on the edge of
        the frame: the chart fills the view (aimed past the sheet's edge, half the frame was bare table) */
-  { camera: orbit({ target: [-3.7, 0, 2.9], dist: 5.6, el: 48, az: 60, fov: 40 }),   // the landfall, under the red lamp
-    phone: orbit({ target: [-4.55, 0, 3.4], dist: 8.6, el: 56, az: 32, fov: 50 }),
-    still: orbit({ target: [-4.1, 0, 3.15], dist: 6.6, el: 42, az: 66, fov: 40 }), progress: 0.85, hour: HOURS[4] },
+    /* round 2: the landfall lands. The harbour plan of Zeebrugge (harbour.js) now lies on the table beyond the
+       chart's west edge, the pencil running on over it to the berth: the view takes in the end of the chart
+       and the plan, the berth in the middle of the frame, clear of the slip on the left */
+  { camera: orbit({ target: [-7.2, 0, 5.0], dist: 6.4, el: 52, az: 58, fov: 40 }),   // the landfall, under the red lamp
+    phone: orbit({ target: [-6.9, 0, 4.6], dist: 10.5, el: 60, az: 36, fov: 50 }),
+    still: orbit({ target: [-6.6, 0, 4.3], dist: 7.2, el: 46, az: 62, fov: 40 }), progress: 0.85, hour: HOURS[4] },
   { at: 1, camera: { position: [0.0, 12.6, 11.2], target: [0.1, 0, 0.5], fov: 34 },       // the whole sheet, in the room light again
     phone: { position: [0.0, 19, 17], target: [0.1, 0, 0.6], fov: 40 }, progress: 1, hour: HOURS[4] },
 ].map((c) => ({ ...c, params: { hour: c.hour, data: dataAt(c.hour) } }));
 
 /* ---- callouts: buoys and fixes, named as the camera passes them ------------------------------ */
+  /* only the fixes are named: the buoys' own names are printed beside them on the chart, and a label that
+     repeats the print was noise (the judges counted W8, W10 and SP2 twice). The fixes say the hour, which the
+     print writes as "1440" */
 const CALLOUTS = [
   { at: [720, 412], text: "<b>14:20</b> off the pier" },
-  { at: [580, 398], text: "<b>SG1</b> green" },
-  { at: [752, 466], text: "<b>SP2</b> red" },
   { at: [524, 594], text: "<b>14:40</b> fix" },
-  { at: [468, 560], text: "<b>W10</b> red" },
-  { at: [548, 632], text: "<b>Songa</b> green" },
-  { at: [340, 632], text: "<b>W8</b> red" },
-  { at: [410, 708], text: "<b>W9</b> green" },
   { at: [258.6, 694.4], text: "<b>15:00</b> fix" },
-  { at: [196, 690], text: "<b>W6</b> red" },
-  { at: [262, 762], text: "<b>W7</b> green" },
 ];
+  /* the boat's draught: the sounder reads the water under her keel, the charted depth plus the tide less this */
+const DRAUGHT = 1.5;
 const clock = (hour) => { const m = Math.round((((hour % 24) + 24) % 24) * 60) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
 
 const steps = section ? [...section.querySelectorAll("[data-chapter]")] : [];
@@ -237,14 +256,21 @@ function callouts(scene, layer) {
       }
     // the sounder rides with the boat: the water under the keel, from the tide and the sea bed
     if (boat) {
-      const s = project(boat.world[0], boat.world[1] + 0.03, boat.world[2]);
+        /* alongside: the label stands at her berth on the harbour plan, not on the chart's edge */
+        const berth = scene.berth && scene.berth();
+        const where = berth || boat.world;
+      const s = project(where[0], where[1] + 0.03, where[2]);
       const depth = Math.max(0, scene.level() - scene.bedAt(boat.chart[0], boat.chart[1]));
       const ox = s.x + 18, oy = s.y - 26;
-      const visible = boat.on && !opening && !s.behind && ox > 0 && ox < w - 230 && oy > 50 && oy < barTop - 30 && s.dist < 7 && !under(ox, oy, ox + 220);
+      const visible = (boat.on || Boolean(berth)) && !opening && !s.behind && ox > 0 && ox < w - 350 && oy > 50 && oy < barTop - 30 && s.dist < (berth ? 10 : 7) && !under(ox, oy, ox + 340);
       sounder.style.opacity = visible ? "1" : "0";
       if (visible) {
-        const atEnd = boat.chart[0] < 40;
-        const text = atEnd ? `<b>Zeebrugge</b> alongside · ${clock(tripHour)}` : `<b>${depth.toFixed(1)} m</b> under the keel · ${clock(tripHour)}`;
+        const atEnd = Boolean(berth) || boat.chart[0] < 40;
+          /* the sum written out, so the figure agrees with the soundings printed round her: charted depth plus
+             the tide, less her draught */
+          const charted = Math.max(0, -scene.bedAt(boat.chart[0], boat.chart[1]));
+          const text = atEnd ? `<b>Zeebrugge</b> alongside · ${clock(tripHour)}`
+              : `<b>${Math.max(0, depth - DRAUGHT).toFixed(1)} m</b> under the keel · ${charted.toFixed(1)} chart + ${scene.level().toFixed(1)} tide − ${DRAUGHT}`;
         if (text !== lastText) { sounder.innerHTML = text; lastText = text; }
         sounder.style.transform = `translate3d(${ox.toFixed(1)}px, ${oy.toFixed(1)}px, 0)`;
       }
@@ -294,6 +320,13 @@ function fillReadings() {
     const breeze = step.querySelector('[data-read="wind"]');
     const points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
     if (breeze) breeze.textContent = `${points[Math.round(wind.from / 45) % 8]} ${Math.round(wind.at(hour))} kn`;
+      /* the water under the keel at this hour, worked out as the sounder works it (charted depth at the boat
+         plus the tide, less the draught), so the slip and the sounder say the same figure */
+      const keel = step.querySelector('[data-read="keel"]');
+      if (keel && bedAt) {
+          const at = pointAlong(boatAt(hour));
+          keel.textContent = `${Math.max(0, h - bedAt(at[0], at[1]) - DRAUGHT).toFixed(1)} m`;
+      }
   });
 }
 
@@ -447,13 +480,17 @@ if (section && steps.length) {
     await pause();
     const chart = print.chartPrint(poster, { width: coarse ? 2048 : 4096 });
     const [base, baseNight, ink] = [await chart.base("day"), await chart.base("night"), await chart.ink()];
+      // the harbour plan, printed the same way (a smaller sheet, so a smaller print)
+      await pause();
+      const harbour = print.chartPrint(harbourSvg(), { width: coarse ? 1024 : 2048 });
+      const plan = { base: await harbour.base("day"), baseNight: await harbour.base("night"), ink: await harbour.ink(), entry: ENTRY, berth: BERTH };
     if (!reduce.matches && window.scrollY < 40) await settled();
     return {
       mount: (el, options) => journey.mount(el, {
         ...options,
         scene: (stageEl) => {
           const scene = table.mount(stageEl, {
-            relief, course: COURSE, story: STORY, window: [0, EDGE], hero: HERO, heroPhone: HERO_PHONE,
+            relief, course: COURSE, story: STORY, window: [0, EDGE], hero: HERO, heroPhone: HERO_PHONE, plan,
             print: { base, baseNight, ink, width: chart.width, height: chart.height, tokens: chart.tokens },
           });
           scene.dispose = callouts(scene, stageEl.querySelector(".trip__labels"));

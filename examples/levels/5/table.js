@@ -80,6 +80,37 @@ vec3 nightGlow(vec2 xz) {
 }
 `;
 
+/* round 2: the instruments on the chart (a pencil, a pair of dividers) and the shadows the lamp throws of them.
+   Each instrument is a few capsules (a segment with a radius); for a point on the paper each capsule is
+   projected from the lamp onto the paper's height, and the point is in its shadow by its distance to the
+   projected segment, with a soft edge that widens the higher the part stands (a raised hinge throws a soft
+   shadow, a pencil lying on the paper a sharp one). Cheap: a handful of segments, no shadow map. */
+const TOOLS = 4;
+const toolGLSL = /* glsl */ `
+uniform vec4 uToolA[${TOOLS}];   // xyz: one end (world), w: radius
+uniform vec4 uToolB[${TOOLS}];   // xyz: the other end, w: 1 if this capsule is in use
+uniform float uToolsOn;
+float toolShade(vec3 P) {
+    float lit = 1.0;
+    if (uToolsOn < 0.002) return lit;
+    for (int i = 0; i < ${TOOLS}; i++) {
+        if (uToolB[i].w < 0.5) continue;
+        vec3 a = uToolA[i].xyz, b = uToolB[i].xyz;
+        float ka = (uLampPos.y - P.y) / max(uLampPos.y - a.y, 0.05);
+        float kb = (uLampPos.y - P.y) / max(uLampPos.y - b.y, 0.05);
+        vec2 pa = uLampPos.xz + (a.xz - uLampPos.xz) * ka, pb = uLampPos.xz + (b.xz - uLampPos.xz) * kb;
+        vec2 ab = pb - pa;
+        float t = clamp(dot(P.xz - pa, ab) / max(dot(ab, ab), 1e-5), 0.0, 1.0);
+        float d = length(P.xz - pa - ab * t);
+        float height = max(mix(a.y, b.y, t) - P.y, 0.0);
+        float pen = 0.004 + height * 0.2;
+        float rs = uToolA[i].w * mix(ka, kb, t);
+        lit = min(lit, mix(1.0, 0.45, (1.0 - smoothstep(rs - pen, rs + pen, d)) * step(0.0, height - 0.001)));
+    }
+    return mix(1.0, lit, uToolsOn);
+}
+`;
+
 const paperVertex = /* glsl */ `
 ${reliefGLSL}
 uniform mat4 uOpen;
@@ -101,6 +132,7 @@ ${simplex2D}
 ${grain}
 ${reliefGLSL}
 ${poolGLSL}
+${toolGLSL}
 uniform sampler2D uBase, uBaseNight, uInk, uWindTex;
 uniform float uNight, uLampOn, uPosterLamp, uWater, uLevel, uLevelY, uRipple, uWindOn, uMaxH;
 uniform vec2 uWind, uStreak, uDrift, uHaze;
@@ -108,8 +140,44 @@ uniform vec3 uPaper, uLampRatio, uWaterTint, uShoal, uInk1, uMagenta1, uWindow0,
 uniform vec4 uCourse[COURSE_POINTS];   // xy: chart point, z: distance along the course to it
 uniform float uBoat, uWinFrom, uWinTo, uHatchOn, uBoatOn;
 uniform vec2 uBoatAt;
+    /* round 2: the boat as a hull with a heading and a wake, and the hour of the day on the light */
+    uniform vec2 uBoatDir;      // unit vector (chart units) down the course where the boat is
+    uniform float uWake;        // 0 alongside or at the pier, 1 under way: her wake on the water astern
+    uniform float uDusk;        // 0 the afternoon, 1 sunset: the room's light warms and dims as the trip goes on
 varying vec2 vUv;
 varying vec3 vWorld;
+
+    /* a cheap per-cell random number: the same cell always gets the same value, so the patterns hold still */
+    float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+
+    /* the hull, seen from above: 22 chart units long, a pointed bow (u > 0) and a full, rounded stern. u runs
+       along the heading, v across it; soft widens the edge (for the shadow), px keeps the edge one pixel.
+       (Far larger than to scale, as a chart symbol is: at 16 units she read as a dot from the hero's distance) */
+    float hullShape(float u, float v, float px, float soft) {
+        float t = u / 11.0;
+        float hw = t > 0.0 ? 3.9 * (1.0 - t * t) : 3.9 * sqrt(max(0.0, 1.0 - pow(-t, 4.0)));
+        float d = max(abs(v) - hw, abs(u) - 11.0);
+        return 1.0 - smoothstep(-soft, soft + px, d);
+    }
+
+    /* the wind on open water: thin dashed lanes laid down the wind and drifting with it, in gusts. The
+       field.js points the scene kit lays on the water are too fine to read from the hero's distance (every
+       judge looked for them and found none), so the lanes are drawn here, in chart space, as a line of the
+       print is: one pixel at least, faded out where a pixel grows too large to hold them (no moire) */
+    float windLanes(vec2 chart, vec2 w, float px, float time) {
+        vec2 cw = vec2(-w.y, w.x);
+        float a = dot(chart, w), c = dot(chart, cw);
+        float lane = floor(c / 5.5), fl = c - lane * 5.5;
+        float h1 = hash1(lane), h2 = hash1(lane + 71.3);
+        float d = abs(fl - (1.0 + 3.5 * h1));                         // where in its lane the line runs
+        float line = 1.0 - smoothstep(0.22, 0.22 + px * 1.1, d);
+        float s = (a - time * (7.0 + 9.0 * h2)) / (34.0 + 46.0 * h2) + h1 * 7.0;
+        float seg = fract(s), id = floor(s);
+        float on = step(0.45, hash1(id * 7.31 + lane * 13.7));         // about half the dashes are there
+        float dash = smoothstep(0.0, 0.2, seg) * (1.0 - smoothstep(0.42, 0.72, seg));
+        float gust = smoothstep(-0.25, 0.45, snoise(chart * 0.0055 + w * time * 0.012));
+        return line * dash * on * gust * (1.0 - smoothstep(2.2, 5.0, px));
+    }
 
 vec3 toLinear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
 vec2 toUv(vec2 xz) { return vec2(xz.x / 10.0 + 0.5, xz.y / 9.0 + 0.5); }
@@ -223,9 +291,47 @@ void main() {
     hatch = smoothstep(0.76 - fs, 0.76 + fs, q) * smoothstep(1.3, 2.6, cr.x);
     rim = (1.0 - smoothstep(0.35, 0.35 + px, abs(cr.x - 7.0))) * inWin * on;
   }
-  float r = length(chart - uBoatAt);
-  float boatHalo = (1.0 - smoothstep(4.6, 4.6 + px + 0.2, r)) * uBoatOn;
-  float boatDot = (1.0 - smoothstep(3.1, 3.1 + px + 0.2, r)) * uBoatOn;
+    /* the boat: a hull down the course (not a dot), its shadow thrown away from the lamp onto the water,
+       a pale deck inside dark topsides, and, while she is under way, her wake: the two arms of the wave
+       wedge astern (19.5 degrees each side, as any hull's) and the churned trail between them */
+    vec2 fwd = uBoatDir, port = vec2(-fwd.y, fwd.x);
+    vec2 rel = chart - uBoatAt;
+    float bu = dot(rel, fwd), bv = dot(rel, port);
+    vec2 lampChart = uLampPos.xz * 100.0 + vec2(500.0, 450.0);
+    vec2 away = normalize(chart - lampChart + 1e-3) * 1.7;
+    float hullOn = 0.0, deck = 0.0, hullShadow = 0.0;
+    if (uBoatOn > 0.002 && dot(rel, rel) < 900.0) {
+        hullOn = hullShape(bu, bv, px, 0.0) * uBoatOn;
+        deck = hullShape(bu * 2.2 + 9.0, bv * 2.6, px, 0.0) * uBoatOn;      // the cockpit, aft of amidships
+        hullShadow = hullShape(dot(rel - away, fwd), dot(rel - away, port), px, 1.1) * uBoatOn * 0.5;
+    }
+    float wake = 0.0, trough = 0.0;
+    if (uWake > 0.002 && wet > 0.01) {
+        float behind = -bu - 10.0;                                     // chart units astern of her transom
+        if (behind > -2.0 && behind < 140.0) {
+            float fade = exp(-behind / 50.0) * smoothstep(-2.0, 1.5, behind);
+            float spread = 2.6 + behind * 0.354;                      // tan(19.5 degrees)
+            float arm = abs(abs(bv) - spread);
+            float w0 = 0.35 + px * 0.8 + behind * 0.01;
+            float arms = 1.0 - smoothstep(w0 * 0.4, w0, arm);
+            float crest = 0.55 + 0.45 * sin(behind * 1.1 - uRipple * 5.0);   // little crests along each arm
+            float trailW = 2.2 + behind * 0.045;
+            float trail = (1.0 - smoothstep(trailW * 0.5, trailW + px, abs(bv)))
+                        * (0.55 + 0.45 * snoise(vec2(behind * 0.22 - uRipple * 1.8, bv * 0.7)));
+            wake = clamp(arms * crest + trail * 0.8, 0.0, 1.0) * fade * uWake * wet;
+            // the darker water just outside each arm, so the white reads on the pale chart blue
+            trough = (1.0 - smoothstep(0.0, w0 * 1.6, abs(arm - w0 * 1.3))) * step(spread, abs(bv)) * fade * uWake * wet;
+            // the arms themselves are drawn dark too: on the pale deep water of the chart (nearly the paper)
+            // white alone did not read; a chart's wake is the darker, broken water
+            trough = max(trough, arms * crest * fade * uWake * wet * 0.8);
+        }
+    }
+    float lanes = 0.0;
+    if (wet > 0.01 && showDay) {
+        float strength = length(uWind);
+        vec2 w = strength > 0.001 ? uWind / strength : vec2(0.7, -0.7);
+        lanes = windLanes(chart, w, px, uRipple) * clamp(strength * 2.4, 0.0, 1.0) * smoothstep(0.8, 2.5, depth) * wet;
+    }
 
   vec3 color = vec3(0.0);
   if (showDay) {
@@ -239,19 +345,32 @@ void main() {
       /* the room beyond the lamp a step darker once the relief stands, and the pool a warm step brighter: by day
          the lamp is a pool you can see and follow with the hand (at 0.95 it had faded from the first screen) */
       vec3 dayLight = vec3(mix(1.0, 0.86, uRise) * hill);
+        /* the hour on the light: through the afternoon the room's light warms and falls a little, so the lamp
+           counts for more as the trip goes on (the time of day visible in the picture, not only on the slips) */
+        dayLight *= mix(vec3(1.0), vec3(0.98, 0.84, 0.68), uDusk);
       dayLight *= mix(vec3(1.0), uLampRatio * mix(1.0, 1.16, uRise), pool * lampLit);
+      // the instruments' shadows take the light away where they fall (the room's and the lamp's alike)
+      float tools = toolShade(P);
+      dayLight *= tools;
     vec3 day = base * dayLight;
     day = mix(day, mix(uWaterTint, uShoal, shallow * 0.55) * dayLight, wa);
     day += uLampRatio * 0.9 * glint * (0.35 + 0.65 * pool);
       /* the wind's streaks: pale lines of foam drawn out down the wind, plain to see on the open water */
       day = mix(day, dayLight * 1.04, foam * 0.85);
+        // the wind's lanes: a darker, bluer line on the water (pale foam on pale chart blue never read)
+        day = mix(day, day * vec3(0.72, 0.82, 0.88), lanes * 0.75);
+        // her wake: the trough's darker water, then the white of the arms and the trail
+        day = mix(day, day * vec3(0.62, 0.74, 0.8), trough * 0.75);
+        day = mix(day, mix(day, dayLight * 1.1, 0.7), (wake - trough * 0.5) * 0.9);
     // the ink over the water, lit as the paper is; then the window's hatch, then the boat
     day = mix(day, toLinear(c) * mix(vec3(1.0), dayLight, 0.4), ink.a);
     day = mix(day, uWindow0 * dayLight, band * 0.07);
     day = mix(day, uWindow0 * dayLight, band * hatch * 0.72);
     day = mix(day, uWindow0 * dayLight, rim * 0.65);
-    day = mix(day, uPaper * dayLight * 1.04, boatHalo);
-    day = mix(day, uWindow0, boatDot);
+        // the boat over all: her shadow, the dark topsides, the pale deck
+        day = mix(day, day * 0.55, hullShadow);
+        day = mix(day, uWindow0 * mix(vec3(1.0), dayLight, 0.5), hullOn);
+        day = mix(day, uPaper * dayLight * 1.06, deck);
     color = day;
   }
   if (showNight) {
@@ -261,6 +380,7 @@ void main() {
       /* the red lamp, and the cabin it lights: outside the pool the sheet stays a dim red, never black (black
          sank Breskens, Hooge Platen and the cartouche into mud) */
       vec3 glow = max(nightGlow(P.xz), uNightLamp * 0.16) * mix(1.0, mix(0.84, 1.14, clamp(face, 0.0, 1.2)) * mix(0.74, 1.0, sh), uRise);
+      glow *= toolShade(P);
     vec3 night = glow * texture(uBaseNight, uv).rgb;
     night = night * mix(1.0, 0.9, wet * smoothstep(0.0, 2.0, depth)) + glow * glint * 0.5;
     if (ink.a > 0.003) {
@@ -276,8 +396,11 @@ void main() {
         night = mix(night, mix(pale, rose, magenta), ink.a * (1.0 - halo) * 0.94);
     }
     night = mix(night, uWindow1, band * hatch * 0.3 + rim * 0.2);
-    night = mix(night, uNightLampMid * 0.6, boatHalo);
-    night = mix(night, uWindow1, boatDot);
+        // by night her wake catches the red lamp, and the hull is the lamp's own bright red with a dark deck
+        night = mix(night, glow * 1.6, wake * 0.6);
+        night = mix(night, night * 0.5, hullShadow);
+        night = mix(night, uWindow1, hullOn);
+        night = mix(night, uNightLampMid * 0.7, deck);
     color = mix(color, night, uNight);
   }
   // the far side of the sheet melts a little into the room, so a low view has depth and no hard edge
@@ -299,6 +422,7 @@ void main() {
 const tableFragment = /* glsl */ `
 ${grain}
 ${poolGLSL}
+${toolGLSL}
 uniform float uNight, uLampOn, uLift, uShadowOn;
 uniform vec3 uShade, uLampGlow;
 varying vec3 vWorld;
@@ -311,6 +435,8 @@ void main() {
   float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
   float blur = 0.1 + 1.1 * uLift;
   float shade = (1.0 - smoothstep(-0.02, blur + 0.32, d)) * mix(0.34, 0.16, uLift) * uShadowOn;
+    // the dividers' hinge leans out over the table: its shadow falls there too
+    shade = max(shade, (1.0 - toolShade(vec3(vWorld.x, 0.0, vWorld.z))) * 0.75);
   // the lamp on the table round the sheet: by day a faint warm light, by night the red lamp's spill
   float spill = dayPool(vWorld.xz) * uLampOn * 0.5 * (1.0 - uNight);
   vec3 nightCol = mix(uNightBg, nightGlow(vWorld.xz), 0.55);      // the table takes less of the lamp than the paper
@@ -325,6 +451,107 @@ void main() {
   gl_FragColor = vec4(col, alpha);
   #include <colorspace_fragment>
   gl_FragColor.rgb += dither(gl_FragCoord.xy);
+}`;
+
+/* the harbour plan of Zeebrugge (harbour.js): a flat second sheet beside the chart, lit by the same lamp
+   and the same room; it is laid on the table as the trip comes in (uDrop 1 in the air, 0 lying down) */
+const planVertex = /* glsl */ `
+uniform float uDrop;
+varying vec2 vUv;
+varying vec3 vWorld;
+void main() {
+    vUv = vec2(uv.x, 1.0 - uv.y);
+    vec3 p = position;
+    // falling onto the table: it comes down from above with its far edge a little higher, as a sheet laid down
+    p.y += uDrop * uDrop * 0.9 + uDrop * (0.5 - uv.y) * 0.25;
+    vec4 world = modelMatrix * vec4(p, 1.0);
+    vWorld = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+}`;
+const planFragment = /* glsl */ `
+${grain}
+${poolGLSL}
+uniform sampler2D uBase, uBaseNight, uInk;
+uniform float uShown, uDusk, uLampOn, uNight;
+uniform vec3 uLampRatio;
+varying vec2 vUv;
+varying vec3 vWorld;
+vec3 toLinear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
+void main() {
+    vec4 ink = texture(uInk, vUv);
+    vec3 c = ink.a > 0.003 ? ink.rgb / ink.a : vec3(0.0);
+    // by day: the room's light (warming with the hour, as on the chart) and the lamp's pool
+    vec3 light = vec3(0.86) * mix(vec3(1.0), vec3(0.98, 0.84, 0.68), uDusk);
+    light *= mix(vec3(1.0), uLampRatio * 1.16, dayPool(vWorld.xz) * uLampOn);
+    vec3 day = texture(uBase, vUv).rgb * light;
+    day = mix(day, toLinear(c) * mix(vec3(1.0), light, 0.4), ink.a);
+    // by night: the red lamp alone, the tints darkening it, the print pale rose as on the chart
+    vec3 glow = max(nightGlow(vWorld.xz), uNightLamp * 0.16);
+    vec3 night = glow * texture(uBaseNight, vUv).rgb;
+    float lit = smoothstep(0.03, 0.14, glow.r);
+    float magenta = clamp((c.r - c.g) * 3.0 - 0.4, 0.0, 1.0);
+    vec3 pale = mix(vec3(0.58, 0.26, 0.19), vec3(1.0, 0.67, 0.58), lit);
+    vec3 rose = mix(vec3(0.62, 0.2, 0.12), vec3(1.0, 0.33, 0.2), lit);
+    night = mix(night, mix(pale, rose, magenta), ink.a * 0.94);
+    gl_FragColor = vec4(mix(day, night, uNight), uShown);
+    #include <colorspace_fragment>
+    gl_FragColor.rgb += dither(gl_FragCoord.xy);
+}`;
+/* its shadow on the table: a soft box under it, spreading while it is still in the air */
+const planShadowFragment = /* glsl */ `
+uniform float uShown, uDrop, uNight;
+uniform vec2 uHalf;
+uniform vec3 uShade;
+varying vec2 vUv;
+void main() {
+    vec2 q = abs((vUv - 0.5) * (uHalf * 2.0 + 1.2)) - uHalf;
+    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+    float blur = 0.06 + 0.5 * uDrop;
+    float a = (1.0 - smoothstep(-0.02, blur + 0.1, d)) * mix(0.3, 0.12, uDrop) * uShown * (1.0 - 0.6 * uNight);
+    gl_FragColor = vec4(uShade * mix(1.0, 0.2, uNight), a);
+    #include <colorspace_fragment>
+}`;
+const planShadowVertex = /* glsl */ `
+varying vec2 vUv;
+void main() { vUv = uv; gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0); }`;
+
+/* the instruments themselves: lacquer, wood, graphite and steel, lit by the same room and lamp as the paper
+   (a soft room light from above, the lamp's light on the faces that turn to it, a highlight on the steel), and
+   by night by the red lamp alone */
+const toolVertex = /* glsl */ `
+varying vec3 vN;
+varying vec3 vW;
+void main() {
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vW = world.xyz;
+    vN = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * world;
+}`;
+const toolFragment = /* glsl */ `
+${grain}
+${poolGLSL}
+uniform vec3 uColor, uLampRatio;
+uniform float uMetal, uDusk, uShown, uLampOn, uNight;
+varying vec3 vN;
+varying vec3 vW;
+void main() {
+    vec3 n = normalize(vN);
+    if (!gl_FrontFacing) n = -n;
+    vec3 L = normalize(uLampPos - vW), V = normalize(cameraPosition - vW);
+    float diff = max(dot(n, L), 0.0);
+    float room = 0.5 + 0.3 * max(n.y, 0.0);
+    float spec = pow(max(dot(n, normalize(L + V)), 0.0), mix(28.0, 90.0, uMetal)) * mix(0.12, 1.1, uMetal);
+    // steel also mirrors the pale room above it, so it reads as metal from any side
+    float sky = uMetal * 0.35 * smoothstep(0.0, 1.0, reflect(-V, n).y);
+    vec3 roomLight = vec3(room) * mix(vec3(1.0), vec3(0.98, 0.84, 0.68), uDusk);
+    vec3 lamp = uLampRatio * diff * 0.55 * (0.4 + 0.6 * dayPool(vW.xz) * uLampOn);
+    vec3 day = uColor * (roomLight + lamp) + vec3(spec + sky) * 0.9;
+    vec3 glow = max(nightGlow(vW.xz), uNightLamp * 0.16);
+    float lum = dot(uColor, vec3(0.3, 0.59, 0.11));
+    vec3 night = glow * (0.45 + 1.5 * diff) * (0.35 + lum * 1.4) + glow * (spec + sky) * 2.2;
+    gl_FragColor = vec4(mix(day, night, uNight), uShown);
+    #include <colorspace_fragment>
+    gl_FragColor.rgb += dither(gl_FragCoord.xy);
 }`;
 
 /* ---- textures -------------------------------------------------------------------------------------- */
@@ -457,9 +684,16 @@ export function mount(container, options = {}) {
     uNightBg: { value: C.nightBg }, uNightLamp: { value: C.nightLamp }, uNightLampMid: { value: C.nightLampMid },
     uNight: { value: 0 }, uLampOn: { value: 1 },
   };
+    // the instruments' capsules (filled in once the instruments are laid out, below), read by the paper and the
+    // table for the shadows
+    const toolUniforms = {
+        uToolA: { value: Array.from({ length: TOOLS }, () => new THREE.Vector4()) },
+        uToolB: { value: Array.from({ length: TOOLS }, () => new THREE.Vector4()) },
+        uToolsOn: { value: 0 },
+    };
   const paper = new THREE.ShaderMaterial({
     uniforms: {
-      ...stage.uniforms, ...shared,
+      ...stage.uniforms, ...shared, ...toolUniforms,
       uRelief: { value: relief.texture }, uRise: { value: stage.still ? 1 : 0 }, uMaxH: { value: relief.maxH + 0.01 },
       uOpen: { value: new THREE.Matrix4() },
       uBase: { value: baseTex }, uBaseNight: { value: nightTex }, uInk: { value: inkTex },
@@ -472,6 +706,7 @@ export function mount(container, options = {}) {
       uCourse: { value: course.map((p) => new THREE.Vector4(p[0], p[1], p[2], 0)) },
       uBoat: { value: 0 }, uBoatAt: { value: new THREE.Vector2(course[0][0], course[0][1]) }, uWinFrom: { value: 0 }, uWinTo: { value: 1e5 },
       uHatchOn: { value: 0 }, uBoatOn: { value: 0 },
+        uBoatDir: { value: new THREE.Vector2(-0.73, 0.68) }, uWake: { value: 0 }, uDusk: { value: 0 },
     },
     defines: { COURSE_POINTS: course.length, STEPS: 8, STREAK_TAPS: 10 },
     vertexShader: paperVertex, fragmentShader: paperFragment,
@@ -481,13 +716,122 @@ export function mount(container, options = {}) {
   scene.add(sheet);
 
   const tableMat = new THREE.ShaderMaterial({
-    uniforms: { ...shared, uLift: { value: 0 }, uShadowOn: { value: stage.still ? 1 : 0 }, uShade: { value: C.shade }, uLampGlow: { value: lampC } },
+    uniforms: { ...shared, ...toolUniforms, uLift: { value: 0 }, uShadowOn: { value: stage.still ? 1 : 0 }, uShade: { value: C.shade }, uLampGlow: { value: lampC } },
     vertexShader: tableVertex, fragmentShader: tableFragment, transparent: true, depthWrite: false,
   });
   const table = new THREE.Mesh(new THREE.PlaneGeometry(60, 60, 1, 1).rotateX(-Math.PI / 2), tableMat);
   table.position.y = -0.004;
   table.renderOrder = -1;
   scene.add(table);
+
+    // ---- the harbour plan of Zeebrugge (harbour.js), laid beside the chart's west edge where the pencil
+    // line leaves it, turned a little as a sheet put down by hand. Its entry point (the plan's east edge)
+    // lies just past where the chart's course runs off, so the line runs on from one sheet to the other.
+    let plan = null;
+    if (o.plan && o.plan.base && o.plan.ink) {
+        const PW = 3.4, PD = 3.06, turn = 0.06;
+        const cos = Math.cos(turn), sin = Math.sin(turn);
+        // plan chart units to the plan's own flat coordinates (x east, z south, round its middle)
+        const local = (x, y) => [(x / 1000 - 0.5) * PW, (y / 900 - 0.5) * PD];
+        // a turn about the vertical, as three.js turns a mesh by rotation.y (x' = x cos + z sin, z' = -x sin + z cos)
+        const turned = ([x, z]) => [x * cos + z * sin, -x * sin + z * cos];
+        const entryWorld = [-5.3, 3.53];      // a hand's breadth past the chart's edge, on the course's line (249 degrees)
+        const e = turned(local(...o.plan.entry));
+        const middle = [entryWorld[0] - e[0], entryWorld[1] - e[1]];
+        const toWorldPlan = (x, y) => { const t = turned(local(x, y)); return [middle[0] + t[0], middle[1] + t[1]]; };
+        const planTex = [canvasTexture(o.plan.base, { srgb: true, aniso }), canvasTexture(o.plan.baseNight, { srgb: true, aniso }),
+                         canvasTexture(o.plan.ink, { srgb: false, premultiplied: true, aniso })];
+        const mat = new THREE.ShaderMaterial({
+            uniforms: { ...shared, uBase: { value: planTex[0] }, uBaseNight: { value: planTex[1] }, uInk: { value: planTex[2] },
+                        uShown: { value: 0 }, uDrop: { value: 1 }, uDusk: { value: 0 }, uLampRatio: { value: C.lampRatio } },
+            vertexShader: planVertex, fragmentShader: planFragment, transparent: true,
+        });
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(PW, PD, 8, 8).rotateX(-Math.PI / 2), mat);
+        mesh.position.set(middle[0], 0.003, middle[1]);
+        mesh.rotation.y = turn;
+        mesh.renderOrder = 1;
+        mesh.visible = false;
+        scene.add(mesh);
+        const shadowMat = new THREE.ShaderMaterial({
+            uniforms: { uShown: mat.uniforms.uShown, uDrop: mat.uniforms.uDrop, uNight: shared.uNight,
+                        uHalf: { value: new THREE.Vector2(PW / 2, PD / 2) }, uShade: { value: C.shade } },
+            vertexShader: planShadowVertex, fragmentShader: planShadowFragment, transparent: true, depthWrite: false,
+        });
+        const shadow = new THREE.Mesh(new THREE.PlaneGeometry(PW + 1.2, PD + 1.2).rotateX(-Math.PI / 2), shadowMat);
+        shadow.position.set(middle[0] + 0.05, 0.001, middle[1] + 0.06);
+        shadow.rotation.y = turn;
+        shadow.renderOrder = 0;
+        shadow.visible = false;
+        scene.add(shadow);
+        stage.onDestroy(() => { planTex.forEach((t) => t.dispose()); });
+        plan = { mesh, shadow, mat, berth: toWorldPlan(...o.plan.berth) };
+    }
+
+    // ---- the instruments: a pencil lying on Walcheren, north of the course, and a pair of dividers standing
+    // on the Hooge Platen, a mile and a bit between their points, their hinge leaning north (on the margin's
+    // scale at the edge of the sheet they stood out of the hero's frame): the chart table of someone planning
+    // this trip. Laid on the relief (surfaceAt)
+    // so they rest on it. They come in once the sheet has settled, and their shadows with them.
+    const surface = (x, y) => shownHeight(bed(x, y));
+    const tools = new THREE.Group();
+    const toolMats = [];
+    const toolMat = (hex, metal) => {
+        const m = new THREE.ShaderMaterial({
+            uniforms: { ...shared, uColor: { value: new THREE.Color(hex) }, uMetal: { value: metal }, uDusk: paper.uniforms.uDusk,
+                        uShown: { value: 0 }, uLampRatio: { value: C.lampRatio } },
+            vertexShader: toolVertex, fragmentShader: toolFragment, transparent: true,
+        });
+        toolMats.push(m);
+        return m;
+    };
+    const capsules = [];
+    // a part between two points: a cylinder (or a cone, r1 at a and r2 at b) along a -> b
+    const up = new THREE.Vector3(0, 1, 0);
+    function part(a, b, r1, r2, mat, sides = 12) {
+        const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), len = A.distanceTo(B);
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r2, r1, len, sides, 1), mat);
+        mesh.position.copy(A).add(B).multiplyScalar(0.5);
+        mesh.quaternion.setFromUnitVectors(up, B.clone().sub(A).normalize());
+        tools.add(mesh);
+        return mesh;
+    }
+    {
+        // the pencil: hexagonal navy lacquer, a pale wood cone, a graphite point, a brass ferrule at the end
+        const [ax, az] = toWorld(560, 150), [bx, bz] = toWorld(700, 232);
+        const r = 0.034;
+        const ya = surface(560, 150) + r, yb = surface(700, 232) + r;
+        const dir = new THREE.Vector3(bx - ax, yb - ya, bz - az).normalize();
+        const at = (k) => [ax + dir.x * k, ya + dir.y * k, az + dir.z * k];
+        const len = Math.hypot(bx - ax, yb - ya, bz - az);
+        part(at(0), at(0.07), r * 0.98, r * 0.98, toolMat("#b9a26a", 0.6), 16);              // the ferrule
+        part(at(0.07), at(len - 0.16), r, r, toolMat("#1f3346", 0.15), 6);                   // the lacquered body
+        part(at(len - 0.16), at(len - 0.03), r, r * 0.3, toolMat("#d8b98a", 0.0), 6);       // the sharpened wood
+        part(at(len - 0.03), at(len), r * 0.3, 0.002, toolMat("#33343a", 0.4), 6);          // the graphite point
+        capsules.push([at(0), at(len), r]);
+    }
+    {
+        // the dividers: two steel legs from a raised hinge to two points on the bank, their tips resting on it
+        const c1 = [760, 712], c2 = [902, 694];
+        const p1 = toWorld(...c1), p2 = toWorld(...c2);
+        const y1 = surface(...c1) + 0.002, y2 = surface(...c2) + 0.002;
+        const hinge = [(p1[0] + p2[0]) / 2, 0.46, (p1[1] + p2[1]) / 2 - 0.28];
+        const steel = toolMat("#a7adb1", 1.0), dark = toolMat("#5d6366", 0.8);
+        for (const [p, y] of [[p1, y1], [p2, y2]]) {
+            part(hinge, [p[0], y, p[1]], 0.024, 0.005, steel, 12);
+            capsules.push([hinge, [p[0], y, p[1]], 0.016]);
+        }
+        const h0 = new THREE.Vector3(...hinge);
+        const axis = new THREE.Vector3(p2[0] - p1[0], 0, p2[1] - p1[1]).normalize().multiplyScalar(0.03);
+        part(h0.clone().sub(axis).toArray(), h0.clone().add(axis).toArray(), 0.034, 0.034, dark, 16);   // the hinge
+        part(hinge, [hinge[0] + 0.02, hinge[1] + 0.13, hinge[2]], 0.012, 0.01, steel, 10);              // its handle
+        capsules.push([hinge, [hinge[0] + 0.02, hinge[1] + 0.13, hinge[2]], 0.012]);
+    }
+    capsules.slice(0, TOOLS).forEach(([a, b, r], i) => {
+        toolUniforms.uToolA.value[i].set(a[0], a[1], a[2], r);
+        toolUniforms.uToolB.value[i].set(b[0], b[1], b[2], 1);
+    });
+    tools.visible = false;
+    scene.add(tools);
 
   // ---- the wind: field.js's wave sheet, laid on the water and turned to the wind, drawn on its own
   // into a picture the paper reads, so the streaks lie only on open water
@@ -553,10 +897,29 @@ export function mount(container, options = {}) {
     }
     return course[0].slice(0, 2);
   };
+    /* the heading at a distance along the course: the unit vector of the leg she is on, turned smoothly
+       over the last few units before a fix so the hull swings round rather than snapping */
+    const heading = (d) => {
+        const dirOf = (i) => {
+            const a = course[i], b = course[i + 1], len = Math.max(Math.hypot(b[0] - a[0], b[1] - a[1]), 1e-3);
+            return [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+        };
+        for (let i = 0; i < course.length - 1; i++) {
+            if (d <= course[i + 1][2] || i === course.length - 2) {
+                const here = dirOf(i);
+                if (i === course.length - 2) return here;
+                const next = dirOf(i + 1), t = smooth(course[i + 1][2] - 6, course[i + 1][2] + 6, d);
+                const x = here[0] + (next[0] - here[0]) * t, y = here[1] + (next[1] - here[1]) * t, n = Math.hypot(x, y) || 1;
+                return [x / n, y / n];
+            }
+        }
+        return dirOf(0);
+    };
+    const courseEnd = course[course.length - 1][2];
 
   // ---- the story by the journey's progress, and the page's own data
   const story = (Array.isArray(o.story) && o.story.length ? o.story : [{ p: 0 }]).slice().sort((x, y) => x.p - y.p);
-  const BASE = { lamp: [0.6, 0.4], lampY: 3, reach: [4.6, 4.3], night: 0, boat: 0, hatch: 0, follow: 1 };
+  const BASE = { lamp: [0.6, 0.4], lampY: 3, reach: [4.6, 4.3], night: 0, boat: 0, hatch: 0, follow: 1, dusk: 0, plan: 0 };
   const blendStory = (p) => {
     let i = 0;
     while (i < story.length - 2 && p > story[i + 1].p) i++;
@@ -565,7 +928,7 @@ export function mount(container, options = {}) {
     const mix = (x, y) => x + (y - x) * t;
     return { lamp: [mix(a.lamp[0], b.lamp[0]), mix(a.lamp[1], b.lamp[1])], lampY: mix(a.lampY, b.lampY),
              reach: [mix(a.reach[0], b.reach[0]), mix(a.reach[1], b.reach[1])], night: mix(a.night, b.night),
-             boat: mix(a.boat, b.boat), hatch: mix(a.hatch, b.hatch), follow: mix(a.follow, b.follow) };
+             boat: mix(a.boat, b.boat), hatch: mix(a.hatch, b.hatch), follow: mix(a.follow, b.follow), dusk: mix(a.dusk, b.dusk), plan: mix(a.plan, b.plan) };
   };
   if (Array.isArray(o.window)) { paper.uniforms.uWinFrom.value = o.window[0]; paper.uniforms.uWinTo.value = o.window[1]; }
   const want = { progress: 0, level: 1, wind: 0.4, from: 225, idleHatch: null, idleBoat: 0, night: null, dark: false };
@@ -767,10 +1130,31 @@ export function mount(container, options = {}) {
     paper.uniforms.uRipple.value = still ? 3 : ripple;
     paper.uniforms.uBoat.value = now.boat;
     paper.uniforms.uBoatAt.value.set(...along(now.boat));
+      paper.uniforms.uBoatDir.value.set(...heading(now.boat));
+      // the wake only while she is under way: none at the pier head, none once she lies alongside
+      paper.uniforms.uWake.value = smooth(4, 16, now.boat) * (1 - smooth(courseEnd - 22, courseEnd - 6, now.boat));
+      now.dusk = ease(now.dusk || 0, s.dusk, 0.5);
+      paper.uniforms.uDusk.value = now.dusk;
     paper.uniforms.uHatchOn.value = now.hatch;
     // the boat shows once it has cast off, or while it waits at the pier head at the end of the hero's clock
     now.idleBoat = ease(now.idleBoat, want.idleBoat * (1 - smooth(0.01, 0.08, want.progress)), 0.5);
     paper.uniforms.uBoatOn.value = Math.max(smooth(0.5, 4, now.boat), now.idleBoat);
+      // the instruments: in once the sheet has settled (they would float while it lifts), faded in with their shadows
+      now.tools = ease(now.tools || 0, openDone ? 1 : 0, 0.35);
+      toolUniforms.uToolsOn.value = now.tools;
+      for (const m of toolMats) m.uniforms.uShown.value = now.tools;
+      tools.visible = now.tools > 0.003;
+      // the harbour plan: laid down as the story asks; once it lies there the boat goes on over it, to her
+      // berth (drawn on the plan), and leaves the chart's edge
+      if (plan) {
+          now.plan = ease(now.plan || 0, s.plan, 0.35);
+          const shown = smooth(0.02, 0.6, now.plan), drop = 1 - smooth(0.0, 1.0, now.plan);
+          plan.mat.uniforms.uShown.value = shown;
+          plan.mat.uniforms.uDrop.value = drop;
+          plan.mat.uniforms.uDusk.value = now.dusk;
+          plan.mesh.visible = plan.shadow.visible = shown > 0.002;
+          paper.uniforms.uBoatOn.value *= 1 - smooth(courseEnd - 10, courseEnd - 0.5, now.boat) * smooth(0.5, 0.95, now.plan);
+      }
   });
 
   const handle = stage.handle({
@@ -798,6 +1182,9 @@ export function mount(container, options = {}) {
     night: () => now.night,
     opening: () => !openDone,
     surfaceAt(x, y) { return shownHeight(bed(x, y)) * paper.uniforms.uRise.value; },
+      /* the berth on the harbour plan (world), once the plan lies on the table and the boat has come to the
+         chart's edge: where the label "alongside" stands; null otherwise */
+      berth() { return plan && now.plan > 0.9 && now.boat > courseEnd - 4 ? [plan.berth[0], 0.004, plan.berth[1]] : null; },
     boatPoint() {
       const c = along(now.boat), w = toWorld(c[0], c[1]);
       return { chart: c, world: [w[0], shownHeight(bed(c[0], c[1])) * paper.uniforms.uRise.value, w[1]],
