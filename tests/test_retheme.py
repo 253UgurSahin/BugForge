@@ -128,7 +128,8 @@ class Repository(unittest.TestCase):
         subprocess.run(["git", "-C", self.root] + list(args), check=True, stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
 
-    def write(self, path, text, newline=None):
+    def write(self, path, text, newline=""):
+        # newline="": the file holds exactly TEXT on every system (Windows would turn \n into \r\n)
         full = os.path.join(self.root, path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         with open(full, "w", encoding="utf-8", newline=newline) as handle:

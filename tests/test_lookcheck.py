@@ -78,7 +78,7 @@ class LookedTests(Look):
                                              "forge-work/design/redesign.md is not a file in the project that holds "
                                              "something")
         self.assertRegex(check["output"][1], r"^changed\.py forge-work/improve/shots/before forge-work/improve/shots/"
-                                             r"after exits 2: error: .*shots/before")  # changed.py names what is missing
+                                             r"after exits 2: error: .*shots[/\\]before")  # changed.py names what is missing
         write(self.root, "forge-work/design/redesign.md", "")
         self.shots("before", "after", colour=(255, 255, 255))
         code, check, _ = self.looked()
