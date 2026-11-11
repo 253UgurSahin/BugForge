@@ -314,7 +314,8 @@ the look changes. The steps are those of `../forge-design/steps/design.md`; here
 of a redesign in particular.
 
 1. Know what the user looks at (rules.md section 9) and write it under `## How it runs`. Work in
-   the folder their server runs from, on a new branch `forge/redesign-<yyyymmdd>`;
+   the folder their server runs from, on a new branch `forge/redesign-<yyyymmdd>` (when
+   `/forge-improve` picks the look: its own `forge/improve-<yyyymmdd>`, no second branch);
    `python3 ../forge/gitguard.py` must exit 0. Keep `forge-work/` out of git (the design part's
    "A work branch"). The app's own tests run and pass first: the proof that nothing breaks later.
    Tests can empty the database they reach: first `python3 ../forge-check/testdb.py .`. Exit 0: a

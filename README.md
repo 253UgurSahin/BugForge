@@ -112,19 +112,26 @@ refuses module scripts from a double-clicked file. From the root of this repo:
 python3 examples/serve.py
 ```
 
-It serves the folder on http://127.0.0.1:8765 (your machine only) and opens the gallery.
+It serves the folder on http://127.0.0.1:8765 (your machine only) and opens the gallery's start page,
+[`examples/index.html`](examples/index.html): the five levels side by side, the scene kit, and how to
+open it all.
 
 **Tidewatch**, a passage planner for small boats, at the five levels. The page is a paper sea chart
 under a lamp; at night the lamp turns red, as it does on a boat. The words, the colours and the
-type stay the same at every level; what changes is how much it moves and how deep it goes.
+type stay the same at every level; what changes is how much it moves and how deep it goes. Each
+level keeps everything of the level below it.
 
-| level | what is new | open |
-| --- | --- | --- |
-| 1 Subtle | the clean design; every control reacts to hover, focus and press | [`examples/levels/1/`](examples/levels/1/index.html) |
-| 2 Polished | content arrives, the tide numbers count up, the passage dialog glides | [`examples/levels/2/`](examples/levels/2/index.html) |
-| 3 Expressive | the passage told as you scroll, the harbour cards tilt in real CSS 3D, a signature lamp | [`examples/levels/3/`](examples/levels/3/index.html) |
-| 4 Showpiece | the chart table becomes a living 3D relief of contour lines that follows the pointer | [`examples/levels/4/`](examples/levels/4/index.html) |
-| 5 Cinematic | "Sail the pencil line": a 3D journey along the course as you scroll, the wind as moving streaks | [`examples/levels/5/`](examples/levels/5/index.html) |
+| | |
+| --- | --- |
+| ![Level 1, Subtle: the sea chart page; buttons and passage cards answer the pointer](examples/previews/level-1.webp) | ![Level 2, Polished: the page arrives, the figures count up, the tide curve draws itself](examples/previews/level-2.webp) |
+| **1 Subtle** ([open](examples/levels/1/index.html)): the clean design; every control reacts to hover, focus and press | **2 Polished** ([open](examples/levels/2/index.html)): content arrives, the day's figures count up, the tide curve draws itself, the dialog glides |
+| ![Level 3, Expressive: the chart as a sheet in 3D on the table under a swinging lamp, then the red night lamp](examples/previews/level-3.webp) | ![Level 4, Showpiece: the chart as a live 3D relief, the water rising and falling with the tide](examples/previews/level-4.webp) |
+| **3 Expressive** ([open](examples/levels/3/index.html)): the chart lies on the table as a sheet in 3D; a lamp swings over it on its own and follows your hand; the tide week stays pinned while its days go by | **4 Showpiece** ([open](examples/levels/4/index.html)): the printed chart becomes a live 3D relief of its own sea bed; the water rises and falls with the tide under a raking lamp |
+| ![Level 5, Cinematic: the camera flies low over the 3D chart along the pencilled course](examples/previews/level-5.webp) | |
+| **5 Cinematic** ([open](examples/levels/5/index.html)): "Sail the pencil line", a 3D journey along the course as you scroll, with its own shaders and the wind as streaks | |
+
+These clips were recorded on a machine without a graphics card, where WebGL runs in software; on your
+own computer levels 4 and 5 run smoothly.
 
 [`examples/levels/README.md`](examples/levels/README.md) explains the concept, the type, the
 colours and what each level adds.

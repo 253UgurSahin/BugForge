@@ -29,7 +29,8 @@ under `## Original brand colours` in components.md, for brand's sweep only.
   local URL, from which folder and branch, and what cache sits in front. Write it under `## How it
   runs`, the first section of redesign.md (review.md, "The redesign report"). Cannot tell: ask.
 - **A work branch in that same folder**, so their dev server shows the work: `git switch -c
-  forge/redesign-<yyyymmdd>`; `python3 ../forge/gitguard.py` must exit 0. Before the first install
+  forge/redesign-<yyyymmdd>` (from `/forge-improve`: stay on its `forge/improve-<yyyymmdd>`);
+  `python3 ../forge/gitguard.py` must exit 0. Before the first install
   or commit, `git status --short` must not list `forge-work/` (level.py writes its `.gitignore` with
   a level; before that, add `forge-work/` to the file `git rev-parse --git-path info/exclude` names).
 - **The app's own tests**, the proof that nothing breaks, their result in redesign.md's `Tests
