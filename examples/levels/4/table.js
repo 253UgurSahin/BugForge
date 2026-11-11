@@ -624,7 +624,10 @@ export async function mount(container, options = {}) {
   const ray = new THREE.Vector3();
   function pointerOnTable() {
     const p = stage.pointer;
-    if (!p.active || !fine.matches) return null;
+    /* over the table, or over the words beside it (the lamp then leans to the sheet's west edge); anywhere else
+       (the top bar, below the hero) it goes back to its place */
+    const beside = !p.inside && p.raw.x <= -0.999 && Math.abs(p.raw.y) < 0.999;
+    if (!p.active || !fine.matches || !(p.inside || beside)) return null;
     ray.set(p.raw.x, p.raw.y, 0.5).unproject(camera).sub(camera.position).normalize();
     if (ray.y > -0.02) return null;
     const t = -camera.position.y / ray.y;

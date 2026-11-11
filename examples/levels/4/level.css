@@ -600,6 +600,11 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
 
 /* ---- the slip: the water of the hour, and the reader's own hour ---- */
 @media (min-width: 60.0625rem) { .hero__slip { width: 18.75rem; left: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) + 31.25rem); } }
+/* a small laptop: the chart's column is narrow, so the slip is too, and lies further left, under the words */
+@media (min-width: 60.0625rem) and (max-width: 80rem) {
+  .hero__slip { width: 16rem; left: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) + 26rem); bottom: var(--space-4); }
+  .hero__slip-note { display: none; }
+}
 .tidebar { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); padding-top: var(--space-3); border-top: var(--size-border) solid var(--color-border); font: 500 0.75rem/1 var(--font-mono); font-variant-numeric: lining-nums tabular-nums; letter-spacing: 0.02em; color: var(--color-text-muted); white-space: nowrap; }
 .tidebar__label { letter-spacing: var(--tracking-caps); text-transform: uppercase; }
 .tidebar__h { color: var(--color-text); font-weight: 700; }
@@ -683,20 +688,26 @@ html:not(.js) :is(.tool, .tideclock) { display: none; }
   .corner { bottom: var(--space-3); right: var(--size-gutter); }
 }
 @media (max-width: 44rem) {
-  /* a phone: the whole sheet under the words, lying further back; the slip on its near corner, the switch on the far one */
-  :root { --l4-lay: 52deg; --l4-turn: -3deg; --l4-eye: 640px; --l4-eye-at: 52% -70%; }
-  .hero__text { padding-bottom: 17rem; }
-  .hero__scene { height: 17rem; }
-  .sheet { --l4-height: 19.75rem; --l4-right: 1.25rem; --l4-bottom: 0.5rem; }
-  .hero__slip { width: 11.25rem; left: var(--size-gutter); bottom: var(--space-1); padding: var(--space-2) var(--space-3) var(--space-3); }
-  .hero__slip-label { font-size: 0.625rem; }
-  .hero__slip-time { font-size: var(--text-base, 1rem); }
-  .hero__slip .tidebar { margin-top: var(--space-2); padding-top: var(--space-2); gap: 5px; font-size: 0.6875rem; }
-  .hero__slip .tidebar__label { display: none; }
-  .scrub { display: none !important; }
-  .corner { bottom: calc(17rem - 3.5rem); right: var(--size-gutter); }
-  .corner .tool span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .corner .tool { width: var(--size-touch); min-height: var(--size-touch); justify-content: center; padding: 0; }
+  /* a phone: the whole sheet under the words, lying further back, and under it the slip as one bar: the window,
+     the next twelve hours to play, the motion switch. The water's figures are the label on the chart (and
+     stay on the slip for screen readers). */
+  :root { --l4-lay: 50deg; --l4-turn: -3deg; --l4-eye: 640px; --l4-eye-at: 52% -60%; }
+  .hero__text { padding-bottom: 17.5rem; }
+  .hero__scene { height: 17.5rem; }
+  .sheet { --l4-height: 15.25rem; --l4-right: 3rem; --l4-bottom: 4.4rem; }
+  .hero__slip {
+    left: 0; right: 0; bottom: var(--space-2); width: auto; rotate: 0deg;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2);
+    padding: var(--space-2) calc(var(--size-touch) + var(--space-3)) var(--space-2) var(--space-3);
+  }
+  .hero__slip-label { grid-column: 1; font-size: 0.625rem; }
+  .hero__slip-time { grid-column: 1; margin-top: 2px; font-size: var(--text-md); gap: var(--space-2); }
+  .hero__slip .tidebar { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .scrub { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
+  .scrub__scale { display: none; }
+  .tool--tide, .corner .tool { width: var(--size-touch); min-height: var(--size-touch); justify-content: center; padding: 0; }
+  :is(.tool--tide, .corner .tool) span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .corner { right: var(--space-2); bottom: calc(var(--space-2) + 5px); }
   .tideclock { font-size: 0.6875rem; }
 }
 
