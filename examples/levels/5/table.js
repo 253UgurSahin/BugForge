@@ -26,8 +26,8 @@ import { mount as mountField } from "../../vendor/scenes/field.js";
 import { stageUniforms, common, simplex2D, simplex3D, grain, line } from "../../vendor/scenes/glsl.js";
 
 export const SHEET = { w: 10, d: 9 };             // world units: 100 chart units each
-const VS = 0.03;                                  // world units per metre of height (about 46 x)
-const DEPTH = 11;                                 // metres: depths are softened past this
+const VS = 0.024;                                 // world units per metre of height (about 37 x)
+const DEPTH = 8;                                  // metres: depths are softened past this
 const WATER_MAX = 6;                              // metres: setData's level 1
 const WIND_MAX = 40;                              // knots: setData's wind 1
 const SPEED = 5.5 * 120 / 60;                     // chart units a minute at 5.5 knots (120 units a mile)
@@ -120,9 +120,9 @@ ${grain}
 uniform sampler2D uDay;
 uniform sampler2D uNight;
 uniform float uNightMix;
-uniform vec4 uCourse[8];          // xy: chart point, z: distance along the course to it
-uniform int uCourseN;
+uniform vec4 uCourse[COURSE_POINTS];   // xy: chart point, z: distance along the course to it
 uniform float uBoat;              // chart units along the course: where the boat is now
+uniform vec2 uBoatAt;             // and the chart point it is at
 uniform float uWinFrom, uWinTo;   // the stretch of the course sailed inside the safe window
 uniform float uReach;             // how much of the pencil line is drawn (chart units)
 uniform float uHatchOn;           // 0..1: the window band shown at all
@@ -130,6 +130,7 @@ uniform vec3 uWindow;             // the window's colour (the accent) by day
 uniform vec3 uLamp, uLampMid;     // the lamp's light on the paper, by day (page tokens)
 uniform vec3 uNightBg, uNightLamp, uNightLampMid, uNightAccent;
 uniform vec3 uPencil;
+uniform vec2 uHaze;               // where the far haze starts and is full, from the camera
 varying vec2 vUv;
 varying vec3 vWorld;
 varying vec4 vLight;
@@ -137,8 +138,7 @@ varying vec4 vLight;
 // distance (chart units) to the course, and how far along it the nearest point lies
 vec2 course(vec2 c) {
   float best = 1e9, along = 0.0;
-  for (int i = 0; i < 7; i++) {
-    if (i >= uCourseN - 1) break;
+  for (int i = 0; i < COURSE_POINTS - 1; i++) {
     vec2 a = uCourse[i].xy, b = uCourse[i + 1].xy, ab = b - a;
     float t = clamp(dot(c - a, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
     float d = length(c - a - ab * t);
@@ -155,7 +155,8 @@ void main() {
   // ---- day: the printed sheet in room light, brighter and warmer in the pool
   if (uNightMix < 0.999) {
     vec3 day = texture(uDay, uv).rgb;
-    color = day * (0.86 * room + 0.2 * lamp * uLamp) * (1.0 - 0.05 * (1.0 - pool));
+    float vignette = smoothstep(1.25, 0.25, length(uv - vec2(0.56, 0.5)));
+    color = day * (0.7 * room + 0.4 * lamp * uLamp) * mix(0.86, 1.0, vignette) * (1.0 - 0.08 * (1.0 - pool));
   }
   // ---- night: ink on a sheet that glows where the lamp falls, as on the page at night
   if (uNightMix > 0.001) {
@@ -163,60 +164,78 @@ void main() {
     vec3 sheet = mix(uNightBg, uNightLampMid, smoothstep(0.0, 0.55, glow));
     sheet = mix(sheet, uNightLamp, smoothstep(0.35, 1.0, glow));
     sheet *= 0.92 + 0.08 * room;
-    color = mix(color, sheet * (1.0 - night.a) + night.rgb * (0.35 + 0.65 * glow), uNightMix);
+    // the room light goes out first, then the red lamp comes up: never a muddy mix of the two
+    color = color * (1.0 - 0.88 * smoothstep(0.0, 0.55, uNightMix))
+          + (sheet * (1.0 - night.a) + night.rgb * (0.35 + 0.65 * glow)) * smoothstep(0.3, 1.0, uNightMix);
   }
 
-  // ---- the pencil line and its fixes: graphite, a little broken by the grain of the paper
+  // ---- the pencil line and its fixes: graphite, a little broken by the grain of the paper. One
+  // pixel's size in chart units, taken here: derivatives inside the branch below would be undefined
   vec2 c = course(chart);
-  float fw = fwidth(c.x);
+  float px = max(length(fwidth(chart)), 1e-4);
   if (c.x < 30.0) {
-    float pencil = (1.0 - smoothstep(1.05 - 0.6 * fw - 0.15, 1.05 + 0.6 * fw + 0.15, c.x)) * step(c.y, uReach + 0.5);
+    // ---- the safe window: a band of hatched light along the course, from the casting off to where
+    // the boat is now (or to where the window closes), its solid edge where the boat is
+    float head = min(uBoat, uWinTo);
+    float corridor = 1.0 - smoothstep(6.5, 8.5, c.x);
+    float sailed = smoothstep(uWinFrom - 2.0, uWinFrom + 2.0, c.y) * (1.0 - smoothstep(head - 1.5, head + 1.5, c.y));
+    float band = corridor * sailed * uHatchOn;
+    float stripe = dot(chart, vec2(0.78801075, 0.61566148)) / 4.0;   // 38 degrees, every 4 units
+    float q = abs(fract(stripe) - 0.5) * 2.0;                        // 1 on a line, 0 between two
+    float fs = 1.5 * px / 4.0;
+    float hatch = smoothstep(0.78 - fs, 0.78 + fs, q);
+    float moving = step(uWinFrom + 1.0, uBoat);
+    float bar = (1.0 - smoothstep(0.9, 0.9 + px * 1.5, abs(c.y - head))) * corridor * uHatchOn * moving;
+    vec3 win = mix(uWindow, uNightAccent, uNightMix);
+    color = mix(color, win, band * mix(0.05, 0.08, uNightMix));
+    color = mix(color, win, band * hatch * mix(0.75, 0.7, uNightMix));
+    color = mix(color, win, bar);
+
+    // ---- the pencil line and its fixes over it: graphite, a little broken by the grain of the paper
+    float pencil = (1.0 - smoothstep(1.05 - 0.6 * px - 0.15, 1.05 + 0.6 * px + 0.15, c.x)) * step(c.y, uReach + 0.5);
     pencil *= 0.78 + 0.22 * smoothstep(-0.4, 0.6, snoise(chart * 1.7));
     float fixes = 0.0;
-    for (int i = 0; i < 3; i++) {
-      if (i >= uCourseN - 1) break;
-      float r = length(chart - uCourse[i].xy), fr = fwidth(r);
-      float ring = 1.0 - smoothstep(0.85, 0.85 + fr + 0.2, abs(r - 6.2));
-      float spot = 1.0 - smoothstep(1.4, 1.4 + fr + 0.2, r);
+    for (int i = 0; i < 3; i++) {                  // the three fixes of the chart: 14:20, 14:40, 15:00
+      float r = length(chart - uCourse[i].xy);
+      float ring = 1.0 - smoothstep(0.85, 0.85 + px + 0.2, abs(r - 6.2));
+      float spot = 1.0 - smoothstep(1.4, 1.4 + px + 0.2, r);
       fixes = max(fixes, max(ring, spot) * step(uCourse[i].z, uReach + 1.0));
     }
     vec3 graphite = mix(uPencil, vec3(0.02), uNightMix);
     color = mix(color, graphite, max(pencil, fixes) * mix(0.85, 0.95, uNightMix));
-
-    // ---- the safe window: a band of hatched light along the course, from the casting off to where
-    // the boat is now (or to where the window closes), its solid edge where the boat is
-    float head = min(uBoat, uWinTo);
-    float corridor = 1.0 - smoothstep(15.0, 21.0, c.x);
-    float sailed = smoothstep(uWinFrom - 2.0, uWinFrom + 2.0, c.y) * (1.0 - smoothstep(head - 1.5, head + 1.5, c.y));
-    float band = corridor * sailed * uHatchOn;
-    float stripe = dot(chart, vec2(0.78801075, 0.61566148)) / 5.0;   // 38 degrees, every 5 units
-    float fs = fwidth(stripe);
-    float hatch = 1.0 - smoothstep(0.17 - fs, 0.17 + fs, abs(fract(stripe) - 0.5) * 2.0 - 0.66);
-    float moving = step(uWinFrom + 1.0, uBoat);
-    float bar = (1.0 - smoothstep(1.2, 1.2 + fwidth(c.y) * 1.5, abs(c.y - head))) * corridor * uHatchOn * moving;
-    vec3 win = mix(uWindow, uNightAccent, uNightMix);
-    color = mix(color, win, band * mix(0.07, 0.14, uNightMix));
-    color = mix(color, win, band * hatch * mix(0.62, 0.8, uNightMix));
-    color = mix(color, win, bar * 0.95);
   }
-  // the boat: a small solid diamond at the head of the band, in the window's colour
+  // the boat: a small dot in the window's colour at the head of the band, ringed in paper
   if (uHatchOn > 0.01 && uBoat > uWinFrom + 1.0) {
-    vec2 boatAt = uCourse[0].xy;
-    for (int i = 0; i < 7; i++) {
-      if (i >= uCourseN - 1) break;
-      if (uBoat >= uCourse[i].z && uBoat <= uCourse[i + 1].z) {
-        float t = (uBoat - uCourse[i].z) / max(uCourse[i + 1].z - uCourse[i].z, 1e-3);
-        boatAt = mix(uCourse[i].xy, uCourse[i + 1].xy, t);
-      }
-    }
-    vec2 rel = abs(chart - boatAt);
-    float diamond = 1.0 - smoothstep(4.2, 4.2 + fwidth(rel.x + rel.y) + 0.3, rel.x + rel.y * 1.15);
-    color = mix(color, mix(uWindow, uNightAccent, uNightMix), diamond * uHatchOn);
+    float r = length(chart - uBoatAt);
+    float halo = 1.0 - smoothstep(4.4, 4.4 + px + 0.2, r);
+    float dotm = 1.0 - smoothstep(3.0, 3.0 + px + 0.2, r);
+    vec3 paperCol = mix(vec3(0.98, 0.965, 0.93), uNightBg, uNightMix);
+    color = mix(color, paperCol, halo * uHatchOn);
+    color = mix(color, mix(uWindow, uNightAccent, uNightMix), dotm * uHatchOn);
   }
 
+  // the far side of the sheet melts a little into the room, so a low view has depth and no hard edge
+  float haze = smoothstep(uHaze.x, uHaze.y, distance(cameraPosition, vWorld)) * 0.55;
+  color = mix(color, mix(uBg, uNightBg, uNightMix), haze);
   gl_FragColor = vec4(color, 1.0);
   #include <colorspace_fragment>
   gl_FragColor.rgb += dither(gl_FragCoord.xy);
+}`;
+
+// The sheet's shadow on the table: soft, a little away from the lamp, gone at night
+const shadowFragment = `
+${stageUniforms}
+uniform vec3 uLampPos;
+uniform float uNightMix;
+varying vec2 vUv;
+varying vec3 vWorld;
+void main() {
+  vec2 away = normalize(vWorld.xz - uLampPos.xz + 1e-4) * 0.12;
+  vec2 q = abs(vWorld.xz - away) - vec2(${(SHEET.w / 2).toFixed(2)}, ${(SHEET.d / 2).toFixed(2)});
+  float outside = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+  float a = (1.0 - smoothstep(-0.05, 0.75, outside)) * 0.22 * (1.0 - uNightMix) * (1.0 - uDark);
+  gl_FragColor = vec4(uText * 0.6, a);
+  #include <colorspace_fragment>
 }`;
 
 const waterVertex = `
@@ -245,6 +264,7 @@ uniform vec3 uWaterTint, uShoal;
 uniform vec3 uLamp, uNightBg, uNightLamp, uNightLampMid;
 uniform sampler2D uWindTex;       // the wind's points, drawn this frame from the same camera
 uniform float uWindOn;
+uniform vec2 uStreak;             // the wind on screen: one step of a streak, in parts of the screen
 varying vec2 vUv;
 varying vec3 vWorld;
 
@@ -254,6 +274,7 @@ void main() {
   float edge = sheetEdge(uv);
   float bed = bedAt(uv).x;
   float depth = uLevel - bed;                     // metres of water here, now
+  float fd = fwidth(depth);                       // taken before any pixel is let go
   if (depth <= 0.0 || edge < 0.5) discard;
 
   // ripples: two layers of noise sliding downwind, stronger with the wind
@@ -262,27 +283,29 @@ void main() {
   vec2 q = chart * 0.045;
   vec3 n1 = snoiseGrad(q * vec2(1.0, 2.2) + w * uRipple * 0.6);
   vec3 n2 = snoiseGrad(q * 2.7 + w * uRipple * 1.3 + 7.3);
-  vec2 slope = (n1.yz * 0.6 + n2.yz * 0.35) * (0.05 + 0.22 * strength);
+  vec2 slope = (n1.yz * 0.6 + n2.yz * 0.35) * (0.012 + 0.05 * strength);
   vec3 N = normalize(vec3(-slope.x, 1.0, -slope.y));
   vec3 V = normalize(cameraPosition - vWorld);
-  float fresnel = 0.03 + 0.97 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+  float fresnel = 0.02 + 0.5 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
 
   // the lamp seen in the water: a soft highlight where the surface mirrors it toward the eye
   vec3 L = normalize(uLampPos - vWorld);
   vec3 H = normalize(L + V);
   float across = length(vWorld.xz - uLampPos.xz) / uLampReach;
   float pool = 1.0 / (1.0 + across * across * 1.6);
-  float glint = pow(max(dot(N, H), 0.0), 180.0) * 1.6 + pow(max(dot(N, H), 0.0), 22.0) * 0.12;
+  float glint = pow(max(dot(N, H), 0.0), 40.0) * 0.35 + pow(max(dot(N, H), 0.0), 8.0) * 0.08;
 
   // depth tint: shallow water is clear, deep water a little denser
   float body = smoothstep(0.0, 9.0, depth);
-  float a = mix(0.08, 0.3, body) + fresnel * 0.25;
-  // where the water meets a bank: a fine wet line
-  float shoreLine = 1.0 - smoothstep(0.0, 0.18 + fwidth(depth) * 1.5, depth);
+  float a = mix(0.05, 0.22, body) + fresnel * 0.12;
+  // where the water meets a bank: a fine wet line, only where the bank shelves gently (on a steep
+  // coast it would only trace the steps of the grid)
+  float gentle = 1.0 - smoothstep(0.012, 0.04, length(bedAt(uv).yz));
+  float shoreLine = (1.0 - smoothstep(0.0, 0.12 + fd * 1.5, depth)) * gentle;
   // the 2 m line of the water as it is now: what a boat of 1.6 m needs, moving with the tide;
   // and the 5 m line, fainter
-  float two = lineAlpha(depth - 2.0, 1.3) * (1.0 - smoothstep(0.0, 0.5, fwidth(depth)));
-  float five = lineAlpha(depth - 5.0, 0.9) * 0.45 * (1.0 - smoothstep(0.0, 0.5, fwidth(depth)));
+  float two = (1.0 - smoothstep(0.65 * fd, 0.65 * fd + fd, abs(depth - 2.0))) * (1.0 - smoothstep(0.0, 0.5, fd));
+  float five = (1.0 - smoothstep(0.45 * fd, 0.45 * fd + fd, abs(depth - 5.0))) * 0.45 * (1.0 - smoothstep(0.0, 0.5, fd));
 
   vec3 dayCol = uWaterTint;
   vec3 nightCol = mix(uNightBg, uNightLampMid, pool * 0.6);
@@ -292,7 +315,7 @@ void main() {
   vec4 acc = vec4(col * a, a);
   acc = acc * (1.0 - two * 0.75) + vec4(lines * two * 0.75, two * 0.75);
   acc = acc * (1.0 - five) + vec4(lines * five, five);
-  float sh = shoreLine * mix(0.55, 0.5, uNightMix);
+  float sh = shoreLine * mix(0.4, 0.45, uNightMix);
   vec3 wet = mix(vec3(1.0), uNightLamp * 1.5, uNightMix);
   acc = acc * (1.0 - sh) + vec4(wet * sh, sh);
   float g = clamp(glint * (0.35 + 0.65 * pool), 0.0, 1.0);
@@ -300,10 +323,21 @@ void main() {
   acc.a = clamp(acc.a + g * 0.6, 0.0, 1.0);
   // the wind over the water: field.js's points, only on open water, faint in the shallows, and
   // brighter in the lamp's pool at night
-  vec4 pts = texture(uWindTex, gl_FragCoord.xy / uResolution) * uWindOn * smoothstep(0.1, 1.2, depth);
-  pts.rgb *= mix(1.0, 0.55 + 1.1 * pool, uNightMix);
-  acc.rgb = acc.rgb * (1.0 - pts.a * (1.0 - uDark)) + pts.rgb;
-  acc.a = clamp(acc.a + pts.a * (1.0 - acc.a), 0.0, 1.0);
+  // each point is drawn out into a short streak down the wind: the picture is read a few times back
+  // along the wind's direction on screen, fainter each step
+  vec2 at = gl_FragCoord.xy / uResolution;
+  vec4 pts = vec4(0.0);
+  float wsum = 0.0;
+  for (int i = 0; i < 10; i++) {
+    float k = float(i);
+    float wgt = 1.0 - k / 10.0;
+    pts += texture(uWindTex, at + uStreak * k) * wgt;
+    wsum += wgt;
+  }
+  float foam = clamp(pts.a * 4.0 / wsum, 0.0, 0.6) * uWindOn * smoothstep(0.1, 1.2, depth);
+  vec3 foamCol = mix(uAccent2, uNightLamp * (0.6 + 1.6 * pool), uNightMix);
+  foam *= mix(0.85, 0.6 + 0.7 * pool, uNightMix);
+  acc = acc * (1.0 - foam) + vec4(foamCol * foam, foam);
   acc *= edge;
   gl_FragColor = vec4(acc.rgb / max(acc.a, 1e-4), acc.a);
   #include <colorspace_fragment>
@@ -338,6 +372,7 @@ function reliefTexture(relief) {
 function pictureTexture(canvas, renderer, premultiplied) {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = false;                          // row 0 of the canvas is the north edge, as in the relief
   texture.premultiplyAlpha = Boolean(premultiplied);
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
@@ -361,9 +396,9 @@ export function shownHeight(h) { return (h >= 0 ? h : -DEPTH * (1 - Math.exp(h /
 export function mount(container, options = {}) {
   const o = { course: [[720, 412], [524, 594], [258.6, 694.4], [96, 756], [-140, 846]], ...options };
   const wind = mountField(container, {
-    formation: "wave", spread: 0.55, speed: 0.6, intensity: 0.9, side: "center",
+    formation: "wave", spread: 0.5, speed: 0.6, intensity: 0.4, count: 14000, side: "center", renderScale: [0.8, 1, 1],
     camera: { fov: 32, near: 0.05, far: 160, position: [0, 9, 13], lookAt: [0, 0, 0] },
-    stillTime: 9,
+    stillTime: 9, fade: 900,
     ...o.stage,
     tokens: {
       accent: "--wind-a", accent2: "--wind-b", window: "--color-accent", lamp: "--color-lamp", lampMid: "--color-lamp-mid",
@@ -384,7 +419,7 @@ export function mount(container, options = {}) {
   // ---- the course: chart points and the distance to each, for the shader and the boat
   const course = o.course.map((p) => [p[0], p[1], 0]);
   for (let i = 1; i < course.length; i++) course[i][2] = course[i - 1][2] + Math.hypot(course[i][0] - course[i - 1][0], course[i][1] - course[i - 1][1]);
-  const courseUniform = Array.from({ length: 8 }, (_, i) => new THREE.Vector4(...(course[Math.min(i, course.length - 1)] || [0, 0, 0]), 0));
+  const courseUniform = course.map((p) => new THREE.Vector4(p[0], p[1], p[2], 0));
 
   const shared = {
     uRelief: { value: relief }, uRise: { value: stage.still ? 1 : 0 },
@@ -395,21 +430,29 @@ export function mount(container, options = {}) {
     uniforms: {
       ...stage.uniforms, ...shared,
       uDay: { value: dayTex }, uNight: { value: nightTex },
-      uCourse: { value: courseUniform }, uCourseN: { value: course.length },
-      uBoat: { value: 0 }, uWinFrom: { value: 0 }, uWinTo: { value: 1e5 }, uReach: { value: stage.still ? 1e5 : 0 },
-      uHatchOn: { value: 0 },
+      uCourse: { value: courseUniform },
+      uBoat: { value: 0 }, uBoatAt: { value: new THREE.Vector2(course[0][0], course[0][1]) }, uWinFrom: { value: 0 }, uWinTo: { value: 1e5 }, uReach: { value: stage.still ? 1e5 : 0 },
+      uHatchOn: { value: 0 }, uHaze: { value: new THREE.Vector2(20, 40) },
     },
+    defines: { COURSE_POINTS: course.length },
     vertexShader: paperVertex, fragmentShader: paperFragment,
   });
   const sheet = new THREE.Mesh(new THREE.BufferGeometry(), paper);
   sheet.renderOrder = 0;
   scene.add(sheet);
 
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(SHEET.w + 2.4, SHEET.d + 2.4, 1, 1).rotateX(-Math.PI / 2),
+    new THREE.ShaderMaterial({ uniforms: { ...stage.uniforms, ...shared }, vertexShader: waterVertex, fragmentShader: shadowFragment,
+                               transparent: true, depthWrite: false }));
+  shadow.position.y = -0.01;
+  shadow.renderOrder = -1;
+  scene.add(shadow);
+
   const waterMat = new THREE.ShaderMaterial({
     uniforms: {
       ...stage.uniforms, ...shared,
       uLevel: { value: 2.5 }, uWind: { value: new THREE.Vector2(0.4, -0.4) }, uRipple: { value: 0 },
-      uWindTex: { value: null }, uWindOn: { value: 1 },
+      uWindTex: { value: null }, uWindOn: { value: 1 }, uStreak: { value: new THREE.Vector2() },
     },
     vertexShader: waterVertex, fragmentShader: waterFragment,
     transparent: true, depthWrite: false,
@@ -435,13 +478,35 @@ export function mount(container, options = {}) {
   squash.scale.set(1.5, 0.08, 1.3);
   stage.onResize((size) => { windTarget.setSize(size.pixels.x, size.pixels.y); });
   stage.onDestroy(() => { windTarget.dispose(); stage.dispose(rig); });
+  const streakA = new THREE.Vector3(), streakB = new THREE.Vector3();
   water.onBeforeRender = (renderer, _scene, camera) => {
     if (!points || waterMat.uniforms.uWindOn.value <= 0) return;
+    // the streaks: the wind's direction and strength, as seen by this camera, in parts of the screen
+    const u = waterMat.uniforms.uWind.value, strength = u.length();
+    streakA.set(rig.position.x, rig.position.y, rig.position.z).project(camera);
+    streakB.set(rig.position.x + u.x * 0.5, rig.position.y, rig.position.z + u.y * 0.5).project(camera);
+    let dx = (streakB.x - streakA.x) * 0.5, dy = (streakB.y - streakA.y) * 0.5;
+    // at most about two pixels a step, so a streak is one line and not a string of beads
+    const len = Math.hypot(dx, dy), px = 2.2 / Math.max(stage.size.pixels.x, 1);
+    const most = Math.min(10 * px, 0.003 + 0.02 * Math.min(1, strength * 2.2));
+    if (len > 1e-6) { dx *= most / len; dy *= most / len; }
+    waterMat.uniforms.uStreak.value.set(dx / 10, dy / 10);
     const before = renderer.getRenderTarget();
     renderer.setRenderTarget(windTarget);
     renderer.clear(true, false, false);
     renderer.render(windScene, camera);
     renderer.setRenderTarget(before);
+  };
+
+  // the course at a distance along it: chart point, and whether it is on the sheet
+  const along = (d) => {
+    for (let i = 0; i < course.length - 1; i++) {
+      if (d <= course[i + 1][2] || i === course.length - 2) {
+        const t = Math.min(1, Math.max(0, (d - course[i][2]) / Math.max(course[i + 1][2] - course[i][2], 1e-3)));
+        return [course[i][0] + (course[i + 1][0] - course[i][0]) * t, course[i][1] + (course[i + 1][1] - course[i][1]) * t];
+      }
+    }
+    return course[0].slice(0, 2);
   };
 
   // ---- the story, by the journey's progress (options.story: { p, hour, lamp, lampY, reachLamp, night,
@@ -479,8 +544,12 @@ export function mount(container, options = {}) {
 
   stage.onTokens((tokens) => { want.dark = tokens.dark; });
 
+  const lookDir = new THREE.Vector3();
   // where the hand points on the table, with the camera this frame is drawn with
   scene.onBeforeRender = (renderer, _scene, camera) => {
+    camera.getWorldDirection(lookDir);
+    const toTable = lookDir.y < -0.05 ? camera.position.y / -lookDir.y : 30;
+    paper.uniforms.uHaze.value.set(toTable * 1.35, toTable * 3.2);
     if (stage.pointer.active && !stage.still) {
       ndc.set(stage.pointer.x, stage.pointer.y);
       ray.setFromCamera(ndc, camera);
@@ -498,7 +567,8 @@ export function mount(container, options = {}) {
     if (points) {
       const u = points.material.uniforms;
       u.uCalmAmount.value = 0;                     // the page keeps its own text clear
-      u.uFocus.value = stage.camera.position.distanceTo(rig.position) * 0.9;
+      u.uFocus.value = 0.4;                        // every point behind the focus: small and sharp, no soft discs
+      u.uSize.value = 0.02;
     }
     // the opening, on the first frames at the top of the page: the relief rises out of the paper and
     // the pencil draws the course. Opened half way down the page, the table is simply there.
@@ -540,20 +610,10 @@ export function mount(container, options = {}) {
     ripple += (still ? 0 : delta) * (0.25 + now.wind * 1.6);
     waterMat.uniforms.uRipple.value = still ? 3 : ripple;
     paper.uniforms.uBoat.value = now.boat;
+    paper.uniforms.uBoatAt.value.set(...along(now.boat));
     paper.uniforms.uReach.value = now.reach;
     paper.uniforms.uHatchOn.value = now.hatch;
   });
-
-  // the course at a distance along it: chart point, and whether it is on the sheet
-  const along = (d) => {
-    for (let i = 0; i < course.length - 1; i++) {
-      if (d <= course[i + 1][2] || i === course.length - 2) {
-        const t = Math.min(1, Math.max(0, (d - course[i][2]) / Math.max(course[i + 1][2] - course[i][2], 1e-3)));
-        return [course[i][0] + (course[i + 1][0] - course[i][0]) * t, course[i][1] + (course[i + 1][1] - course[i][1]) * t];
-      }
-    }
-    return course[0].slice(0, 2);
-  };
 
   const handle = stage.handle({
     setProgress(p) { if (Number.isFinite(Number(p))) { want.progress = Math.min(1, Math.max(0, Number(p))); stage.invalidate(); } },
@@ -576,10 +636,10 @@ export function mount(container, options = {}) {
     bedAt: bed,
     level: () => now.level,
     // world height at a chart point: the paper, or the water over it
-    surfaceAt(x, y) { return Math.max(shownHeight(bed(x, y)), shownHeight(now.level)) * shared.uRise.value; },
+    surfaceAt(x, y) { return shownHeight(bed(x, y)) * shared.uRise.value; },
     boatPoint() {
       const c = along(now.boat), w = toWorld(c[0], c[1]);
-      return { chart: c, world: [w[0], shownHeight(now.level) * shared.uRise.value, w[2]],
+      return { chart: c, world: [w[0], shownHeight(bed(c[0], c[1])) * shared.uRise.value, w[2]],
                on: now.boat > 1 && now.hatch > 0.5 && c[0] > 8 && c[0] < 992 && c[1] > 8 && c[1] < 892 };
     },
     course,

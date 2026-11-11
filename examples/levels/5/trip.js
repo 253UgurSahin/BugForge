@@ -92,27 +92,32 @@ const WINDOW = [10 + 58 / 60, 17 + 1 / 60];                          // today's 
 
 // what the scene shows at each chapter (table.js reads it by the journey's progress)
 const STORY = [
-  { p: 0, hour: NOW, lamp: [1.5, 0.1], lampY: 4.2, reachLamp: 3.6, night: 0, boat: 0, hatch: 0, follow: 1, reach: EDGE + legs[3] },
-  { p: 0.25, hour: HOURS[1], lamp: [2.15, -0.45], lampY: 2.6, reachLamp: 2.4, night: 0, boat: boatAt(HOURS[1]) + 2, hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
-  { p: 0.5, hour: HOURS[2], lamp: [0.6, 1.2], lampY: 2.4, reachLamp: 2.4, night: 0, boat: boatAt(HOURS[2]), hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
-  { p: 0.75, hour: HOURS[3], lamp: [-2.2, 2.4], lampY: 2.2, reachLamp: 2.3, night: 0.12, boat: boatAt(HOURS[3]), hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
+  { p: 0, hour: NOW, lamp: [1.6, 0.2], lampY: 3.6, reachLamp: 2.9, night: 0, boat: 0, hatch: 0, follow: 1, reach: EDGE + legs[3] },
+  { p: 0.25, hour: HOURS[1], lamp: [2.15, -0.45], lampY: 2.6, reachLamp: 1.9, night: 0, boat: boatAt(HOURS[1]) + 2, hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
+  { p: 0.5, hour: HOURS[2], lamp: [0.6, 1.2], lampY: 2.4, reachLamp: 1.9, night: 0, boat: boatAt(HOURS[2]), hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
+  { p: 0.75, hour: HOURS[3], lamp: [-2.2, 2.4], lampY: 2.2, reachLamp: 1.8, night: 0.12, boat: boatAt(HOURS[3]), hatch: 1, follow: 0.35, reach: EDGE + legs[3] },
   { p: 1, hour: HOURS[4], lamp: [-3.4, 3.0], lampY: 3.6, reachLamp: 3.3, night: 1, boat: EDGE + legs[3], hatch: 1, follow: 0.6, reach: EDGE + legs[3] },
 ];
 
 // camera keyframes, world units: the sheet is 10 x 9 round the middle, x east, z south, y up
 const CHAPTERS = [
-  { camera: { position: [-1.3, 8.6, 10.2], target: [-2.0, -0.4, 0.4], fov: 30 },
-    phone: { position: [0.6, 13.6, 8.8], target: [0.4, 0, -1.6], fov: 34 },
-    still: { position: [0.2, 9.4, 9.6], target: [0.3, -0.2, 0.3], fov: 32 }, alt: "" },
-  { camera: { position: [3.5, 1.35, -1.5], target: [1.25, -0.05, 0.55], fov: 36 },
-    phone: { position: [3.9, 2.4, -2.1], target: [1.6, -0.2, 0.2], fov: 44 } },
-  { camera: { position: [2.25, 1.05, 0.55], target: [-0.15, -0.05, 1.85], fov: 38 },
-    phone: { position: [2.6, 1.9, 0.1], target: [0.2, -0.2, 1.6], fov: 46 } },
-  { camera: { position: [-0.55, 0.62, 1.7], target: [-3.7, -0.12, 3.15], fov: 40 },
-    phone: { position: [-0.2, 1.2, 1.2], target: [-3.2, -0.2, 2.9], fov: 48 } },
-  { camera: { position: [0.4, 9.8, 8.2], target: [-0.9, -0.3, 0.6], fov: 32 },
-    phone: { position: [0.2, 14.4, 7.6], target: [-0.6, 0, -1.4], fov: 36 } },
+  { camera: { position: [-2.6, 8.5, 11.0], target: [-3.45, -0.6, 0.35], fov: 30 },      // the whole sheet, right of the words
+    phone: { position: [1.6, 10.6, 5.4], target: [1.2, 0, -4.4], fov: 46 },
+    still: { position: [0.2, 9.0, 9.9], target: [0.1, -0.5, 0.35], fov: 33 } },
+  { camera: { position: [3.1, 1.75, 2.1], target: [1.75, 0, -0.25], fov: 36 },          // down to the pier head
+    phone: { position: [2.9, 3.2, 3.2], target: [2.0, 0, 0.55], fov: 50 },
+    still: { position: [3.0, 1.9, 2.0], target: [2.15, 0, -0.35], fov: 38 } },
+  { camera: { position: [1.7, 1.7, 3.5], target: [-0.2, 0, 1.25], fov: 38 },            // across the roads to the fix
+    phone: { position: [1.4, 3.1, 4.6], target: [0.1, 0, 2.15], fov: 52 },
+    still: { position: [1.8, 1.8, 3.6], target: [0.3, 0, 1.45], fov: 40 } },
+  { camera: { position: [0.45, 2.75, 3.95], target: [-2.85, -0.25, 2.6], fov: 40 },     // down the Wielingen
+    phone: { position: [0.4, 3.0, 4.4], target: [-2.4, 0, 2.9], fov: 54 },
+    still: { position: [0.0, 1.8, 3.7], target: [-2.6, -0.1, 2.5], fov: 42 } },
+  { camera: { position: [0.2, 10.2, 9.2], target: [-1.6, -0.5, 0.6], fov: 32 },         // the landfall, the whole sheet by night
+    phone: { position: [-0.4, 10.4, 7.0], target: [-1.4, 0, -1.6], fov: 48 },
+    still: { position: [0.0, 10.0, 9.4], target: [-0.6, -0.5, 0.5], fov: 33 } },
 ].map((c, i) => ({ ...c, progress: STORY[i].p, params: { hour: HOURS[i], night: STORY[i].night, data: dataAt(HOURS[i]) } }));
+if (/debug/.test(location.hash) && window.__poses) window.__poses.forEach((pose, i) => { if (pose && CHAPTERS[i]) Object.assign(CHAPTERS[i], pose); });   // DEBUG-REMOVE
 
 /* ---- callouts: buoys and fixes, named as the camera passes them ------------------------------ */
 const CALLOUTS = [
@@ -147,6 +152,10 @@ function callouts(scene, layer) {
     const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000 || 0.016);
     last = now;
     const w = layer.clientWidth, h = layer.clientHeight;
+    // the lit slip covers part of the stage: nothing is named underneath it
+    const card = current > 0 && steps[current] ? steps[current].querySelector(".trip__card") : null;
+    const box = card ? card.getBoundingClientRect() : null;
+    const under = (x, y) => box && x > box.left - 160 && x < box.right + 12 && y > box.top - 16 && y < box.bottom + 16;
     const project = (wx, wy, wz) => {
       v.x = wx; v.y = wy; v.z = wz;
       const p = camera.position, e = camera.matrixWorldInverse.elements, m = camera.projectionMatrix.elements;
@@ -155,25 +164,28 @@ function callouts(scene, layer) {
       const cx = (m[0] * x + m[4] * y + m[8] * z + m[12]) / cw, cy = (m[1] * x + m[5] * y + m[9] * z + m[13]) / cw;
       return { x: (cx + 1) / 2 * w, y: (1 - cy) / 2 * h, behind: z > -0.05, dist: Math.hypot(p.x - wx, p.y - wy, p.z - wz) };
     };
+    const boat = scene.boatPoint();
     for (const c of made) {
       const [wx, wz] = [(c.at[0] - 500) / 100, (c.at[1] - 450) / 100];
+      // a fix the boat is sitting on is named by the sounder instead
+      const sitting = boat && boat.on && Math.hypot(boat.chart[0] - c.at[0], boat.chart[1] - c.at[1]) < 40;
       const s = project(wx, scene.surfaceAt(c.at[0], c.at[1]) + 0.02, wz);
-      const inView = !s.behind && s.x > -40 && s.x < w - 140 && s.y > 60 && s.y < h - 90;
-      const goal = inView ? smooth(5.2, 3.2, s.dist) : 0;
+      const inView = !s.behind && s.x > -40 && s.x < w - 140 && s.y > 60 && s.y < h - 90 && !under(s.x, s.y);
+      const goal = inView && !sitting ? smooth(5.2, 3.2, s.dist) : 0;
       c.shown += (goal - c.shown) * Math.min(1, dt * 5);
       if (c.shown < 0.01) { if (c.el.style.opacity !== "0") c.el.style.opacity = "0"; continue; }
       c.el.style.opacity = c.shown.toFixed(3);
       c.el.style.transform = `translate3d(${s.x.toFixed(1)}px, ${(s.y - 7).toFixed(1)}px, 0)`;
     }
     // the sounder rides with the boat: the water under the keel, from the tide and the sea bed
-    const b = scene.boatPoint();
+    const b = boat;
     if (b) {
       const s = project(b.world[0], b.world[1] + 0.03, b.world[2]);
       const depth = Math.max(0, scene.level() - scene.bedAt(b.chart[0], b.chart[1]));
-      const visible = b.on && !s.behind && s.x > 0 && s.x < w - 120 && s.y > 60 && s.y < h - 90 && s.dist < 6;
+      const visible = b.on && !s.behind && s.x > 0 && s.x < w - 220 && s.y > 60 && s.y < h - 90 && s.dist < 6 && !under(s.x + 18, s.y - 26);
       sounder.style.opacity = visible ? "1" : "0";
       if (visible) {
-        const text = `<b>${depth.toFixed(1)} m</b> under the keel`;
+        const text = `<b>${depth.toFixed(1)} m</b> under the keel · ${clock(tripHour)}`;
         if (text !== lastText) { sounder.innerHTML = text; lastText = text; }
         sounder.style.transform = `translate3d(${(s.x + 18).toFixed(1)}px, ${(s.y - 26).toFixed(1)}px, 0)`;
       }
@@ -186,7 +198,7 @@ function callouts(scene, layer) {
 const steps = section ? [...section.querySelectorAll("[data-chapter]")] : [];
 const marks = section ? [...section.querySelectorAll("[data-go]")] : [];
 const gauge = document.getElementById("slip-gauge");
-let live = null, current = -1, idle = { hour: NOW, last: 0, frame: 0 };
+let live = null, current = -1, tripHour = NOW, idle = { hour: NOW, last: 0, frame: 0 };
 
 function showChapter(index) {
   current = index;
@@ -280,6 +292,9 @@ if (section && steps.length) {
     stillWidth: 880,
     stillRatio: 0.6,
     onUpdate: ({ params }) => {
+      // also called before each still is drawn: the slip and the stage only follow the live trip
+      if (section.getAttribute("data-journey") !== "live") return;
+      tripHour = params.hour || NOW;
       section.style.setProperty("--trip-night", clamp(params.night || 0).toFixed(3));
       section.toggleAttribute("data-night-now", (params.night || 0) > 0.5);
       if (current > 0 || (params.hour || NOW) > NOW + 0.01) tellGauge(params.hour || NOW);
