@@ -9,17 +9,18 @@
    sheet to Zeebrugge; then up over the whole sheet as the lamp goes out and the room light comes back.
    - The opening: the drawn chart (the poster) draws its course; the 3D sheet then takes its place
      exactly, lifts off the page and settles into the hero's view (table.js).
-   - The journey's chapter event marks the chapter in the strip of tools. Each slip is paper: it lands
-     on the chart with a spring as it comes in, solid, and no label is ever drawn over it.
+   - The strip of tools marks the chapter whose slip is nearest the middle of the screen. Each slip is
+     paper: it lands on the chart with a spring as it comes in, solid, and no label is ever drawn over it.
    - The night of the landfall is read from where its slip is on the screen, so the red lamp is on
      while that slip is read, whatever the camera's lag; the lamp goes out again as it leaves.
    - The data hook: the scene's setData gets the page's own numbers, read from the page itself: the
      water from the week's tide curve (tide.js), the wind from the day's reading (17 kn SW, easing to
      12 kn by 18:00). The water at each chapter's hour is the level of the water on the sheet, so the
      banks dry as the passage goes on; the wind turns, stirs and speeds the streaks over the water.
-   - While nobody scrolls, the hero's clock runs on from "now" (09:40) toward the casting off: the tide
-     rises over the banks, the window opens at 10:58 and its band sweeps out along the course; the slip
-     says the hour and the water and lights its window while the hour is inside it.
+   - While nobody scrolls, the hero's clock runs on from "now" (09:40) to the casting off at 14:20: the
+     tide rises over the banks, the window opens at 10:58 and its band sweeps out along the course, the
+     boat comes to the pier head; the slip says the hour and the water and lights its window.
+   - On a slow device the table rests while the page is being scrolled (restWhileScrolling).
    - Callouts follow the buoys and fixes as the camera passes them; the sounder rides with the boat.
    - Tools: "Plain chart" (the drawn chart instead of the 3D, Alt+Shift+C, also with the stills of
      reduced motion), "Tide table" (Alt+Shift+T: to the week, with the table open), and the kit's
@@ -115,7 +116,7 @@ const STORY = [
 
 // camera keyframes, world units: the sheet is 10 x 9 round the middle, x east, z south, y up
 const CHAPTERS = [
-  { ...{ camera: orbit(HERO) }, phone: orbit(HERO_PHONE),                               // the hero
+  { camera: orbit(HERO), phone: orbit(HERO_PHONE),                                       // the hero
     still: { position: [0.2, 9.4, 10.2], target: [0.1, -0.5, 0.35], fov: 33 }, progress: 0, hour: HOURS[0] },
   { via: true, camera: { position: [3.4, 5.2, 5.6], target: [1.4, 0, -0.2], fov: 34 },  // down behind the pier head
     phone: { position: [3.2, 6.2, 5.2], target: [1.7, 0, -0.3], fov: 48 }, progress: 0.12, hour: NOW + (OFF - NOW) * 0.6 },
@@ -275,16 +276,20 @@ function showChapter(index) {
 }
 
 // the hero's clock: once the opening is over and while the trip waits at its first chapter, the hours
-// run on from now to the casting off (two and a half seconds an hour) and stop there, the window open
-// and the water high: where the trip begins. It rides on the stage's own frames, so it stops whenever
-// the scene does (reduced motion, paused, out of sight).
+// run on from now to the casting off (two and a half seconds an hour, by the wall's clock, so a slow
+// device sees the same hours, only fewer frames of them) and stop there, the window open, the water
+// high and the boat waiting at the pier head: where the trip begins. It rides on the stage's own frames,
+// so it stops whenever the scene does (reduced motion, paused, out of sight).
 function heroClock(journeyHandle) {
   const scene = journeyHandle.scene;
-  let hour = NOW, ready = !scene.opening || !scene.opening();
+  let hour = NOW, ready = !scene.opening || !scene.opening(), last = 0;
   journeyHandle.stage.container.addEventListener("tableopen", () => { ready = true; });
-  return journeyHandle.stage.onFrame((time, delta) => {
+  return journeyHandle.stage.onFrame(() => {
+    const now = performance.now(), delta = last ? Math.min((now - last) / 1000, 1) : 0;
+    last = now;
     if (current > 0 || journeyHandle.stage.still || !ready || hour >= OFF) return;
     hour = Math.min(OFF, hour + delta / 2.5);
+    if (hour >= OFF) scene.setStory({ idleBoat: 1 });
     const data = dataAt(hour);
     CHAPTERS[0].params.data.splice(0, 3, ...data);      // the journey blends on from where the clock is
     CHAPTERS[0].params.hour = hour;

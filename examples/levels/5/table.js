@@ -29,8 +29,9 @@
    { target, dist, el, az, fov, shift } and heroPhone (the hero's view, as an orbit, with its lens shift).
    setProgress(p): the journey's progress. setData([level, wind, from]): the tide (0..1 of 6 m), the wind
    (0..1 of 40 kn) and where it comes from (0..1 of 360 degrees), the page's own numbers (trip.js).
-   setStory({ idleHatch, night }): the hero's clock (how far the window has opened while the trip waits
-   at its start), and the night as the page reads it from the landfall's slip (null: the story's).
+   setStory({ idleHatch, idleBoat, night }): the hero's clock (how far the window has opened while the
+   trip waits at its start, and the boat at the pier head once the clock is there), and the night as the
+   page reads it from the landfall's slip (null: the story's).
    onCamera(fn): fn(camera) as each frame is drawn, for labels that follow the chart. The container gets
    the event "tableopen" when the opening is over. */
 import * as THREE from "three";
@@ -553,9 +554,9 @@ export function mount(container, options = {}) {
              boat: mix(a.boat, b.boat), hatch: mix(a.hatch, b.hatch), follow: mix(a.follow, b.follow) };
   };
   if (Array.isArray(o.window)) { paper.uniforms.uWinFrom.value = o.window[0]; paper.uniforms.uWinTo.value = o.window[1]; }
-  const want = { progress: 0, level: 1, wind: 0.4, from: 225, idleHatch: null, night: null, dark: false };
+  const want = { progress: 0, level: 1, wind: 0.4, from: 225, idleHatch: null, idleBoat: 0, night: null, dark: false };
   const first = blendStory(0);
-  const now = { level: want.level, wind: want.wind, night: 0, boat: first.boat, hatch: first.hatch,
+  const now = { level: want.level, wind: want.wind, night: 0, boat: first.boat, hatch: first.hatch, idleBoat: 0,
                 lamp: [...first.lamp], lampY: first.lampY, reach: [...first.reach] };
   let ripple = 0, aim = null, wall = 0;
   const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3(), ndc = new THREE.Vector2();
@@ -598,7 +599,7 @@ export function mount(container, options = {}) {
   }
   const heroView = () => (stage.size.aspect < 0.8 ? o.heroPhone || o.hero : o.hero) || null;
   // started: the first frame was drawn at the drawn chart; opened: seconds into the opening (null: none)
-  let opened = null, openStart = 0, openDone = stage.still, startedAt = 0;
+  let opened = null, openStart = 0, openDone = stage.still;
   const tmpPos = new THREE.Vector3(), tmpQuat = new THREE.Quaternion(), shiftM = new THREE.Matrix4();
   const journeyPos = new THREE.Vector3(), journeyQuat = new THREE.Quaternion();
   const clockNow = () => (document.timeline && document.timeline.currentTime != null ? document.timeline.currentTime : performance.now()) / 1000;
@@ -677,7 +678,7 @@ export function mount(container, options = {}) {
       else {
         poster = measurePoster();
         if (!poster) { openDone = true; container.dispatchEvent(new CustomEvent("tableopen")); }
-        else { opened = 0; startedAt = wallNow; openStart = wallNow + FADE / 1000 + 0.12; }
+        else { opened = 0; openStart = wallNow + FADE / 1000 + 0.12; }
       }
     }
     let t = 1;
@@ -687,7 +688,7 @@ export function mount(container, options = {}) {
       t = clamp01(opened / OPENING);
       if (t >= 1) { openDone = true; opened = null; container.dispatchEvent(new CustomEvent("tableopen")); }
     }
-    const lift = openDone ? 0 : Math.sin(Math.PI * smooth(0.02, 0.88, t)) * (1 - smooth(0.6, 0.92, t)) + 0 * startedAt;
+    const lift = openDone ? 0 : Math.sin(Math.PI * smooth(0.02, 0.88, t)) * (1 - smooth(0.6, 0.92, t));
     placeSheet(Math.max(0, lift) * 0.55, Math.max(0, lift));
     const rise = openDone ? 1 : smooth(0.3, 0.92, t);
     paper.uniforms.uRise.value = rise;
@@ -750,7 +751,9 @@ export function mount(container, options = {}) {
     paper.uniforms.uBoat.value = now.boat;
     paper.uniforms.uBoatAt.value.set(...along(now.boat));
     paper.uniforms.uHatchOn.value = now.hatch;
-    paper.uniforms.uBoatOn.value = smooth(0.5, 4, now.boat);              // the boat shows once it has cast off
+    // the boat shows once it has cast off, or while it waits at the pier head at the end of the hero's clock
+    now.idleBoat = ease(now.idleBoat, want.idleBoat * (1 - smooth(0.01, 0.08, want.progress)), 0.5);
+    paper.uniforms.uBoatOn.value = Math.max(smooth(0.5, 4, now.boat), now.idleBoat);
   });
 
   const handle = stage.handle({
@@ -769,6 +772,7 @@ export function mount(container, options = {}) {
     setStory(extra = {}) {
       if ("idleHatch" in extra) want.idleHatch = Number.isFinite(extra.idleHatch) ? extra.idleHatch : null;
       if ("night" in extra) want.night = Number.isFinite(extra.night) ? clamp01(extra.night) : null;
+      if ("idleBoat" in extra) want.idleBoat = clamp01(Number(extra.idleBoat) || 0);
       stage.invalidate();
     },
     onCamera(fn) { onCamera.push(fn); return () => { const at = onCamera.indexOf(fn); if (at !== -1) onCamera.splice(at, 1); }; },
