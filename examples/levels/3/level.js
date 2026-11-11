@@ -257,6 +257,10 @@
     /* what follows the hand and the page, each on a spring of its own */
     function S(v) { return { v: v, d: 0, t: v }; }
     var pool = { x: S(0), y: S(0) }, page = S(0);
+        /* the reader leans over the table toward the hand: the eye (the desk's perspective origin) moves a
+           little toward the pointer, so the whole sheet, its turned corner and its relief of plates are seen
+           from that side, about 6 degrees at the most. The slip lies above the sheet and moves the other way */
+        var lean = { x: S(0), y: S(0) };
     var hand = null, frame = 0, last = 0, size = null, map = null, laid = !moving(), near = true, swings = [];
 
     function measure() {
@@ -264,6 +268,12 @@
       size = { w: w, h: h, s: s, ox: w - 1000 * s, oy: h - 900 * s, k: parseFloat(getComputedStyle(root).getPropertyValue("--l3-k")) || 1,
         top: hero.getBoundingClientRect().top + window.scrollY, tall: hero.offsetHeight,
         dx: d.left + window.scrollX, dy: d.top + window.scrollY };
+        /* where the eye rests, as the CSS puts it (the inline lean is cleared first, so it is read clean) */
+        desk.style.perspectiveOrigin = "";
+        var po = getComputedStyle(desk).perspectiveOrigin.split(" ").map(parseFloat);
+        size.po = po.length === 2 && isFinite(po[0]) && isFinite(po[1]) ? po : null;
+        size.dw = d.width;
+        size.dh = d.height;
     }
     function onSheet(x, y) { return { x: size.ox + x * size.s, y: size.oy + y * size.s }; }
     /* nobody pointing: the lamp rests on the pencil line, just past the 14:20 fix, and walks on down it
@@ -337,6 +347,15 @@
       if (!at) at = rest(page.t);
       pool.x.t = clamp(at.x, size.w * 0.04, size.w * 0.96);
       pool.y.t = clamp(at.y, size.h * 0.04, size.h * 0.96);
+        /* the lean: where the hand is in the hero, -1 to 1 each way; none without a hand or with less motion */
+        var hb = hero.getBoundingClientRect();
+        if (hand && !reduce.matches && !paused() && hb.width && hb.height) {
+            lean.x.t = clamp((hand.x - hb.left - hb.width / 2) / (hb.width / 2), -1, 1);
+            lean.y.t = clamp((hand.y - hb.top - hb.height / 2) / (hb.height / 2), -1, 1);
+        } else {
+            lean.x.t = 0;
+            lean.y.t = 0;
+        }
     }
     function draw() {
       var x = pool.x.v, y = pool.y.v, at = "translate3d(" + x.toFixed(1) + "px, " + y.toFixed(1) + "px, 0)", k = 1 / size.k;
@@ -352,9 +371,20 @@
         var p = map.place(x / size.w, y / size.h);
         table.style.transform = "translate3d(" + (p.x - size.dx).toFixed(1) + "px, " + (p.y - size.dy).toFixed(1) + "px, 0)";
       }
-      if (slip) slip.style.translate = page.v > 0.001 ? "0 " + (-(fine.matches ? 130 : 24) * page.v).toFixed(1) + "px" : "";
+        /* the eye moves toward the hand: up to 70 percent of the desk across and 45 percent along it (about 6 degrees of view) */
+        if (size.po) {
+            var lx = lean.x.v, ly = lean.y.v;
+            desk.style.perspectiveOrigin = Math.abs(lx) + Math.abs(ly) < 0.001 ? ""
+                : (size.po[0] + lx * size.dw * 0.7).toFixed(1) + "px " + (size.po[1] + ly * size.dh * 0.45).toFixed(1) + "px";
+        }
+        /* the slip rises as the page leaves (more on a wide screen, so the layers part by 48 px or more; 60 on
+           a phone, past the 24 the level asks for), and lies above the sheet: it moves against the lean */
+        if (slip) {
+            var sy = page.v > 0.001 ? -(fine.matches ? 130 : 60) * page.v : 0, sxl = -lean.x.v * 14, syl = -lean.y.v * 8;
+            slip.style.translate = Math.abs(sy) + Math.abs(sxl) + Math.abs(syl) > 0.05 ? sxl.toFixed(1) + "px " + (sy + syl).toFixed(1) + "px" : "";
+        }
     }
-    function settle() { [pool.x, pool.y, page].forEach(function (s) { s.v = s.t; s.d = 0; }); }
+    function settle() { [pool.x, pool.y, page, lean.x, lean.y].forEach(function (s) { s.v = s.t; s.d = 0; }); }
     /* the loop runs only while the hand or the page moves the lamp, and sleeps after */
     function tick(now) {
       frame = 0;
@@ -365,7 +395,8 @@
       last = now;
       /* the lamp follows the hand a little late and a little past, as a hanging thing does; the page's own
          scroll is followed closely */
-      [[pool.x, 6, 0.7], [pool.y, 6, 0.7], [page, 14, 1]].forEach(function (e) {
+      /* the lean follows more slowly and settles without overshoot: a reader's head, not a swinging lamp */
+      [[pool.x, 6, 0.7], [pool.y, 6, 0.7], [page, 14, 1], [lean.x, 3.2, 0.9], [lean.y, 3.2, 0.9]].forEach(function (e) {
         var s = e[0], w = e[1], z = e[2];
         s.d += (w * w * (s.t - s.v) - 2 * z * w * s.d) * dt;
         s.v += s.d * dt;

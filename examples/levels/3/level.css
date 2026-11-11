@@ -295,7 +295,10 @@
   /* the sheet on the table, seen from the reader's chair */
   --l3-lay: 27deg;                              /* how far the sheet lies back */
   --l3-turn: -1.4deg;                           /* and how it lies turned: a sheet is never quite square */
-  --l3-sink: -28px;                             /* a little under the screen, so no part of it ever comes nearer */
+    /* the sheet lies a little in front of the screen: its near edge is then wider than level 2's flat chart,
+       so the first screen holds more chart, not less. The plates are drawn at --l3-k times their size, so
+       the small enlargement this gives stays sharp */
+    --l3-sink: 70px;
   --l3-eye: 1450px;                             /* how far the eye is from the screen */
   --l3-eye-at: 26% -46%;                        /* and where it is: left of the sheet, above the table */
   --l3-curl: 5.5rem;                            /* the corner that has turned up */
@@ -305,45 +308,77 @@
   /* the lamp. The sheet is multiplied by one light: warm cream in the pool, and outside it a step down to
      about the table's own brightness, so the sheet stays the lightest paper on the table; the middle of the
      pool is warmed (soft light), never bleached. By night: a dim, deep red pool, the rest faintly readable */
-  --l3-lit: #fff1d9;
-  --l3-rim: #fcefdc;
-  --l3-dim: #f0ebe2;
-  --l3-glow: rgba(255, 176, 84, 0.5);
-  --l3-table: rgba(255, 252, 244, 0.78);        /* the same lamp on the table round the sheet */
-  --l3-room: rgba(110, 84, 40, 0.16);           /* and the room outside its reach */
+    /* A lamp reads as a lamp, not as a vignette, because its pool has an edge: the shade cuts the light off.
+       So the pool is bright and warm right up to a rim, and past the rim the paper drops a clear step into
+       the room's shade (about 12 percent darker), not a slow fade. */
+    --l3-lit: #fff6e4;
+    --l3-rim: #f7e5c4;
+    --l3-dim: #e2d5bf;
+    --l3-glow: rgba(255, 170, 70, 0.62);
+    --l3-table: rgba(255, 249, 234, 0.85);      /* the same lamp on the table round the sheet */
+    --l3-room: rgba(96, 70, 30, 0.3);           /* and the room outside its reach: clearly in shade */
   --l3-cast: rgba(56, 38, 10, 0.3);             /* the sheet's shadow on the table */
   --l3-contact: rgba(56, 38, 10, 0.26);         /* where it touches the table */
   --l3-cut: #d6c8ab;                            /* the cut edge of the paper, towards the reader */
   --l3-back: #ece2cd;                           /* the back of the paper, on the turned-up corner */
   --l3-crease-dark: rgba(92, 66, 22, 0.12);     /* the fold: one side turned from the light */
-  --l3-crease-light: rgba(255, 255, 255, 0.5);  /* and one side towards it */
+    --l3-crease-light: rgba(255, 255, 255, 0.24); /* and one side towards it (at 0.5 it read as a white streak) */
   --l3-ink-2: #263b49;                          /* small print on paper: darker than --color-text-muted, so 12 px reads */
-  --l3-pool-c: rgba(255, 186, 96, 0.36);        /* the lamp over the hour the tide story reads */
+  --l3-pool-c: rgba(255, 186, 96, 0.2);         /* the lamp over the hour the tide story reads: a faint warmth, never a blob */
   --l3-glint: rgba(255, 186, 96, 0.5);          /* the lamp caught by a card under the hand */
   --l3-sheet: #fbf8f0;                          /* the tide sheet laid on the table */
   --l3-dusk: rgba(48, 30, 8, 0.34);             /* the dialog: the lamp turned down */
   --l3-dusk-2: rgba(36, 22, 4, 0.62);
 }
+/* By night the room outside the pool is kept a lighter red (dim #a88a7e, was #5e4740): the lamp adds light to
+   a dim sheet, it is not the only light. The turned-up corner shows the back of the paper in the red light
+   (#7a2c1a), not a black hole */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --l3-paper: #84260f; --l3-lit: #ffffff; --l3-rim: #d09c8b; --l3-dim: #5e4740; --l3-glow: rgba(255, 92, 52, 0.42);
+    --l3-paper: #8c2a12; --l3-lit: #ffffff; --l3-rim: #e2b2a2; --l3-dim: #a88a7e; --l3-glow: rgba(255, 92, 52, 0.42);
     --l3-table: rgba(150, 38, 14, 0.62); --l3-room: rgba(0, 0, 0, 0.32); --l3-cast: rgba(0, 0, 0, 0.62); --l3-contact: rgba(0, 0, 0, 0.7);
-    --l3-cut: #2a0d07; --l3-back: #3b150c; --l3-crease-dark: rgba(0, 0, 0, 0.2); --l3-crease-light: rgba(255, 150, 110, 0.06);
-    --l3-ink-2: #e2cdbf; --l3-pool-c: rgba(166, 45, 23, 0.5); --l3-glint: rgba(255, 106, 77, 0.16); --l3-sheet: #1a110e;
+    --l3-cut: #3a120a; --l3-back: #7a2c1a; --l3-crease-dark: rgba(0, 0, 0, 0.2); --l3-crease-light: rgba(255, 150, 110, 0.06);
+    --l3-ink-2: #e2cdbf; --l3-pool-c: rgba(166, 45, 23, 0.3); --l3-glint: rgba(255, 106, 77, 0.16); --l3-sheet: #1a110e;
     --l3-dusk: rgba(6, 2, 1, 0.66); --l3-dusk-2: rgba(2, 1, 0, 0.86);
   }
 }
 :root[data-theme="dark"] {
-  --l3-paper: #84260f; --l3-lit: #ffffff; --l3-rim: #d09c8b; --l3-dim: #5e4740; --l3-glow: rgba(255, 92, 52, 0.42);
+  --l3-paper: #8c2a12; --l3-lit: #ffffff; --l3-rim: #e2b2a2; --l3-dim: #a88a7e; --l3-glow: rgba(255, 92, 52, 0.42);
   --l3-table: rgba(150, 38, 14, 0.62); --l3-room: rgba(0, 0, 0, 0.32); --l3-cast: rgba(0, 0, 0, 0.62); --l3-contact: rgba(0, 0, 0, 0.7);
-  --l3-cut: #2a0d07; --l3-back: #3b150c; --l3-crease-dark: rgba(0, 0, 0, 0.2); --l3-crease-light: rgba(255, 150, 110, 0.06);
-  --l3-ink-2: #e2cdbf; --l3-pool-c: rgba(166, 45, 23, 0.5); --l3-glint: rgba(255, 106, 77, 0.16); --l3-sheet: #1a110e;
+  --l3-cut: #3a120a; --l3-back: #7a2c1a; --l3-crease-dark: rgba(0, 0, 0, 0.2); --l3-crease-light: rgba(255, 150, 110, 0.06);
+  --l3-ink-2: #e2cdbf; --l3-pool-c: rgba(166, 45, 23, 0.3); --l3-glint: rgba(255, 106, 77, 0.16); --l3-sheet: #1a110e;
   --l3-dusk: rgba(6, 2, 1, 0.66); --l3-dusk-2: rgba(2, 1, 0, 0.86);
 }
+/* The sheet by night, re-inked. Dark ink on a red sheet only reads where the lamp is brightest; outside the
+   pool it sank into the paper. So at night the sheet is a dim red paper and its print is pale rose, as a
+   chart's light print shows under a red lamp: every word reads anywhere on the sheet, and the lamp's pool
+   is the brighter red that lights the paper under it. Only on the sheet: the rest of the page keeps its tokens. */
+:root[data-theme="dark"] .sheet {
+    --l3-paper: #5c1a0c; --l3-dim: #9a7a6e; --l3-rim: #e8c0b0;
+    --color-chart-ink: #f3cdbf; --color-chart-contour: #e09a84; --color-chart-edge: #e6a892;
+    --color-chart-pencil: #fff0e6; --color-chart-magenta: #ff9c7e;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .sheet {
+        --l3-paper: #5c1a0c; --l3-dim: #9a7a6e; --l3-rim: #e8c0b0;
+        --color-chart-ink: #f3cdbf; --color-chart-contour: #e09a84; --color-chart-edge: #e6a892;
+        --color-chart-pencil: #fff0e6; --color-chart-magenta: #ff9c7e;
+    }
+}
+
+/* the space between "Today" and the week: the section's own padding is enough; the pinned stage and its head
+   no longer add theirs on top (together they left an empty band of 170 px above the week) */
+.tides:has(.story.is-live) { padding-top: var(--space-6); }
+.story.is-live .story__stage { padding-top: 0; }
 
 /* ---- the chart as a sheet of paper lying on the table under the lamp ---------------------------------- */
 .hero::after { display: none; }               /* level 2's lamp is a fixed glow; this one hangs over the sheet */
-.hero::before { background: radial-gradient(75% 95% at 74% 52%, transparent 35%, var(--l3-room) 100%); }
+.hero::before {
+    background: radial-gradient(75% 95% at 74% 52%, transparent 35%, var(--l3-room) 100%);
+    /* the room's shade fades out before the hero ends, so the page below never starts at a hard seam */
+    -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+}
 .hero__scene { overflow: visible; -webkit-mask-image: none; mask-image: none; container-type: size; }
 .hero__scene::after { display: none; }        /* level 2's fold lies on the screen; this one lies in the paper */
 .desk { position: absolute; inset: 0; perspective: var(--l3-eye); perspective-origin: var(--l3-eye-at); pointer-events: none; }
@@ -393,7 +428,9 @@
 }
 .sheet__lamp {
   mix-blend-mode: multiply;
-  background: radial-gradient(ellipse 22% 21% at 50% 50%, var(--l3-lit) 0%, var(--l3-lit) 28%, var(--l3-rim) 54%, var(--l3-dim) 84%) var(--l3-dim);
+    /* the pool holds its light out to about half its radius, then the shade's rim brings it down over a
+       short band (54 to 80 percent): the edge you can point at, which makes it a lamp */
+    background: radial-gradient(ellipse 22% 21% at 50% 50%, var(--l3-lit) 0%, var(--l3-lit) 40%, var(--l3-rim) 60%, var(--l3-dim) 80%) var(--l3-dim);
 }
 .sheet__glow {
   mix-blend-mode: soft-light;
@@ -484,8 +521,15 @@
 /* where the sheet lies: on a wide screen right of the words, its near edge along the foot of the hero */
 @media (min-width: 60.0625rem) {
   /* it starts right of the headline, so the words never run over its edge */
+    /* base.css gives the words a halo of page colour, for a chart that runs under them. Here the sheet stays
+       right of the words, and the room round the lamp is a shade darker than the page, so that halo would
+       show as a pale glow round every letter: off */
+    .hero h1, .lead { text-shadow: none; }
   .hero__scene {
     top: calc(var(--size-header) + var(--space-5)); bottom: var(--space-6);
+      /* the sheet lies in front of the screen (--l3-sink), so its near edge comes lower than the scene's foot:
+         it is laid this far up, so the whole sheet and the "Pause motion" line under it stay in the window */
+      --l3-bottom: 4.25rem;
     left: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) + var(--text-display) * 5.9 + var(--space-3));
     right: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) - var(--space-4));
   }
@@ -500,7 +544,8 @@
 /* on a phone the words are shorter and keep one button (the header has the other). The page marks a phone
    as html.is-narrow (before the first paint, and again when the width changes), because a width rule here
    is also matched for a moment while Chromium takes a full-page picture, which then lost the second button */
-html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
+/* (Level 3 used to drop the last sentence and the second button on a phone. A level keeps everything of the
+   level below, and level 2 shows both, so they stay; the sheet lies below them.) */
 
 /* ---- one control stops what moves by itself (the lamp's swing, the cards' lean): WCAG 2.2.2. The page
    keeps the choice (the scene kit's key, so the whole gallery follows it) ---- */
@@ -541,9 +586,10 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
 /* ---- the week, told as you scroll. level.js marks the story .is-live (motion on, script running, the table
    closed), pins its stage, walks a cursor through the week and writes which day is current; without it the
    steps are a list. The heading, the note and the table button stay with the week while it is pinned. ---- */
-:root { --color-veil: rgba(251, 248, 240, 0.78); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --color-veil: rgba(13, 7, 6, 0.8); } }
-:root[data-theme="dark"] { --color-veil: rgba(13, 7, 6, 0.8); }
+/* the days still to come lie under a veil that leaves them as a faint pencil line, still readable as data (at 0.78 / 0.8 they read as missing) */
+:root { --color-veil: rgba(251, 248, 240, 0.6); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --color-veil: rgba(13, 7, 6, 0.58); } }
+:root[data-theme="dark"] { --color-veil: rgba(13, 7, 6, 0.58); }
 
 .tt { margin: 0 0 var(--space-7); }
 /* the week is a sheet of chart paper on the table: a neat line, a soft shadow, the lamp over the hour */
@@ -566,7 +612,9 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
 
 .story.is-live { height: calc(100vh + 7 * 40vh); height: calc(100svh + 7 * 40svh); }
 .story.is-live .story__stage {
-  position: sticky; top: 0; display: grid; align-content: center; height: 100vh; height: 100svh; padding-block: var(--space-4);
+    /* the stage starts at its top, not centred: centred, it left an empty band of half a screen between
+       "Today at Vlissingen" and the week before the stage was pinned */
+    position: sticky; top: 0; display: grid; align-content: start; height: 100vh; height: 100svh; padding-block: var(--space-4);
 }
 .story.is-live .section__head { margin-bottom: var(--space-4); padding-top: var(--space-4); }
 .story.is-live .tides__bar { align-items: center; margin-bottom: var(--space-5); }
@@ -593,7 +641,7 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
 .story.is-live .tide__veil { display: block; position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .tide__shade, .tide__pool { position: absolute; top: 0; bottom: 0; left: 0; will-change: transform; }
 .tide__shade { width: 200%; background: linear-gradient(to right, transparent 0 50%, var(--color-veil) 53%, var(--color-veil)); }
-.tide__pool { width: 34%; margin-left: -17%; background: radial-gradient(closest-side, var(--l3-pool-c), color-mix(in oklab, var(--l3-pool-c), transparent 62%) 52%, transparent); }
+.tide__pool { width: 18%; margin-left: -9%; background: radial-gradient(closest-side, var(--l3-pool-c), color-mix(in oklab, var(--l3-pool-c), transparent 62%) 52%, transparent); }
 .tide__read.is-flipped { left: auto; right: var(--space-1); }
 .story.is-live .tide__days span[data-current] { font-weight: 700; }
 .story.is-live .tide__cursor { display: block; position: absolute; top: 0; bottom: 0; left: 0; width: 0; border-left: var(--size-border) solid var(--color-text); pointer-events: none; will-change: transform; }
@@ -729,7 +777,7 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
   .hero__scene { inset: auto 0 0 0; height: var(--l3-reveal); --l3-height: 31rem; --l3-right: max(var(--size-gutter), 50% - 16rem); --l3-bottom: var(--space-4); }
   .hero__slip { display: block; left: max(var(--size-gutter), 50% - 18rem); bottom: var(--space-7); width: 13.75rem; padding: var(--space-3) var(--space-4) var(--space-4); }
   .hero__slip-time { font-size: var(--text-md); gap: var(--space-2); }
-  .hero__slip-note { display: none; }
+    /* the slip keeps its note, as level 2's does: what the pencil line is */
   .hero__print {
     display: block; position: absolute; left: 0; top: 0; z-index: 0; width: 100%; height: calc(100% - var(--l3-reveal) + var(--space-7)); pointer-events: none;
     -webkit-mask-image: linear-gradient(to bottom, transparent 6%, #000 34%, #000 62%, transparent 96%); mask-image: linear-gradient(to bottom, transparent 6%, #000 34%, #000 62%, transparent 96%);
@@ -755,10 +803,13 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
   .hero h1 { margin-top: var(--space-4); }
   .lead { margin-top: var(--space-4); }
   .hero__actions { margin-top: var(--space-5); }
-  .hero__scene { --l3-height: 27rem; --l3-right: calc(var(--size-gutter) + var(--space-1)); --l3-bottom: var(--space-6); }
+    /* 24.5rem tall: the sheet runs nearly from edge to edge, both edges in view (27rem ran off the left edge) */
+  .hero__scene { --l3-height: 24.5rem; --l3-right: var(--space-3); --l3-bottom: var(--space-6); }
   .hero__slip { left: auto; right: var(--space-2); bottom: var(--space-5); width: 12rem; padding: var(--space-2) var(--space-3) var(--space-3); }
   .hero__slip-label { font-size: 0.6875rem; }
   .hero__slip-time { font-size: var(--text-base); }
+    /* the note in small print, so the slip covers less of the chart on a phone */
+    .hero__slip-note { margin-top: var(--space-2); padding-top: var(--space-2); font-size: 0.8125rem; line-height: 1.35; }
   .motion { right: auto; left: calc(var(--space-3) * -1); }
   .story__day { margin-left: var(--tide-gutter, var(--space-5)); }
   .step { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
@@ -768,6 +819,9 @@ html.is-narrow :is(.lead__more, .hero__actions .btn--line) { display: none; }
   .story.is-live .tides__bar { margin-bottom: var(--space-3); }
   .story.is-live .story__now b { font-size: var(--text-lg); }
   .story.is-live .tide__legend { gap: var(--space-1) var(--space-4); font-size: 0.75rem; }
+    /* seven days in 330 px: "Tue 10 (moon)" ran into "Wed 11". On a phone each column keeps its date only;
+       the caption above says which day it is ("Wed 11, day 2 of 7") */
+    .story.is-live .tide__days b, .story.is-live .tide__days .moon { display: none; }
   .story.is-live .step__day b { font-size: var(--text-2xl); }
   .story.is-live .step__line { margin-top: var(--space-2); font-size: var(--text-sm); }
   .story.is-live .story__rule { margin-top: var(--space-4); }
