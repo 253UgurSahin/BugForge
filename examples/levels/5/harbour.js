@@ -43,7 +43,7 @@ function markup() {
         + "M770 640 C860 626 940 620 1020 610 L1020 758 C920 764 840 772 770 776 Z";
     const bank = "M90 300 C150 270 260 280 300 320 C330 352 280 392 200 392 C120 392 60 340 90 300 Z";
     const soundings = [
-        [120, 120, "14", "2"], [300, 160, "15", "6"], [520, 140, "16", "1"], [760, 150, "15", "4"], [920, 260, "13", "8"],
+        [120, 120, "14", "2"], [300, 160, "15", "6"], [520, 140, "16", "1"], [920, 260, "13", "8"],
         [880, 420, "12", "5"], [140, 470, "9", "6"], [200, 340, "3", "4"], [540, 330, "14", "0"],
         [520, 620, "13", "5"], [600, 560, "13", "7"], [640, 680, "11", "0"], [100, 600, "5", "2"], [900, 600, "6", "8"],
         [410, 640, "8", "4"],
@@ -98,13 +98,13 @@ function markup() {
 <g class="c-mole"><path d="${westMole}"/><path d="${eastMole}"/>
 <path d="M330 760L376 742"/><path d="M640 770L700 748"/></g>
 <g class="c-basin"><path d="M330 704L392 700L398 734L334 740Z"/><path d="M560 690L640 690L640 740L560 744Z"/></g>
-<text class="t-town" x="520" y="848">ZEEBRUGGE</text>
+<text class="t-town" x="560" y="850">ZEEBRUGGE</text>
 <text class="t-water" x="400" y="220" transform="rotate(-6 400 220)">Pas van het Zand</text>
 <text class="t-water t-sm" x="610" y="650">Voorhaven</text>
 <text class="t-place" x="300" y="664">Marina</text>
 <text class="t-bank" x="196" y="372" transform="rotate(-4 196 372)">Bol van Heist</text>
 <g class="c-light" transform="translate(498 462) scale(2.4)"><path class="flare" transform="rotate(300)" d="M0 -3C4 -9 4.6 -16 0 -25C-4.6 -16 -4 -9 0 -3Z"/><circle r="2.1"/></g>
-<text class="t-small" x="480" y="446" text-anchor="end">F.G 12m</text>
+<text class="t-small" x="300" y="486" text-anchor="end">F.G 12m</text>
 <g class="c-light" transform="translate(566 466) scale(2.4)"><path class="flare" transform="rotate(60)" d="M0 -3C4 -9 4.6 -16 0 -25C-4.6 -16 -4 -9 0 -3Z"/><circle r="2.1"/></g>
 <text class="t-small" x="588" y="474" text-anchor="start">F.R 12m</text>
 <g class="c-snd">${soundings}</g>
@@ -115,8 +115,8 @@ function markup() {
 <text class="note" transform="translate(640 296) rotate(-14)"><tspan x="0">from the Wielingen</tspan><tspan x="0" dy="38">249° T</tspan></text>
 <text class="note" transform="translate(90 720) rotate(-4)"><tspan x="0">alongside</tspan><tspan x="0" dy="38">1810</tspan></text>
 </g>
-<g class="c-mark" transform="translate(${BERTH[0]} ${BERTH[1]}) rotate(-142) scale(2.2)"><path d="M0 -11C4 -6 4.2 4 3.2 9L-3.2 9C-4.2 4 -4 -6 0 -11Z" style="fill: var(--color-accent); stroke: none"/><path d="M0 3.6L1.6 7.4L-1.6 7.4Z" style="fill: var(--color-bg); stroke: none"/></g>
-<g class="c-title" transform="translate(810 784)">
+<g class="c-mark" transform="translate(${BERTH[0]} ${BERTH[1]}) rotate(-142) scale(3.4)"><path d="M0 -11C4 -6 4.2 4 3.2 9L-3.2 9C-4.2 4 -4 -6 0 -11Z" style="fill: var(--color-accent); stroke: none"/><path d="M0 3.6L1.6 7.4L-1.6 7.4Z" style="fill: var(--color-bg); stroke: none"/></g>
+<g class="c-title" transform="translate(800 118)">
 <text class="k" y="-44">NORTH SEA · BELGIUM</text><text class="n" y="16">Zeebrugge</text><text class="s" y="60">Harbour plan</text>
 </g>
 <g class="c-neat"><path class="paper" d="M987.5 0H1000V900H0V887.5H987.5Z"/></g>`;

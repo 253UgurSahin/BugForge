@@ -129,7 +129,7 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitPhoneHe
 
 // what the scene shows along the journey (table.js blends it by the journey's progress)
 const STORY = [
-  { p: 0, lamp: [0.9, 0.3], lampY: 3, reach: [4.6, 4.3], night: 0, boat: 0, hatch: 0, follow: 1 },
+  { p: 0, lamp: [0.9, 0.3], lampY: 3, reach: [4.6, 4.3], night: 0, boat: 0, hatch: 0, follow: 1, plan: 1 },
   { p: 0.12, lamp: [2.0, -0.2], lampY: 2.8, reach: [3.6, 3.4], night: 0, boat: 0, hatch: 0.6, follow: 0.4 },
   { p: 0.25, lamp: [2.3, -0.45], lampY: 2.6, reach: [2.8, 2.6], night: 0, boat: boatAt(HOURS[1]) + 2, hatch: 1, follow: 0.35, dusk: 0.05 },
   { p: 0.45, lamp: [0.6, 1.2], lampY: 2.5, reach: [2.8, 2.6], night: 0, boat: boatAt(HOURS[2]), hatch: 1, follow: 0.35, dusk: 0.18 },
@@ -166,10 +166,10 @@ const CHAPTERS = [
   { camera: orbit({ target: [-7.2, 0, 5.0], dist: 6.4, el: 52, az: 58, fov: 40 }),   // the landfall, under the red lamp
     phone: orbit({ target: [-6.9, 0, 4.6], dist: 10.5, el: 60, az: 36, fov: 50 }),
     still: orbit({ target: [-6.6, 0, 4.3], dist: 7.2, el: 46, az: 62, fov: 40 }), progress: 0.85, hour: HOURS[4] },
-  { at: 1, camera: { position: [0.0, 12.6, 11.2], target: [0.1, 0, 0.5], fov: 34 },       // the whole sheet, in the room light again
+  { at: 1, camera: { position: [-1.3, 14.2, 12.6], target: [-1.3, 0, 0.9], fov: 34 },       // the whole sheet, in the room light again
     /* (on a phone the whole sheet lies in the middle of the screen, not at its top over half a screen of bare
        paper: the view aims further north, so the sheet sits lower) */
-    phone: { position: [0.0, 19, 15.2], target: [0.1, 0, -1.5], fov: 40 }, progress: 1, hour: HOURS[4] },
+    phone: { position: [-0.6, 26, 20], target: [-0.6, 0, -1.5], fov: 40 }, progress: 1, hour: HOURS[4] },
 ].map((c) => ({ ...c, params: { hour: c.hour, data: dataAt(c.hour) } }));
 
 /* ---- callouts: buoys and fixes, named as the camera passes them ------------------------------ */
@@ -266,7 +266,10 @@ function callouts(scene, layer) {
         const berth = scene.berth && scene.berth();
         const where = berth || boat.world;
       const s = project(where[0], where[1] + 0.03, where[2]);
-      const depth = Math.max(0, scene.level() - scene.bedAt(boat.chart[0], boat.chart[1]));
+        /* the tide as the slips give it: the tide table at the hour shown (the scene's water eases behind the
+           scroll, and its figure disagreed with the slip's) */
+        const tideNow = tide.height(tripHour);
+      const depth = Math.max(0, tideNow - scene.bedAt(boat.chart[0], boat.chart[1]));
       const ox = s.x + 18, oy = s.y - 26;
       const visible = (boat.on || Boolean(berth)) && !opening && !s.behind && ox > 0 && ox < w - 350 && oy > 50 && oy < barTop - 30 && s.dist < (berth ? 10 : 7) && !under(ox, oy, ox + 340);
       sounder.style.opacity = visible ? "1" : "0";
@@ -276,7 +279,7 @@ function callouts(scene, layer) {
              the tide, less her draught */
           const charted = Math.max(0, -scene.bedAt(boat.chart[0], boat.chart[1]));
           const text = atEnd ? `<b>Zeebrugge</b> alongside · ${clock(tripHour)}`
-              : `<b>${Math.max(0, depth - DRAUGHT).toFixed(1)} m</b> under the keel · ${charted.toFixed(1)} chart + ${scene.level().toFixed(1)} tide − ${DRAUGHT}`;
+              : `<b>${Math.max(0, depth - DRAUGHT).toFixed(1)} m</b> under the keel · ${charted.toFixed(1)} chart + ${tideNow.toFixed(1)} tide − ${DRAUGHT}`;
         if (text !== lastText) { sounder.innerHTML = text; lastText = text; }
         sounder.style.transform = `translate3d(${ox.toFixed(1)}px, ${oy.toFixed(1)}px, 0)`;
       }

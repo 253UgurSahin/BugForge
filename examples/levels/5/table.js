@@ -1148,7 +1148,8 @@ export function mount(container, options = {}) {
       // berth (drawn on the plan), and leaves the chart's edge
       if (plan) {
           now.plan = ease(now.plan || 0, s.plan, 0.35);
-          const shown = smooth(0.02, 0.6, now.plan), drop = 1 - smooth(0.0, 1.0, now.plan);
+          /* (no fall: caught half way, the sheet hung sheared over the chart; it simply lies there) */
+          const shown = 1, drop = 0;
           plan.mat.uniforms.uShown.value = shown;
           plan.mat.uniforms.uDrop.value = drop;
           plan.mat.uniforms.uDusk.value = now.dusk;

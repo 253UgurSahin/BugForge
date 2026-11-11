@@ -570,7 +570,7 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
   content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
   background:
     linear-gradient(to bottom, var(--color-bg) 0, var(--color-bg) 1.5%, transparent 10%),
-    linear-gradient(to right, var(--color-bg) calc(var(--l) + var(--w) * 0.07), color-mix(in srgb, var(--color-bg) 88%, transparent) calc(var(--l) + var(--w) * 0.17), color-mix(in srgb, var(--color-bg) 30%, transparent) calc(var(--l) + var(--w) * 0.29), transparent calc(var(--l) + var(--w) * 0.4));
+    linear-gradient(to right, var(--color-bg) calc(var(--l) + var(--w) * 0.02), color-mix(in srgb, var(--color-bg) 90%, transparent) calc(var(--l) + var(--w) * 0.1), color-mix(in srgb, var(--color-bg) 62%, transparent) calc(var(--l) + var(--w) * 0.2), color-mix(in srgb, var(--color-bg) 28%, transparent) calc(var(--l) + var(--w) * 0.31), color-mix(in srgb, var(--color-bg) 8%, transparent) calc(var(--l) + var(--w) * 0.4), transparent calc(var(--l) + var(--w) * 0.48));
   opacity: var(--trip-hero);
 }
 .trip[data-plain] .trip__stage::after { opacity: 1; }
@@ -603,6 +603,8 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
 /* the slip lies on the chart above the strip of tools, never under it; on a short screen it keeps
    the window and the water and leaves its note to the chapters below */
 .trip__step--hero .hero__slip { bottom: calc(var(--size-tools) + var(--space-3)); }
+  /* (wider by a little: "17:01" touched the slip's right edge) */
+@media (min-width: 60.0625rem) { .trip__step--hero .hero__slip { width: calc(var(--size-slip) + 1.75rem); } }
 @media (max-height: 52rem) and (min-width: 60.01rem) {
   .trip__step--hero .hero__slip-note { display: none; }
 }
@@ -709,7 +711,7 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
 .trip[data-journey="still"] .trip__step .trip__card { margin: 0; width: auto; rotate: none; }
 .trip[data-journey="still"] .trip__still { display: block; }
 .trip[data-journey="still"] .trip__step--hero .trip__still,
-.trip[data-plain][data-journey="still"] .trip__plain { position: absolute; z-index: 0; top: calc(var(--size-header) + var(--space-6)); right: max(var(--size-gutter), calc((100% - var(--size-content)) / 2)); width: min(52%, 46rem); }
+.trip[data-plain][data-journey="still"] .trip__plain { position: absolute; z-index: 0; top: calc(var(--size-header) + var(--space-6)); right: max(var(--size-gutter), calc((100% - var(--size-content)) / 2)); width: min(47%, 43rem); }
 .trip[data-plain][data-journey="still"] .trip__plain { display: block; width: min(46%, 40rem); }
 /* the hero's still is the sheet on the table: its soft shadow fades out instead of ending at the frame */
 .trip[data-journey="still"] .trip__step--hero .trip__still img {
@@ -763,6 +765,8 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
   .trip__marks { display: none; }
   .trip__bar-in { justify-content: flex-end; }
   .tool { padding: 0 var(--space-3); }
+    /* the hero's slip goes once the trip is under way: it lay over the 14:20 slip with another hour on it */
+    .trip[data-journey="live"]:not([data-journey-chapter="0"]) .trip__step--hero .hero__slip { opacity: 0; visibility: hidden; transition: opacity var(--duration-fast) linear, visibility 0s linear var(--duration-fast); }
     /* the last look over the whole sheet needs less scroll on a phone: at 90svh it left a long band of bare
        paper between the trip and the day's readings */
     .trip__end { height: 55vh; height: 55svh; }
@@ -832,7 +836,9 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
 .scrub5__input { width: 100%; margin: 0; accent-color: var(--color-text); cursor: pointer; }
 .scrub5__input:focus-visible { outline: var(--size-ring, 2px) solid var(--color-accent); outline-offset: 3px; }
 .scrub5__ticks { position: absolute; left: 0; right: 0; bottom: 0; height: var(--space-4); font: 500 0.6875rem/1 var(--font-mono); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
-.scrub5__ticks span { position: absolute; left: calc(var(--t) * 100%); bottom: 0; transform: translateX(calc(var(--t) * -100%)); white-space: nowrap; }
+  /* the whole hours, evenly spaced and each centred on its own hour (now and 14:20 at the ends, pulled in to
+     fit, made the spacing look uneven) */
+.scrub5__ticks span { position: absolute; left: calc(var(--t) * 100%); bottom: 0; transform: translateX(-50%); white-space: nowrap; }
 /* the slip keeps one height: on a wide screen with motion on the scale's room is kept from the first paint
    (!important: base.css hides every [hidden] with !important; this room is kept on purpose, unseen) */
 @media (prefers-reduced-motion: no-preference) and (min-width: 60.0625rem) {
