@@ -6,9 +6,11 @@
    the nautical mile. seaBed(x, y) is metres above chart datum: land from 5 m up, the drying banks 0
    to 3.6 m, water below 0. Made up, but shaped like the mouth of the Westerschelde.
 
-   reliefGrid(columns, rows): the bed on a grid over the sheet, as metres. The distance to the two long
-   coast lines is the costly part, so it is measured on a grid four times coarser and spread over the
-   fine one (a distance field is smooth, so that is exact enough to draw with). */
+   reliefGrid(columns, rows, { x0, x1, step }): the bed on a grid over the sheet (x0..x1, all of y), as
+   metres. The distance to the two long coast lines is the costly part, so it is measured on a grid
+   `step` times coarser and spread over the fine one (a distance field is smooth, so that is exact enough
+   to draw with). reliefRows() is the same work as a generator that stops after every few rows, so the
+   3D table can build it between frames and never holds the page up for long. */
 
 export const W = 1000, H = 900, NM = 120;
 
@@ -100,28 +102,36 @@ export function seaBed(x, y) {
   return bedFrom(x, y, dn, ds);
 }
 
-/* the bed on columns x rows points over the whole sheet (x 0..1000, y 0..900, the edges included) */
-export function reliefGrid(columns, rows) {
-  const STEP = 4;
-  const cc = Math.ceil((columns - 1) / STEP) + 1, cr = Math.ceil((rows - 1) / STEP) + 1;
+/* the bed on columns x rows points over x0..x1 and the whole height, the edges included; a generator
+   that yields after every `chunk` rows (the coarse coast first, in one go: it is the cheap part) */
+export function* reliefRows(columns, rows, { x0 = 0, x1 = W, step = 4, chunk = 24 } = {}) {
+  const cc = Math.ceil((columns - 1) / step) + 1, cr = Math.ceil((rows - 1) / step) + 1;
   const coarseN = new Float32Array(cc * cr), coarseS = new Float32Array(cc * cr);
-  const xAt = (i) => (i / (columns - 1)) * W, yAt = (j) => (j / (rows - 1)) * H;
+  const xAt = (i) => x0 + (i / (columns - 1)) * (x1 - x0), yAt = (j) => (j / (rows - 1)) * H;
   for (let j = 0; j < cr; j++) {
     for (let i = 0; i < cc; i++) {
-      const [dn, ds] = shore(xAt(Math.min(i * STEP, columns - 1)), yAt(Math.min(j * STEP, rows - 1)));
+      const [dn, ds] = shore(xAt(Math.min(i * step, columns - 1)), yAt(Math.min(j * step, rows - 1)));
       coarseN[j * cc + i] = dn;
       coarseS[j * cc + i] = ds;
     }
+    if (j % 6 === 5) yield j;
   }
   const heights = new Float32Array(columns * rows);
   for (let j = 0; j < rows; j++) {
-    const fj = Math.min(j / STEP, cr - 1), j0 = Math.min(Math.floor(fj), cr - 2), tj = fj - j0;
+    const fj = Math.min(j / step, cr - 1), j0 = Math.min(Math.floor(fj), cr - 2), tj = fj - j0;
     for (let i = 0; i < columns; i++) {
-      const fi = Math.min(i / STEP, cc - 1), i0 = Math.min(Math.floor(fi), cc - 2), ti = fi - i0;
+      const fi = Math.min(i / step, cc - 1), i0 = Math.min(Math.floor(fi), cc - 2), ti = fi - i0;
       const k = j0 * cc + i0;
       const lerp2 = (a) => (a[k] * (1 - ti) + a[k + 1] * ti) * (1 - tj) + (a[k + cc] * (1 - ti) + a[k + cc + 1] * ti) * tj;
       heights[j * columns + i] = bedFrom(xAt(i), yAt(j), lerp2(coarseN), lerp2(coarseS));
     }
+    if (j % chunk === chunk - 1) yield cr + j;
   }
   return { columns, rows, heights };
+}
+
+/* the same, in one go */
+export function reliefGrid(columns, rows, options) {
+  const work = reliefRows(columns, rows, options);
+  for (;;) { const step = work.next(); if (step.done) return step.value; }
 }

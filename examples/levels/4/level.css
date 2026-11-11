@@ -314,16 +314,9 @@
 .chart .line--dry { stroke: var(--color-chart-ink); stroke-width: 0.7; stroke-opacity: 0.5; stroke-dasharray: 0.6 2.4; stroke-linecap: round; }
 .chart .c-shadow { fill: var(--color-relief); }
 
-/* ---- the sheet: lying on the table at a slight angle, with the fold it has always had ---- */
-.hero__scene { perspective: var(--l3-perspective); perspective-origin: 58% 30%; }
-.sheet { position: absolute; inset: 0; overflow: hidden; transform-origin: 50% 100%; transform: rotateX(var(--l3-tilt)) scale(var(--l3-sheet-scale)); }
+/* ---- the sheet: lying on the table, whole, with the fold it has always had and the corner that has turned
+   up. Level 4 sets its pose (see "level 4: Showpiece"): the 3D table takes its camera from it. ---- */
 .hero__scene::after { display: none; }        /* level 2's fold lies on the screen; here it lies on the sheet */
-.sheet::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to right, transparent calc(57% - 56px), var(--color-fold-shade) calc(57% - 0.5px), var(--color-fold-light) calc(57% + 0.5px), transparent calc(57% + 64px)); }
-@media (min-width: 60.0625rem) {
-  /* a strip of table right and below the sheet, where its shadow falls */
-  .hero__scene { right: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) - var(--l3-edge)); bottom: calc(var(--space-7) - var(--l3-edge)); }
-  .sheet { inset: 0 var(--l3-edge) var(--l3-edge) 0; box-shadow: var(--shadow-table); }
-}
 
 /* ---- the lamp: a pool of light behind the chart (it shows through the paper and, at night, is all the
    light there is) and a shade on the sheet around it. level.js moves both, and the shadows. ---- */
@@ -429,11 +422,12 @@
 .pass::before { display: none; }              /* level 2's shadow layer: depth.css lays the shadow here */
 .pass:hover, .pass:active { transform: none; box-shadow: var(--depth-shadow); }
 .pass .strip { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
-/* on paper by day the lamp's glare is warm, not white: a faint yellow that leaves the ink dark */
-.pass[data-depth-tone="light"] > .depth-glare::before { display: block; background: radial-gradient(closest-side, rgba(255, 210, 128, 0.2), rgba(255, 210, 128, 0)) center / 70% 70% no-repeat; }
-:root[data-theme="dark"] .pass > .depth-glare::before { background: radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 16%, transparent), transparent) center / 64% 64% no-repeat; }
+/* on paper by day the lamp's glare is warm, not white: a faint warm tint multiplied in, so the ink stays as
+   dark as printed (a pale spot over the letters would only lower their contrast) */
+.pass[data-depth-tone="light"] > .depth-glare::before { display: block; mix-blend-mode: multiply; background: radial-gradient(closest-side, rgba(255, 226, 170, 0.55), rgba(255, 226, 170, 0)) center / 70% 70% no-repeat; }
+:root[data-theme="dark"] .pass > .depth-glare::before { background: radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 9%, transparent), transparent) center / 64% 64% no-repeat; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .pass > .depth-glare::before { background: radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 16%, transparent), transparent) center / 64% 64% no-repeat; }
+  :root:not([data-theme="light"]) .pass > .depth-glare::before { background: radial-gradient(closest-side, color-mix(in oklab, var(--color-accent) 9%, transparent), transparent) center / 64% 64% no-repeat; }
 }
 
 /* ---- three notes in the margin: index cards that rise off the table as one pile, deal out into a row
@@ -520,75 +514,223 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
 }
 
 /* ================================================================ level 4: Showpiece */
-/* the lamp is in the scene now: its pool on the table, and the drawn chart, step aside once it is live */
+/* ---- the chart table. The drawn sheet is the poster: it lies in the very pose the 3D table takes its
+   camera from (table.js reads this perspective and this transform), so the scene paints over it exactly
+   and the drawn sheet steps aside under it (.hero.is-3d). Without WebGL it stays, with its own lamp. ---- */
+:root {
+  --l4-lay: 39deg;                              /* how far the sheet lies back on the table */
+  --l4-turn: -3deg;                             /* and how it lies turned: a sheet is never quite square */
+  --l4-eye: 1300px;                             /* how far the eye is from the screen */
+  --l4-eye-at: 24% -46%;                        /* and where: left of the sheet, above the table */
+  --l4-paper: var(--color-surface);             /* the sheet, whiter than the table */
+  --l4-cut: #d2c3a3;                            /* the paper's cut edge */
+  --l4-back: #ebe0c9;                           /* the back of the paper, on the turned-up corner */
+  --l4-ink-glow: #000;                          /* the print outside the red lamp's pool: only at night */
+  --l4-sheet-shadow: 0 2.5px 0 var(--l4-cut), 0 3px 2px rgba(48, 34, 10, 0.22), 10px 26px 40px -14px rgba(48, 34, 10, 0.42);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --l4-paper: #a62d17; --l4-cut: #2a0d07; --l4-back: #3b150c; --l4-ink-glow: #5e2416;
+    --l4-sheet-shadow: 0 2.5px 0 var(--l4-cut), 0 14px 30px -10px rgba(0, 0, 0, 0.8);
+    --color-pool-shade: rgba(12, 4, 2, 0.9);
+  }
+}
+:root[data-theme="dark"] {
+  --l4-paper: #a62d17; --l4-cut: #2a0d07; --l4-back: #3b150c; --l4-ink-glow: #5e2416;
+  --l4-sheet-shadow: 0 2.5px 0 var(--l4-cut), 0 14px 30px -10px rgba(0, 0, 0, 0.8);
+  --color-pool-shade: rgba(12, 4, 2, 0.9);
+}
+.hero__scene {
+  overflow: visible; -webkit-mask-image: none; mask-image: none; container-type: size;
+  perspective: var(--l4-eye); perspective-origin: var(--l4-eye-at);
+}
+@media (min-width: 60.0625rem) {
+  /* right of the headline, so the words never run over the sheet; the box is the canvas of the 3D table */
+  .hero__scene {
+    top: calc(var(--size-header) + var(--space-2)); bottom: var(--space-5);
+    left: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) + var(--text-display) * 6.1);
+    right: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) - var(--space-5));
+  }
+}
+.sheet {
+  position: absolute; right: var(--l4-right, var(--space-5)); bottom: var(--l4-bottom, var(--space-4));
+  height: var(--l4-height, min(112cqh, (100cqw - var(--space-5)) * 900 / 860)); aspect-ratio: 860 / 900;
+  overflow: hidden; background: var(--l4-paper); box-shadow: var(--l4-sheet-shadow);
+  transform-origin: 50% 100%; transform: rotateX(var(--l4-lay)) rotateZ(var(--l4-turn));
+}
+.sheet .hero__poster { inset: 0; width: 100%; height: 100%; aspect-ratio: auto; }
+.sheet > i { position: absolute; display: block; pointer-events: none; }
+/* the fold the sheet has always had: a soft valley, feathered on both sides of the crease */
+.sheet__fold {
+  top: 0; bottom: 0; left: calc(57% - 64px); width: 128px;
+  background: linear-gradient(to right, transparent, var(--color-fold-shade) 46%, var(--color-fold-shade) 49.6%, var(--color-fold-light) 50.4%, transparent);
+}
+/* the corner that has turned up: where it was, the table shows; the flap lies folded over the chart */
+.sheet__dog, .sheet__curl { top: 0; right: 0; width: 11.63%; aspect-ratio: 1; }
+.sheet__dog { background: linear-gradient(to bottom left, var(--color-bg) 50%, transparent 50%); }
+.sheet__curl {
+  background: linear-gradient(to top right, color-mix(in oklab, var(--l4-back), #000 12%) 0%, var(--l4-back) 38%, color-mix(in oklab, var(--l4-back), #fff 25%) 49.6%, transparent 50%);
+  filter: drop-shadow(-2px 4px 3px rgba(48, 34, 10, 0.32));
+}
+/* once the 3D table has painted over it, the drawn sheet and its lamp step aside. The stage would fade the
+   poster out while its canvas fades in, and halfway both are half there (the page shows through): here the
+   drawn sheet stays whole under the canvas until the canvas is whole, then goes */
+.sheet[data-scene-poster] { opacity: 1 !important; }
 .hero__light { transition: opacity var(--duration-slower) var(--ease-standard); }
 .hero.is-3d .hero__light { opacity: 0; }
-.hero.is-3d .sheet { visibility: hidden; transition: visibility 0s linear 0.7s; }
+.hero.is-3d .sheet { visibility: hidden; transition: visibility 0s linear 0.6s; }
 
-/* ---- the water of the hour: on the slip, under the window it is about ---- */
-.tidebar { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); padding-top: var(--space-3); border-top: var(--size-border) solid var(--color-border); font: 500 var(--text-xs)/1 var(--font-mono); font-variant-numeric: lining-nums tabular-nums; letter-spacing: 0.02em; color: var(--color-text-muted); white-space: nowrap; }
+/* ---- the label at the tide gauge on the chart: the hour the water stands at, and its height ---- */
+.tideclock {
+  position: absolute; left: 0; top: 0; z-index: 2; display: flex; align-items: baseline; gap: var(--space-2);
+  padding: 6px var(--space-2) 5px; border: var(--size-border) solid var(--color-text-muted); border-radius: var(--radius-sm);
+  background: var(--color-surface); box-shadow: var(--shadow-slip); white-space: nowrap; pointer-events: none;
+  font: 500 0.75rem/1 var(--font-mono); font-variant-numeric: lining-nums tabular-nums; color: var(--color-text);
+  transform: translate(calc(var(--gauge-x, -999px) - 50%), calc(var(--gauge-y, -999px) - 100% - 18px));
+  opacity: 0; visibility: hidden;
+}
+.tideclock::after {        /* the pin down to the gauge */
+  content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 18px; background: var(--color-text);
+  box-shadow: 0 17px 0 1.5px var(--color-text);
+}
+.tideclock__time { font-weight: 700; }
+.tideclock__way { color: var(--color-text-muted); }
+.tideclock.is-lapse .tideclock__time { color: var(--color-accent); }
+.hero.is-3d .tideclock { opacity: 1; visibility: visible; }
+
+/* ---- the slip: the water of the hour, and the reader's own hour ---- */
+@media (min-width: 60.0625rem) { .hero__slip { width: 18.75rem; left: calc(max(var(--size-gutter), (100% - var(--size-content)) / 2) + 31.25rem); } }
+.tidebar { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); padding-top: var(--space-3); border-top: var(--size-border) solid var(--color-border); font: 500 0.75rem/1 var(--font-mono); font-variant-numeric: lining-nums tabular-nums; letter-spacing: 0.02em; color: var(--color-text-muted); white-space: nowrap; }
 .tidebar__label { letter-spacing: var(--tracking-caps); text-transform: uppercase; }
-.tidebar__h { color: var(--color-text); font-weight: 600; }
-.tidebar__time { margin-left: auto; }
-.tidebar.is-lapse .tidebar__time { color: var(--color-accent); font-weight: 600; }
-.gauge { position: relative; flex: none; width: 7px; height: var(--size-icon); border: var(--size-border) solid currentColor; overflow: hidden; }
-.gauge i { position: absolute; inset: 0; background: var(--color-accent-2); transform-origin: 50% 100%; transform: scaleY(var(--level, 0.17)); }
-/* the slip's window lights while the time-lapse is inside it: the solid top edge every window has */
-.hero__slip::after { content: ""; position: absolute; left: -1px; right: -1px; top: -1px; height: 3px; border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--color-accent); transform: scaleX(0); transform-origin: left; pointer-events: none; }
+.tidebar__h { color: var(--color-text); font-weight: 700; }
+.tidebar__time { margin-left: auto; color: var(--color-text); }
+.tidebar.is-lapse .tidebar__time { color: var(--color-accent); font-weight: 700; }
+/* a tide staff: its marks, and the water standing in it */
+.gauge { flex: none; width: 12px; height: 20px; overflow: visible; color: var(--color-text); }
+.gauge__staff { fill: var(--color-bg); stroke: currentColor; stroke-width: 1; }
+.gauge__ticks { fill: none; stroke: currentColor; stroke-width: 1; }
+.gauge__fill { fill: var(--color-accent-2); transform-box: fill-box; transform-origin: 50% 100%; transform: scaleY(var(--level, 0.17)); }
+.scrub { margin-top: var(--space-3); }
+.scrub[hidden] { display: none; }
+/* a real control: bordered, lettered at 12px, as level 5's tools */
+.tool {
+  display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--size-control-sm); padding: 0 var(--space-3);
+  border: var(--size-border) solid var(--color-text-muted); border-radius: var(--radius-sm); background: var(--color-surface);
+  color: var(--color-text); font: 600 0.75rem/1 var(--font-mono); letter-spacing: 0.07em; text-transform: uppercase; white-space: nowrap; cursor: pointer;
+}
+.tool:hover { border-color: var(--color-text); background: var(--color-bg); }
+.tool:focus-visible { outline: var(--size-ring, 2px) solid var(--color-accent); outline-offset: 2px; }
+.tool:disabled { cursor: default; border-style: dashed; color: var(--color-text-muted); background: var(--color-surface); }
+.tool[hidden] { display: none; }
+.tool__glyph { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.glyph-run, .glyph-play { fill: currentColor; stroke: none; }
+.glyph-back, .glyph-play { display: none; }
+.tool--tide[aria-pressed="true"] { background: var(--color-text); color: var(--color-bg); border-color: var(--color-text); }
+.tool--tide[aria-pressed="true"] .glyph-run { display: none; }
+.tool--tide[aria-pressed="true"] .glyph-back { display: inline; }
+.tool--tide:disabled .glyph-run { display: none; }
+.tool--motion.is-paused .glyph-pause { display: none; }
+.tool--motion.is-paused .glyph-play { display: inline; }
+/* the scale of the next twelve hours, with the safe window hatched on it as everywhere */
+.scrub__scale { position: relative; margin-top: var(--space-2); padding-bottom: 14px; --thumb: 14px; }
+.scrub__input { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 28px; margin: 0; background: transparent; cursor: pointer; }
+.scrub__input:focus-visible { outline: var(--size-ring, 2px) solid var(--color-accent); outline-offset: 3px; }
+.scrub__input::-webkit-slider-runnable-track { height: 8px; border: var(--size-border) solid var(--color-text-muted); border-radius: 1px; background: linear-gradient(var(--color-water), var(--color-water)) 0 0 / calc(var(--at, 0) * 100%) 100% no-repeat, var(--color-bg); }
+.scrub__input::-moz-range-track { height: 8px; border: var(--size-border) solid var(--color-text-muted); border-radius: 1px; background: var(--color-bg); }
+.scrub__input::-moz-range-progress { height: 8px; background: var(--color-water); }
+.scrub__input::-webkit-slider-thumb { -webkit-appearance: none; width: var(--thumb); height: 24px; margin-top: -9px; border: 2px solid var(--color-surface); border-radius: 2px; background: var(--color-text); box-shadow: 0 1px 3px rgba(14, 42, 59, 0.35); }
+.scrub__input::-moz-range-thumb { width: 10px; height: 20px; border: 2px solid var(--color-surface); border-radius: 2px; background: var(--color-text); }
+.scrub__window {
+  position: absolute; top: 10px; height: 8px; pointer-events: none;
+  left: calc(var(--thumb) / 2 + var(--win-a, 0) * (100% - var(--thumb))); width: calc((var(--win-b, 0) - var(--win-a, 0)) * (100% - var(--thumb)));
+  border-top: var(--size-bar) solid var(--color-accent);
+  background: repeating-linear-gradient(-45deg, var(--color-hatch) 0 var(--size-border), transparent var(--size-border) var(--size-hatch-sm));
+}
+.scrub__ticks { position: absolute; left: calc(var(--thumb) / 2); right: calc(var(--thumb) / 2); bottom: 0; height: 12px; pointer-events: none; font: 500 0.6875rem/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
+.scrub__ticks span { position: absolute; left: calc(var(--t) * 100%); transform: translateX(-50%); }
+.scrub__ticks span:first-child { transform: none; }
+.scrub__ticks span:last-child { transform: translateX(-100%); }
+/* the slip's window lights while the hour is inside it: the solid top edge every window has */
+.hero__slip::after { content: ""; position: absolute; left: -1px; right: -1px; top: -1px; height: var(--size-bar); border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--color-accent); transform: scaleX(0); transform-origin: left; pointer-events: none; }
 .hero__slip.is-open::after { transform: none; }
 .hero__slip.is-open .hero__slip-time .hatch { color: var(--color-accent); }
 
-/* ---- the chart's corner: the time-lapse and the pause, tucked under the sheet ---- */
-.corner { position: absolute; right: 0; bottom: var(--space-2); z-index: 2; display: flex; align-items: center; gap: var(--space-1); }
-.corner .tidebar { display: none; }
-.corner__btn { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--size-touch); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-text-muted); font: 500 var(--text-xs)/1 var(--font-mono); letter-spacing: var(--tracking-caps); text-transform: uppercase; cursor: pointer; }
-.corner__btn:hover { color: var(--color-text); }
-.corner__btn:focus-visible { outline: var(--size-ring, 2px) solid var(--color-accent); outline-offset: 2px; }
-.corner__btn[hidden] { display: none; }
-.corner__btn:disabled { opacity: 0.45; cursor: default; }
-.corner__icon { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.corner__run, .motion__play { fill: currentColor; stroke: none; }
-.corner__back, .motion__play { display: none; }
-#tide-play[aria-pressed="true"] { color: var(--color-accent); }
-#tide-play[aria-pressed="true"] .corner__run { display: none; }
-#tide-play[aria-pressed="true"] .corner__back { display: inline; }
-.motion[aria-pressed="true"] .motion__pause { display: none; }
-.motion[aria-pressed="true"] .motion__play { display: inline; }
+/* ---- the night lamp switched with the 3D table on the screen: the light spreads from the switch ---- */
+.relamp { position: fixed; inset: 0; z-index: 30; pointer-events: none; background: radial-gradient(circle at var(--x) var(--y), color-mix(in oklab, var(--color-accent) 30%, transparent), transparent 70%); }
+
+/* ---- the corner of the hero: one switch for all the motion of the page ---- */
+.corner { position: absolute; right: 0; bottom: var(--space-3); z-index: 2; display: flex; align-items: center; gap: var(--space-2); }
 @media (prefers-reduced-motion: no-preference) {
-  .gauge i { transition: transform var(--duration-slow) linear; }
+  .gauge__fill { transition: transform var(--duration-slow) linear; }
   .hero__slip::after { transition: transform var(--duration-slower) var(--ease-standard); }
-  .corner__btn { transition: color var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard); }
-  .corner__btn:active:not(:disabled) { transform: scale(var(--m-press)); }
+  .tool { transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); }
+  .tool:active:not(:disabled) { transform: scale(var(--m-press)); }
+  .hero.is-3d .tideclock { transition: opacity var(--duration-slower) var(--ease-standard) 0.9s, visibility 0s linear 0.9s; }
   [data-enter="corner"] { animation: l2-fade var(--duration-slower) var(--ease-standard) calc(var(--m-slip) + var(--duration-slow)) backwards; }
 }
-@media (prefers-reduced-motion: reduce) { .corner .motion, #tide-play { display: none; } }
-html:not(.js) .corner__btn { display: none; }
+@media (prefers-reduced-motion: reduce) { #motion, #tide-play { display: none; } }
+html:not(.js) :is(.tool, .tideclock) { display: none; }
+
+/* ---- narrower screens: the sheet lies below the words, whole, and the slip lies on it ---- */
 @media (max-width: 60rem) {
-  /* a phone: the slip stays off, so the corner carries the water, on a label of paper over the chart */
-  .corner { right: calc(var(--space-2) * -1); bottom: var(--space-3); flex-wrap: wrap; justify-content: flex-end; gap: 0; padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3); border: var(--size-border) solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); box-shadow: var(--shadow-slip); }
-  .corner .tidebar { display: flex; margin: 0; padding: 0 var(--space-2) 0 0; border: 0; }
-  .corner .tidebar__label { display: none; }
-  .corner__btn { min-width: var(--size-touch); justify-content: center; padding: 0 var(--space-2); }
-  .corner__btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :root { --l4-lay: 48deg; --l4-turn: -2deg; --l4-eye: 900px; --l4-eye-at: 50% -20%; }
+  .hero__text { padding-bottom: 27rem; }
+  .hero__scene { inset: auto 0 0 0; height: 27rem; }
+  .sheet { --l4-height: 24rem; --l4-right: max(var(--size-gutter), 50% - 12rem); --l4-bottom: var(--space-6); }
+  .hero__slip { display: block; left: var(--size-gutter); bottom: var(--space-3); width: 15rem; padding: var(--space-3) var(--space-4) var(--space-4); }
+  .hero__slip-time { font-size: var(--text-md); gap: var(--space-2); }
+  .hero__slip-note { display: none; }
+  .corner { bottom: var(--space-3); right: var(--size-gutter); }
+}
+@media (max-width: 44rem) {
+  /* a phone: the whole sheet under the words, lying further back; the slip on its near corner, the switch on the far one */
+  :root { --l4-lay: 52deg; --l4-turn: -3deg; --l4-eye: 640px; --l4-eye-at: 52% -70%; }
+  .hero__text { padding-bottom: 17rem; }
+  .hero__scene { height: 17rem; }
+  .sheet { --l4-height: 19.75rem; --l4-right: 1.25rem; --l4-bottom: 0.5rem; }
+  .hero__slip { width: 11.25rem; left: var(--size-gutter); bottom: var(--space-1); padding: var(--space-2) var(--space-3) var(--space-3); }
+  .hero__slip-label { font-size: 0.625rem; }
+  .hero__slip-time { font-size: var(--text-base, 1rem); }
+  .hero__slip .tidebar { margin-top: var(--space-2); padding-top: var(--space-2); gap: 5px; font-size: 0.6875rem; }
+  .hero__slip .tidebar__label { display: none; }
+  .scrub { display: none !important; }
+  .corner { bottom: calc(17rem - 3.5rem); right: var(--size-gutter); }
+  .corner .tool span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .corner .tool { width: var(--size-touch); min-height: var(--size-touch); justify-content: center; padding: 0; }
+  .tideclock { font-size: 0.6875rem; }
 }
 
-/* ---- 3D in the screens. The week lies back on the table under the lamp, its safe windows raised
-   out of it as magenta bands; the day under the lamp is a small model of its tide, the window standing
-   up from the water; the passage slips carry their strip as a little relief. ---- */
+/* ---- 3D in the screens: the seven days of tide as a stack of day sheets on the table (level.js): the day under
+   the lamp in front, the days to come stacked behind it, each with its own tide and its windows hatched ---- */
+.dstack { display: none; }
 @media (prefers-reduced-motion: no-preference) {
-  .story.is-live .tide { perspective: 1700px; perspective-origin: 50% -30%; }
-  .story.is-live .tide__plot { transform-style: preserve-3d; transform: rotateX(16deg); transform-origin: 50% 100%; box-shadow: 0 18px 22px -18px var(--color-relief); }
-  .story.is-live .tide__window { transform: translateZ(18px); }
-  .story.is-live .tide__window::after { box-shadow: 0 10px 14px -10px color-mix(in oklab, var(--color-accent) 45%, transparent); }
-  .story.is-live .dayc { perspective: 900px; perspective-origin: 50% -60%; }
-  .story.is-live .dayc__plot { overflow: visible; transform-style: preserve-3d; transform: rotateX(30deg); transform-origin: 50% 100%; box-shadow: 0 16px 20px -16px var(--color-relief); }
-  .story.is-live .dayc__svg { transform: translateZ(6px); }
-  .story.is-live .dayc__win { transform: translateZ(26px); }
-  .story.is-live .dayc__plot { --dot-z: 12px; }
-  .pass .strip { overflow: visible; transform-style: preserve-3d; transform: perspective(520px) rotateX(18deg); transform-origin: 50% 100%; }
-  .pass .strip svg { transform: translateZ(7px); }
-  .pass .strip__window { transform: translateZ(16px); box-shadow: 0 8px 10px -8px color-mix(in oklab, var(--color-accent) 50%, transparent); }
+  .story.is-live .dayc { position: relative; margin-top: var(--space-6); }
+  .story.is-live .dayc__plot { background: transparent; border-color: transparent; overflow: visible; }
+  .story.is-live .dayc__plot > :not(.dayc__dot) { visibility: hidden; }
+  .story.is-live .dstack {
+    display: block; position: absolute; left: 0; right: 0; top: 0; height: clamp(6.5rem, 10vw, 9rem);
+    perspective: 900px; perspective-origin: 60% -160%; transform-style: preserve-3d; pointer-events: none;
+  }
+  .story.is-live .dayc__dot { z-index: 20; }
 }
+.dstack__day {
+  position: absolute; inset: 0; overflow: hidden; border: var(--size-border) solid var(--color-border); border-radius: var(--radius-sm);
+  background: var(--color-surface); box-shadow: 0 1px 0 rgba(14, 42, 59, 0.05), 0 12px 18px -14px rgba(74, 52, 14, 0.55);
+  transform-origin: 50% 100%; will-change: transform, opacity;
+}
+.dstack__day svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dstack__light { fill: var(--color-day); }
+.dstack__area { fill: var(--color-water); }
+.dstack__curve { fill: none; stroke: var(--color-text); stroke-width: 1.6; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.dstack__win { fill: url(#dstack-hatch); }
+.dstack__bar { fill: var(--color-accent); }
+.dstack__need { fill: none; stroke: var(--color-text); stroke-opacity: 0.55; stroke-width: 1; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.dstack__name {
+  position: absolute; right: var(--space-2); top: 4px; padding: 3px 5px 2px; background: var(--color-surface);
+  font: 600 0.6875rem/1 var(--font-mono); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--color-text);
+}
+.dstack__day.is-none .dstack__name::after { content: " · no window"; font-weight: 500; color: var(--color-text-muted); }
+
 /* the lamp over the week by day too: a warm pool where the cursor reads the hour */
 .story.is-live .tide__pool { display: block; background: radial-gradient(closest-side, rgba(255, 246, 214, 0.55), transparent); mix-blend-mode: normal; }
 :root[data-theme="dark"] .story.is-live .tide__pool { background: radial-gradient(closest-side, var(--color-lamp-mid), transparent); mix-blend-mode: screen; }

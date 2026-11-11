@@ -154,10 +154,28 @@
   /* ---- the night lamp: the light spreads from the switch ------------------------------------- */
   function relamp(event) {
     var lamp = document.getElementById("theme-switch");
-    if (!document.startViewTransition) {                   /* app.js switches; the colours cross-fade */
+    /* with the 3D chart table on the screen a view transition would wait for a picture of the scene: there
+       the colours switch at once (app.js) and the lamp's light spreads from the switch over them */
+    var table = document.querySelector(".hero.is-3d");
+    var tableInView = table && table.getBoundingClientRect().bottom > 0;
+    if (!document.startViewTransition || tableInView) {
       if (reduce.matches) return;
       root.classList.add("is-relamping");
       setTimeout(function () { root.classList.remove("is-relamping"); }, ms("--duration-slow") + ms("--duration-fast"));
+      if (tableInView && Element.prototype.animate) {
+        var at = lamp.getBoundingClientRect(), cx = at.left + at.width / 2, cy = at.top + at.height / 2;
+        var far = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
+        var glow = document.createElement("div");
+        glow.className = "relamp";
+        glow.setAttribute("aria-hidden", "true");
+        glow.style.setProperty("--x", cx + "px");
+        glow.style.setProperty("--y", cy + "px");
+        document.body.appendChild(glow);
+        var spread = glow.animate(
+          [{ clipPath: "circle(0px at " + cx + "px " + cy + "px)", opacity: 1 }, { clipPath: "circle(" + far + "px at " + cx + "px " + cy + "px)", opacity: 0 }],
+          { duration: ms("--duration-lamp") || 700, easing: token("--ease-move") });
+        spread.onfinish = spread.oncancel = function () { glow.remove(); };
+      }
       return;
     }
     event.stopImmediatePropagation();
@@ -214,51 +232,49 @@
     var p = null, v = { x: 0, y: 0 }, hand = null, frame = 0, last = 0, cast = false;
 
     var sheet = hero.querySelector(".sheet");
-    function box() {                                         /* the sheet, and where the chart lies on it */
-      var sw = sheet.offsetWidth, sh = sheet.offsetHeight, narrow = window.innerWidth <= 960;
-      var pw = narrow ? Math.max(sw, 740) : sw, ph = narrow ? pw * 0.9 : sh;
-      var s = Math.max(pw / 1000, ph / 900);
-      return { sx: scene.offsetLeft + sheet.offsetLeft, sy: scene.offsetTop + sheet.offsetTop, sw: sw, sh: sh, narrow: narrow,
-        ox: sw - pw + pw - 1000 * s, oy: sh - ph + ph - 900 * s, s: s };
+    /* the sheet lies in CSS 3D (level 4 gives it its pose): where a point of the sheet is on the screen, and
+       which point of the sheet is under a point of the screen. Read from the CSS once, and after a resize */
+    var view = null;
+    function measure() {
+      var cs = getComputedStyle(scene), ss = getComputedStyle(sheet), org = ss.transformOrigin.split(" ").map(parseFloat), M;
+      try { M = new DOMMatrix(ss.transform === "none" ? undefined : ss.transform); } catch (e) { M = new DOMMatrix(); }
+      var A = new DOMMatrix().translate(sheet.offsetLeft + org[0], sheet.offsetTop + org[1]).multiply(M).translate(-org[0], -org[1]);
+      view = { A: A, inv: A.inverse(), P: parseFloat(cs.perspective) || 0, o: cs.perspectiveOrigin.split(" ").map(parseFloat),
+        sx: scene.offsetLeft, sy: scene.offsetTop, sw: sheet.offsetWidth, sh: sheet.offsetHeight };
     }
-    function chartToHero(b, x, y) { return { x: b.sx + b.ox + x * b.s, y: b.sy + b.oy + y * b.s }; }
+    function box() { if (!view) measure(); return { narrow: window.innerWidth <= 960, sw: view.sw, sh: view.sh }; }
+    function sheetToHero(u, w) {                              /* a point of the sheet, in its own pixels, on the screen */
+      var q = view.A.transformPoint(new DOMPoint(u, w, 0, 1)), k = view.P ? view.P / (view.P - q.z) : 1;
+      return { x: view.sx + view.o[0] + (q.x - view.o[0]) * k, y: view.sy + view.o[1] + (q.y - view.o[1]) * k };
+    }
+    function chartToSheet(x, y) { return { x: (x - 140) / 860 * view.sw, y: y / 900 * view.sh }; }
+    function chartToHero(b, x, y) { var c = chartToSheet(x, y); return sheetToHero(c.x, c.y); }
     function rest(b) {                                       /* nobody points: over the river, and down the pencil line as the hero scrolls away */
-      var h = hero.offsetHeight;
-      var at = b.narrow ? { x: b.sx + b.sw * 0.58, y: h - 150 } : { x: b.sx + b.sw * 0.5, y: h * 0.51 };
+      var h = hero.offsetHeight, at = chartToHero(b, 700, 470);
       var gone = reduce.matches ? 0 : clamp(-hero.getBoundingClientRect().top / (h * 0.8), 0, 1);
       var fix = chartToHero(b, 524, 594), go = 0.7 * gone;    /* towards the 14:40 fix on the pencil line */
       return { x: at.x + (fix.x - at.x) * go, y: at.y + (fix.y - at.y) * go };
     }
     function target(b) {
       if (!hand || reduce.matches) return rest(b);
-      return { x: clamp(hand.x, b.sx + b.sw * 0.16, hero.offsetWidth - 24), y: clamp(hand.y, hero.offsetHeight * 0.06, hero.offsetHeight * 0.97) };
+      return { x: clamp(hand.x, view.sx, hero.offsetWidth - 24), y: clamp(hand.y, hero.offsetHeight * 0.06, hero.offsetHeight * 0.97) };
     }
-    /* where a point of the screen lies on the tilted sheet: the CSS perspective, undone. The numbers are
-       read from the CSS once, and again after a resize */
-    var view = null;
-    function measure() {
-      var cs = getComputedStyle(scene), root = getComputedStyle(document.documentElement);
-      view = { o: cs.perspectiveOrigin.split(" ").map(parseFloat), P: parseFloat(cs.perspective) || 0,
-        org: getComputedStyle(sheet).transformOrigin.split(" ").map(parseFloat),
-        th: (parseFloat(root.getPropertyValue("--l3-tilt")) || 0) * Math.PI / 180, k: parseFloat(root.getPropertyValue("--l3-sheet-scale")) || 1 };
-    }
-    function onSheet(x, y) {
+    function onSheet(x, y) {                                  /* the ray from the eye through a point of the screen, to the sheet */
       if (!view) measure();
-      var o = view.o, P = view.P, org = view.org, th = view.th, k = view.k;
-      var X = x - scene.offsetLeft, Y = y - scene.offsetTop, sx0 = sheet.offsetLeft, sy0 = sheet.offsetTop;
-      if (!P) return { x: X - sx0, y: Y - sy0 };
-      var q = Y - o[1], A = sy0 + org[1] - o[1], d = P * (q - A) / (P * Math.cos(th) + q * Math.sin(th));
-      var s = P / (P - d * Math.sin(th)), gx = o[0] + (X - o[0]) / s;
-      return { x: org[0] + (gx - sx0 - org[0]) / k, y: org[1] + d / k };
+      var X = x - view.sx, Y = y - view.sy;
+      if (!view.P) return { x: X - sheet.offsetLeft, y: Y - sheet.offsetTop };
+      var E = view.inv.transformPoint(new DOMPoint(view.o[0], view.o[1], view.P, 1)), S = view.inv.transformPoint(new DOMPoint(X, Y, 0, 1));
+      var t = E.z / ((E.z - S.z) || 1e-6);
+      return { x: E.x + (S.x - E.x) * t, y: E.y + (S.y - E.y) * t };
     }
     function draw(b) {
       lamp.style.transform = "translate3d(" + p.x.toFixed(1) + "px, " + p.y.toFixed(1) + "px, 0)";
       var lit = onSheet(p.x, p.y);
       shade.style.transform = "translate3d(" + lit.x.toFixed(1) + "px, " + lit.y.toFixed(1) + "px, 0)";
       /* the land throws its shadow away from the lamp; on a touch screen once, from where the lamp rests */
-      var from = fine.matches ? p : cast ? null : rest(b);
+      var from = fine.matches ? lit : cast ? null : onSheet(rest(b).x, rest(b).y);
       if (from) shadows.forEach(function (el) {
-        var c = LANDS[el.getAttribute("data-land")], at = chartToHero(b, c[0], c[1]);
+        var c = LANDS[el.getAttribute("data-land")], at = chartToSheet(c[0], c[1]);
         var dx = (at.x - from.x) * 0.03, dy = (at.y - from.y) * 0.03, n = Math.hypot(dx, dy), k = n > 16 ? 16 / n : 1;
         el.style.translate = (dx * k).toFixed(1) + "px " + (dy * k).toFixed(1) + "px";
         cast = true;
@@ -305,7 +321,8 @@
   /* ---- the opening of level 3: the sheet is laid on the table, its plates come down one by one ---- */
   if (hero && moving()) (function () {
     var sheet = hero.querySelector(".sheet"), lay = spring(ms("--duration-draw") * 1.4, 0.18);   /* laid down */
-    sheet.animate([{ transform: "rotateX(30deg) scale(1.12)" }],                 /* to its place in the CSS */
+    var pose = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--l4-lay")) || 37;
+    sheet.animate([{ transform: "rotateX(" + (pose + 14) + "deg) rotateZ(-7deg) scale(1.05)" }],   /* to its place in the CSS */
       { duration: lay.duration, easing: lay.easing, delay: ms("--duration-stagger") });
     var land = hero.querySelector(".plate--land"), ink = hero.querySelector(".plate--ink"), drop = spring(ms("--duration-slower") * 1.3, 0.3);
     hero.querySelectorAll(".plate--shadow").forEach(function (el) {
@@ -372,6 +389,52 @@
     var DAYS = [0, 1, 2, 3, 4, 5, 6].map(function (k) { return level.slice(k * 96, k * 96 + 97); });
     var frame = 0, near = false, was = -1, day = -1, live = false;
 
+    /* level 4: the seven days as a stack of day sheets on the table, the day under the lamp in front and the
+       days to come behind it, each with its own tide, its daylight and its safe windows hatched; as the week
+       goes by the front sheet slides away and the next one comes forward */
+    var dayc = story.querySelector(".dayc"), stack = null, sheets = [];
+    if (dayc && dPlot) {
+      var NS = "http://www.w3.org/2000/svg";
+      stack = document.createElement("div");
+      stack.className = "dstack";
+      stack.setAttribute("aria-hidden", "true");
+      stack.innerHTML = '<svg width="0" height="0" style="position:absolute" focusable="false"><defs><pattern id="dstack-hatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.2" height="12" fill="var(--color-hatch)"/></pattern></defs></svg>';
+      for (var k = 0; k < 7; k++) {
+        var sheet = document.createElement("div"), path = "";
+        sheet.className = "dstack__day";
+        for (var q = 0; q <= 96; q++) path += (q ? "L" : "M") + q * 10 + " " + (600 - 100 * DAYS[k][q]).toFixed(1);
+        var lit = light[k], svg = '<svg viewBox="0 0 960 650" preserveAspectRatio="none" focusable="false">';
+        if (lit) svg += '<rect class="dstack__light" x="' + ((lit.a - k * 24) * 40).toFixed(1) + '" y="0" width="' + ((lit.b - lit.a) * 40).toFixed(1) + '" height="650"/>';
+        var any = false;
+        wins.forEach(function (w) {
+          if (Math.floor(w.a / 24) !== k) return;
+          any = true;
+          var x0 = (w.a - k * 24) * 40, ww = (w.b - w.a) * 40;
+          svg += '<rect class="dstack__win" x="' + x0.toFixed(1) + '" y="0" width="' + ww.toFixed(1) + '" height="650"/><rect class="dstack__bar" x="' + x0.toFixed(1) + '" y="0" width="' + ww.toFixed(1) + '" height="22"/>';
+        });
+        svg += '<path class="dstack__area" d="' + path + 'L960 650L0 650Z"/><path class="dstack__need" d="M0 400H960"/><path class="dstack__curve" d="' + path + '"/></svg>';
+        sheet.innerHTML = svg + '<span class="dstack__name">' + NAMES[k] + " " + (10 + k) + "</span>";
+        if (!any) sheet.classList.add("is-none");
+        stack.appendChild(sheet);
+        sheets.push(sheet);
+      }
+      dayc.insertBefore(stack, dPlot);
+    }
+    function place(c) {                                      /* c: the day in front, with its fraction */
+      for (var k = 0; k < sheets.length; k++) {
+        var d = k - c, el = sheets[k];
+        if (d < -0.7 || d > 5.5) { el.style.opacity = "0"; el.style.visibility = "hidden"; continue; }
+        el.style.visibility = "visible";
+        var y, z, x, o;
+        if (d >= 0) { y = -d * 11; z = -d * 58; x = d * 6; o = Math.max(0, 1 - d * 0.12); }
+        else { y = d * -30; z = -d * 140; x = 0; o = Math.max(0, 1 + d * 1.6); }   /* gone by: it lifts toward you and fades */
+        el.style.transform = "translate3d(" + x.toFixed(1) + "px, " + y.toFixed(1) + "px, " + z.toFixed(1) + "px)";
+        el.style.opacity = o.toFixed(3);
+        el.style.zIndex = String(10 - Math.round(d * 1.5));
+        el.style.filter = d > 0.05 ? "brightness(" + (1 - Math.min(d, 5) * 0.035).toFixed(3) + ")" : "";
+      }
+    }
+
     function smooth(t) { return t * t * (3 - 2 * t); }
     function progress() { var r = story.getBoundingClientRect(); return clamp(-r.top / Math.max(1, r.height - window.innerHeight), 0, 1); }
     /* every day has the same stretch of scroll: quick through the night, slow over the hours of daylight */
@@ -429,6 +492,7 @@
       var dh = heightAt(DAYS[a], hod) * (1 - m) + heightAt(DAYS[b], hod) * m;
       dDot.style.transform = "translate3d(" + (hod / 24 * dPlot.clientWidth).toFixed(1) + "px, " + ((600 - 100 * dh) / 650 * dPlot.clientHeight).toFixed(1) + "px, var(--dot-z, 0px))";
       dDot.style.opacity = edge.toFixed(2);
+      if (stack) place(a + m);
     }
     function tick() {
       frame = 0;

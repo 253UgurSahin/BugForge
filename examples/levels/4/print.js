@@ -1,22 +1,29 @@
-/* Tidewatch, level 4: the printed chart as a picture for the 3D table.
+/* Tidewatch, level 4: the printed chart as pictures for the 3D table (table.js).
 
-   The hero chart is the page's own inline SVG, drawn from one sea bed (the poster of every level). The
-   3D table lays that same print over its relief, so nothing of the chart is lost: tints, contours,
-   soundings, names, lights, buoys, the rose and the neat line, in the page's own fonts.
+   The hero chart is the page's own inline SVG, drawn from one sea bed (the poster of every level), cut
+   as level 3 cuts it: the sheet runs from x 140 to 1000 of the chart, with its neat line on four sides.
+   The table prints that same SVG on its sheet in two layers, so the water of the tide lies between the
+   paper and the ink and never over a word or a line:
+   - base(theme): the paper and its tints (the shoal blues, the drying green, the land, the basins), no
+     line and no letter. "day" on the day paper; "night" is the night print's tints over white, so it
+     reads as how much each tint darkens the sheet that the red lamp lights.
+   - ink(): every line, sign and letter (contours, soundings, names, buoys, lights, the rose, the neat
+     line) and the pencil (the course, its fixes, times and notes, its line clean), over nothing: the
+     day colours with their coverage. The scene keeps them in register with the banks and prints them
+     last, so they stay as dark and sharp as on paper; at night it uses their coverage only.
+   How: the plates of the poster are put together in one SVG again, with the page's chart rules (every
+   top-level `.chart` rule of the stylesheets) and the colour tokens of one theme, read from the `:root`
+   and `:root[data-theme="dark"]` rules of tokens.css, so day and night can both be printed whatever theme
+   the page shows now. The fonts go in as data, read from the page's own font files (same origin, no
+   other host). The SVG becomes an image; the image is drawn on a canvas in bands, with a breath between
+   them, so the page never waits long for one big drawing.
 
-   How: the plates of the poster are put together in one SVG of their own, with the page's chart rules
-   (every top-level `.chart` rule of the stylesheets) and the colour tokens of one theme, read from the
-   `:root` and `:root[data-theme="dark"]` rules of tokens.css, so the day and the night print can both be
-   made whatever theme the page shows now. The fonts go in as data, read from the page's own font files
-   (the same origin, no other host). The SVG becomes an image, the image is drawn on a canvas.
-
-   chartPictures(hero, { width }) -> { width, height, draw(theme), pencil() }
-   draw("day" | "night") -> Promise<canvas>: the print without the pencil, on its paper.
-   pencil() -> Promise<Uint8Array>: the pencilled course, its fixes and notes alone, as coverage (a byte
-   a pixel, row 0 at the top), so the scene can draw it on whatever surface is on top: the water where
-   the course is afloat, the paper where it is dry. */
+   chartPrint(hero, { width }) -> { width, height, base(theme, width), ink() }, each a Promise<canvas>. */
 
 const THEMES = { day: ":root", night: ':root[data-theme="dark"]' };
+const XMLNS = "http://www.w3.org/2000/svg";
+const VIEW = { x: 140, w: 860, h: 900 };
+const breath = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /* every custom property set by the day rule, and the night rule on top of it */
 function themeTokens() {
@@ -47,7 +54,6 @@ function chartRules() {
     try { rules = sheet.cssRules; } catch (error) { continue; }
     for (const rule of Array.from(rules || [])) {
       if (rule.type !== 1 || !/\.chart\b/.test(rule.selectorText || "")) continue;
-      if (/animation|transition/.test(rule.cssText) && !/fill|stroke|font/.test(rule.cssText)) continue;
       out.push(rule.cssText.replace(/\b(animation|transition)[^;]*;/g, ""));
     }
   }
@@ -76,8 +82,7 @@ async function fontFaces() {
     try { rules = sheet.cssRules; } catch (error) { continue; }
     for (const rule of Array.from(rules || [])) {
       if (rule.type !== 5) continue;                                   // CSSFontFaceRule
-      const src = rule.style.getPropertyValue("src");
-      const match = /url\(["']?([^"')]+)["']?\)/.exec(src);
+      const match = /url\(["']?([^"')]+)["']?\)/.exec(rule.style.getPropertyValue("src"));
       if (!match) continue;
       const url = new URL(match[1], sheet.href || location.href);
       if (url.origin !== location.origin) continue;                    // the page's own files only
@@ -87,30 +92,36 @@ async function fontFaces() {
   return (await Promise.all(faces)).filter(Boolean).join("\n");
 }
 
-const XMLNS = "http://www.w3.org/2000/svg";
-const serial = (node) => new XMLSerializer().serializeToString(node);
+/* what each layer leaves out */
+const INKS = ".c-grat, .c-dyke, .c-groyne, .c-town, .c-mole, .c-light, .c-mark, .c-buoy, .c-wreck, .c-diamond, .c-rose, .c-title, .c-fig, .c-snd, .c-pencil, .c-lines, .c-neat, text";
+const LAYER = {
+  base: `.chart * { stroke: none !important; }
+    .chart :is(${INKS}) { display: none !important; }`,
+  ink: `.chart .c-sea path, .chart .c-land path, .chart .c-basin path { fill: none !important; }
+    .chart .c-pencil { filter: none !important; }
+    .chart .c-shadow { display: none !important; }`,
+};
 
-export function chartPictures(hero, { width = 2048 } = {}) {
-  const plates = {
-    sea: hero.querySelector(".plate--sea"), land: hero.querySelector(".plate--land"),
-    ink: hero.querySelector(".plate--ink"), pencil: hero.querySelector(".plate--pencil"),
-  };
-  const height = Math.round(width * 0.9);
+export function chartPrint(hero, { width = 2048 } = {}) {
   const tokens = themeTokens();
   const rules = chartRules();
   const faces = fontFaces();
+  const serial = (node) => new XMLSerializer().serializeToString(node);
+  /* the plates of the poster, in the order they lie on the sheet (the shadows are the poster's own) */
+  const plates = [".plate--sea", ".plate--land", ".plate--ink", ".plate--pencil"].map((sel) => hero.querySelector(sel)).filter(Boolean);
+  const inner = plates.map((svg) => Array.from(svg.childNodes).filter((n) => n.nodeType === 1).map(serial).join("")).join("");
+  const heightOf = (w) => Math.round((w * VIEW.h) / VIEW.w);
 
-  /* the inside of a plate, as markup (defs of the sea plate go first: the pencil filter, the hatch, the clip) */
-  const inner = (svg) => (svg ? Array.from(svg.childNodes).map((n) => (n.nodeType === 1 ? serial(n) : "")).join("") : "");
-  function sheetSVG(theme, parts, extra = "") {
+  function markup(theme, layer, w, h) {
     const vars = Object.entries(tokens[theme]).map(([k, v]) => `${k}:${v}`).join(";");
-    return `<svg xmlns="${XMLNS}" xmlns:xlink="http://www.w3.org/1999/xlink" class="chart" viewBox="0 0 1000 900" `
-      + `width="${width}" height="${height}" preserveAspectRatio="none">`
-      + `<style>${extra}\nsvg{${vars}}\n${rules}\n.chart .c-shadow{display:none}</style>${parts}</svg>`;
+    return `<svg xmlns="${XMLNS}" xmlns:xlink="http://www.w3.org/1999/xlink" class="chart" viewBox="${VIEW.x} 0 ${VIEW.w} ${VIEW.h}" `
+      + `width="${w}" height="${h}" preserveAspectRatio="none">`
+      + `<style>svg{${vars}}\n${rules}\n${LAYER[layer]}</style>${inner}</svg>`;
   }
-  async function paint(markup, fill) {
+  async function paint(theme, layer, w, fill) {
+    const h = heightOf(w);
     const fonts = await faces;
-    const text = markup.replace("<style>", `<style>${fonts}\n`);
+    const text = markup(theme, layer, w, h).replace("<style>", `<style>${fonts}\n`);
     const url = URL.createObjectURL(new Blob([text], { type: "image/svg+xml" }));
     try {
       const image = new Image();
@@ -118,36 +129,29 @@ export function chartPictures(hero, { width = 2048 } = {}) {
       image.src = url;
       await image.decode();
       const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const g = canvas.getContext("2d", { willReadFrequently: !fill });
-      if (fill) { g.fillStyle = fill; g.fillRect(0, 0, width, height); }
-      g.drawImage(image, 0, 0, width, height);
+      canvas.width = w;
+      canvas.height = h;
+      const g = canvas.getContext("2d");
+      if (fill) { g.fillStyle = fill; g.fillRect(0, 0, w, h); }
+      const bands = Math.max(1, Math.ceil(h / 384));
+      for (let i = 0; i < bands; i++) {
+        const y0 = Math.round((i * h) / bands), y1 = Math.round(((i + 1) * h) / bands);
+        await breath();
+        g.drawImage(image, 0, (y0 / h) * image.height, image.width, ((y1 - y0) / h) * image.height, 0, y0, w, y1 - y0);
+      }
       return canvas;
     } finally {
       URL.revokeObjectURL(url);
     }
   }
-  const defs = plates.sea ? plates.sea.querySelector("defs") : null;
-  const defsText = defs ? serial(defs) : "";
-  const seaInner = plates.sea ? Array.from(plates.sea.childNodes).filter((n) => n.nodeType === 1 && n.tagName !== "defs").map(serial).join("") : "";
   return {
     width,
-    height,
-    /* the print on its paper: the day chart on the paper under the lamp, the night print (dark inks
-       that let the paper through) on a pale sheet that only the red lamp will light */
-    draw(theme) {
-      const paper = theme === "night" ? "#efe4da" : (tokens.day["--color-surface"] || "#faf6ec");
-      return paint(sheetSVG(theme, defsText + seaInner + inner(plates.land) + inner(plates.ink)), paper);
+    height: heightOf(width),
+    /* the paper and its tints: by day on the day paper; by night the night tints over white */
+    base(theme, w = Math.min(width, 1024)) {
+      return paint(theme, "base", w, theme === "night" ? "#ffffff" : (tokens.day["--color-surface"] || "#faf6ec"));
     },
-    /* the pencil alone, in black, read back as coverage */
-    async pencil() {
-      const canvas = await paint(sheetSVG("day", defsText + inner(plates.pencil),
-        ".chart .c-pencil{stroke:#000;stroke-opacity:1}.chart .c-pencil text,.chart .c-pencil .dot{fill:#000;fill-opacity:1}"), null);
-      const data = canvas.getContext("2d").getImageData(0, 0, width, height).data;
-      const out = new Uint8Array(width * height);
-      for (let i = 0, j = 3; i < out.length; i++, j += 4) out[i] = data[j];
-      return out;
-    },
+    /* every line, sign and letter of the day print, and the pencil, over nothing */
+    ink() { return paint("day", "ink", width, null); },
   };
 }
