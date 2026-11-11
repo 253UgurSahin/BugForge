@@ -1,0 +1,65 @@
+{
+ "about": "The rules of motioncheck.py, read at start: rule: [severity, what was found, why it matters, how to fix it]. Severity is critical, high, medium or low; the script's own code decides when each rule fires.",
+ "rules": {
+  "no-reduced-motion": [
+   "high",
+   "animations, and no prefers-reduced-motion rule in the project",
+   "movement on screen makes some people dizzy or sick; they ask their system for less",
+   "add @media (prefers-reduced-motion: reduce) rules that swap movement for a fade or nothing"
+  ],
+  "cdn": [
+   "high",
+   "animation code or a Lottie file loaded from another host",
+   "it sees each visitor's IP address, and a file changed there runs in your app (privacy and supply chain)",
+   "install the package with the app's own package manager and import it, so the app serves it; copy Lottie files into the repo"
+  ],
+  "layout": [
+   "medium",
+   "a layout property is animated",
+   "the page is laid out again on every frame: phones stutter",
+   "animate transform (translate, scale) or opacity; to open and close: grid-template-rows 0fr to 1fr"
+  ],
+  "infinite": [
+   "medium",
+   "an animation that never stops, outside a reduced-motion guard",
+   "movement longer than 5 seconds must pause or stop (WCAG 2.2.2), and it drains batteries",
+   "put it in @media (prefers-reduced-motion: no-preference), or stop its selector in a reduce block"
+  ],
+  "raf": [
+   "medium",
+   "a requestAnimationFrame loop that never ends, and no pause in this file",
+   "it draws while nobody looks",
+   "stop the loop when an IntersectionObserver says it is off-screen, and on visibilitychange"
+  ],
+  "library": [
+   "medium",
+   "an animation library, and no script asks for reduced motion",
+   "CSS cannot stop a script",
+   "check matchMedia('(prefers-reduced-motion: reduce)') and show the end state or one still frame"
+  ],
+  "video": [
+   "medium",
+   "a video plays by itself and has no controls",
+   "people cannot pause it (WCAG 2.2.2)",
+   "add controls or a pause button of your own, and do not autoplay for reduced motion"
+  ],
+  "transition-all": [
+   "low",
+   "transition: all",
+   "every property that changes animates, layout ones too",
+   "name the properties: transition: transform ..., opacity ..."
+  ],
+  "duration": [
+   "low",
+   "a transition time outside 80 ms to 1 s",
+   "under 80 ms nobody sees it; over 1 s people wait",
+   "use the motion tokens: about 120 ms for small changes, 200 to 400 ms for larger ones"
+  ],
+  "will-change": [
+   "low",
+   "will-change used widely",
+   "each one keeps a layer in memory; many slow a phone down",
+   "remove it; add it to one element only after you measured a problem there"
+  ]
+ }
+}

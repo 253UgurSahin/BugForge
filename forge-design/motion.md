@@ -168,40 +168,100 @@ in markup. Scripts may still set them: `element.style.setProperty("--m-tab-x", "
 Each: the markup or script, what people who asked for reduced motion get, and the usual mistake.
 The classes are in motion.css. Scripts import `token`, `ms` and `reduce` from tokens.js above.
 
-One script switches the scroll recipes on and pauses loops nobody can see:
+One script switches the scroll recipes on and pauses loops nobody can see. It watches the page, so
+what a page change without a reload brings (Next, Inertia, Livewire's `wire:navigate`, Turbo, Vue
+Router, SvelteKit, Astro's ClientRouter) reveals too; a script that looks once leaves that content
+at `opacity: 0`, and it looks gone. Its `mounts` start a scene or depth.js on each element that
+appears and stop it when the element leaves the page:
 
 ```js
-// motion.js: load it as a module on every page (next: <MotionRuntime/> below)
-document.documentElement.dataset.motion ||= "on";   // from here on, .m-reveal starts hidden;
-                                                    // ||= keeps "paused" from the kit's motionToggle
+// motion.js: startMotion() once per page load, from the app's entry script (next: <MotionRuntime/>)
+const PICK = ".m-reveal:not(.is-visible), .m-draw:not(.is-visible), .m-grow:not(.is-visible)";
+let running = null, users = 0;                       // one runtime per page, however often it is started
 
-const seen = new IntersectionObserver((entries) => {
-  for (const entry of entries) {
-    if (!entry.isIntersecting) continue;
-    entry.target.classList.add("is-visible");
-    seen.unobserve(entry.target);                 // once: scrolling back up does not replay it
-  }
-}, { threshold: 0.1 });                          // no negative rootMargin: see the mistake below
-document.querySelectorAll(".m-reveal, .m-draw, .m-grow").forEach((el) => seen.observe(el));
-
-const visible = new IntersectionObserver((entries) => {
-  for (const entry of entries) {
-    if (entry.target.dataset.userPaused === "true") continue;   // the user's pause button wins
-    entry.target.dataset.paused = String(!entry.isIntersecting);
-  }
-});
-document.querySelectorAll(".m-marquee, .m-skeleton").forEach((el) => visible.observe(el));
+export function startMotion(mounts = {}) {         // { selector: (element) => its stop() }
+  let mine = true;
+  const release = () => {                            // each caller's stop counts once; the last one stops it all
+    if (!mine) return;
+    mine = false;
+    if (--users === 0) running?.();
+  };
+  users += 1;
+  if (running) return release;                       // a second start (a nested layout, a <body> script run
+                                                     // again): the first call's runtime and mounts stay
+  const root = document.documentElement;
+  root.dataset.motion ||= "on";                      // from here on, .m-reveal starts hidden;
+                                                     // ||= keeps "paused" from the kit's motionToggle
+  const seen = new IntersectionObserver((entries) => {
+    for (const entry of entries) {                   // a tenth in view, or 96px of a block taller than the screen
+      if (!entry.isIntersecting || (entry.intersectionRatio < 0.1 && entry.intersectionRect.height < 96)) continue;
+      entry.target.classList.add("is-visible");
+      seen.unobserve(entry.target);                  // once: scrolling back up does not replay it
+    }
+  }, { threshold: [0, 0.01, 0.02, 0.04, 0.07, 0.1] });   // no negative rootMargin: see the mistake below
+  const visible = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.target.dataset.userPaused === "true") continue;   // the user's pause button wins
+      entry.target.dataset.paused = String(!entry.isIntersecting);
+    }
+  });
+  const live = new Map();                            // element: its stop(), while it is in the page
+  let frame = 0;
+  const watch = () => {
+    frame = 0;
+    document.querySelectorAll(PICK).forEach((el) => seen.observe(el));   // observing twice is harmless
+    document.querySelectorAll(".m-marquee, .m-skeleton").forEach((el) => visible.observe(el));
+    for (const [el, stop] of live) if (!el.isConnected) { live.delete(el); stop?.(); }
+    for (const [selector, start] of Object.entries(mounts)) {
+      document.querySelectorAll(selector).forEach((el) => { if (!live.has(el)) live.set(el, start(el)); });
+    }
+  };
+  watch();
+  const added = new MutationObserver(() => { frame ||= requestAnimationFrame(watch); });
+  added.observe(root, { childList: true, subtree: true });   // <html>: Livewire and Turbo swap the <body>
+  running = () => {
+    running = null;
+    added.disconnect(); seen.disconnect(); visible.disconnect(); cancelAnimationFrame(frame);
+    for (const stop of live.values()) stop?.();
+    live.clear();
+  };
+  return release;
+}
 ```
+```js
+// the app's entry script (resources/js/app.js, src/main.js, static/js/site.js): once per page load
+import { startMotion } from "./motion.js";
+import { lazyScene, motionToggle } from "./scenes/lazy.js";   // imports nothing: three comes later
+import { mount } from "./scenes/depth.js";         // level 3 and up
+
+startMotion({
+  ".hero-scene": (el) => lazyScene(el, () => import("./scenes/contour.js"), { calm: "left" }).destroy,
+  "[data-depth]": (el) => mount(el, { tilt: 7 }).destroy,
+  "#motion": (el) => motionToggle(el).destroy,     // the pause button, on each page that brings one
+});
+```
+
+These mounts take the place of a page's own `hero.js` (section 9, scenes.md section 5), never both:
+one `lazyScene` per container and one `motionToggle` per button. With both, one click pauses and
+plays again, so the button does nothing, and the container gets two WebGL contexts.
 
 Where motion.css and motion.js go:
 
 | stack | motion.css | motion.js |
 | --- | --- | --- |
-| laravel | `resources/css/motion.css`, imported in `app.css` after the other imports | `resources/js/motion.js`, imported from `app.js` |
-| django | `static/css/motion.css`, linked after `tokens.css` | `static/js/motion.js`, `<script type="module">` in the base template |
-| next, Tailwind 4 | `app/motion.css`, in `globals.css` right after `@import "tailwindcss";` as `@import "./motion.css" layer(components);` | `<MotionRuntime/>` below, once in `app/layout.tsx` |
+| laravel (Blade, Livewire, Inertia) | `resources/css/motion.css`, imported in `app.css` after the other imports | `resources/js/motion.js`, `startMotion()` once in `app.js` |
+| django | `static/css/motion.css`, linked after `tokens.css` | `static/js/motion.js`, started from `static/js/site.js`, a `<script type="module" src="...">` in the base template's `<head>` |
+| next, Tailwind 4 | `app/motion.css`, in `globals.css` right after `@import "tailwindcss";` as `@import "./motion.css" layer(components);` | `app/motion.js` and `<MotionRuntime/>` below, once in `app/layout.tsx` |
 | next, no Tailwind | `app/motion.css`, imported in `app/layout.tsx` after `globals.css` | the same |
-| static | imported in `src/main.*`; no bundler: a `<link>` on every page | `src/motion.js` from `src/main.*`, or a module script |
+| static | imported in `src/main.*`; no bundler: a `<link>` on every page | `src/motion.js` started from `src/main.*`, or from a module script in `<head>` |
+
+Once per page load, never per page: it sees what each later page change brings. Start it from the
+`<head>` or the bundled entry file, not from an inline script in `<body>`: Turbo and htmx's
+`hx-boost` run those again on every visit (a second `startMotion()` mounts nothing twice and keeps
+the first call's mounts; the runtime stops once every caller has called its stop). A scene or
+depth.js in HTML the server renders starts through `mounts`; in a component (React, Vue, Svelte,
+also under Inertia) it starts from the component's own lifecycle (section 9). Every app whose links
+change the page without a reload gets section 12's click proof.
 
 Why the layer: Tailwind 4 puts every utility in a cascade layer, and CSS outside any layer beats
 every layer whatever the order. Unlayered, `.m-lift { position: relative }` undoes an `absolute`
@@ -209,45 +269,18 @@ class and an `m-` transition replaces a `transition-*` class. Inside `layer(comp
 utilities win; where an element has Tailwind transition classes, add the property there
 (`transition-[color,transform]`) instead of an `m-` class.
 
-**Next (App Router).** The layout stays while the pages under it change on the client, so a script
-that runs once never sees the elements of the next page: they keep `opacity: 0` and the content
-looks gone. A client component observes whatever arrives, on every route:
+**Next (App Router).** The layout stays while the pages under it change on the client, so the
+runtime starts once, in a client component of the layout (React runs effects twice in
+development: the stop and a second start are safe):
 
 ```jsx
 "use client";
-// app/motion-runtime.jsx: motion.js for Next; <MotionRuntime /> once, inside <body> of app/layout.tsx
-// (a .jsx file is fine in a TypeScript app; as .tsx, write (entry.target as HTMLElement).dataset)
+// app/motion-runtime.jsx: <MotionRuntime /> once, inside <body> of app/layout.tsx; motion.js next to it
 import { useEffect } from "react";
-
-const PICK = ".m-reveal:not(.is-visible), .m-draw:not(.is-visible), .m-grow:not(.is-visible)";
+import { startMotion } from "./motion.js";
 
 export default function MotionRuntime() {
-  useEffect(() => {
-    document.documentElement.dataset.motion ||= "on";
-    const seen = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        entry.target.classList.add("is-visible");
-        seen.unobserve(entry.target);
-      }
-    }, { threshold: 0.1 });
-    const visible = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target.dataset.userPaused === "true") continue;
-        entry.target.dataset.paused = String(!entry.isIntersecting);
-      }
-    });
-    let frame = 0;
-    const watch = () => {
-      frame = 0;
-      document.querySelectorAll(PICK).forEach((el) => seen.observe(el));   // observing twice is harmless
-      document.querySelectorAll(".m-marquee, .m-skeleton").forEach((el) => visible.observe(el));
-    };
-    watch();
-    const added = new MutationObserver(() => { frame ||= requestAnimationFrame(watch); });
-    added.observe(document.body, { childList: true, subtree: true });   // route changes, streamed parts
-    return () => { added.disconnect(); seen.disconnect(); visible.disconnect(); cancelAnimationFrame(frame); };
-  }, []);
+  useEffect(() => startMotion(), []);   // every route's content, streamed parts too
   return null;
 }
 ```
@@ -353,8 +386,11 @@ to nothing else. After a client-side page change, move focus to the new page's `
 Reduced: none. Mistake: the same `view-transition-name` twice on a page (the whole transition is
 skipped), a transition over 300ms on every navigation, and focus left on a link that is gone.
 Frameworks change pages on the client, where `@view-transition { navigation: auto; }` never runs
-(it is for full page loads only). Next: the `TurnLink` of section 10; Livewire's navigate and
-others: read the docs of the installed version, and prove it with frames across a click (section 12).
+(it is for full page loads only). Next 15.2 and up: React's `<ViewTransition>` (section 10, after
+reading the docs of the installed version); older Next: the `TurnLink` of section 10. Inertia,
+Livewire's `wire:navigate`, Turbo, SvelteKit, Astro and the rest: read the docs of the installed
+version (some have an option for it, others need `document.startViewTransition` around their page
+change), and prove it with frames across a click (section 12).
 
 **Scroll reveal, IntersectionObserver.** `class="m-reveal"` plus motion.js above. Reduced: a fade
 without the rise. Mistake: hiding content in CSS with no script running (blank page: the recipe
@@ -366,36 +402,45 @@ of a page may never count as seen and stays invisible.
 scrollbar. Reduced, and in browsers without it: the element is simply there. Mistake: writing
 `animation-timeline` before the `animation` shorthand (the shorthand resets it), and no `@supports`.
 
-**Number count-up.** The real number is in the HTML for screen readers and for no-script; the
-visible copy counts (`sr-only`: the app's class that hides text from the eye only).
+**Number count-up.** The real number is in the HTML, for screen readers and for no-script; once it
+is on screen, the script counts its digits up in the text node that is there, in under a second.
+No second copy of the number: an extra span can fall under a descendant rule of the app's own
+(`.cells span { font-size: ... }` then makes the counting digits small and muted). Adding one
+anyway: check the app's `X span` rules for the element you wrap first.
 
 ```html
-<span class="sr-only">1,280 bookings</span>
-<span class="m-count" aria-hidden="true" data-value="1280">1,280</span>
+<span class="m-count" data-value="1280">1,280</span>
 ```
 ```js
 export function countUp(el) {
+  const text = el.firstChild;                          // the page's (or React's, Vue's) own text node
   const target = Number(el.dataset.value);
+  if (!text || text.nodeType !== Node.TEXT_NODE || !Number.isFinite(target) || reduce.matches) return;
+  const end = text.data;                               // reduced: the number already stands there
   const format = new Intl.NumberFormat(document.documentElement.lang || undefined);
   const duration = ms("--duration-slower") * 1.5;
-  let start;
+  let start, shown;
   const step = (now) => {
     start ??= now;
+    if (text.data !== shown) return;                   // the app wrote a newer value meanwhile: it stays
     const progress = Math.min((now - start) / duration, 1);
-    el.textContent = format.format(Math.round(target * (1 - (1 - progress) ** 3)));   // soft landing
+    text.data = shown = progress < 1 ? format.format(Math.round(target * (1 - (1 - progress) ** 3))) : end;
     if (progress < 1) requestAnimationFrame(step);
   };
   const seen = new IntersectionObserver(([entry]) => {
     if (!entry.isIntersecting) return;
     seen.disconnect();
-    if (!reduce.matches) requestAnimationFrame(step);   // reduced: the number already stands there
+    text.data = shown = format.format(0);
+    requestAnimationFrame(step);
   });
   seen.observe(el);
 }
 ```
 
-Reduced: the final number, at once. Mistake: digits that jiggle (no `tabular-nums`), counting for
-seconds, counting before it is on screen, and a live region that reads out every step.
+Reduced: the final number, at once. Mistake: `el.textContent = ...` on a number React or Vue drew
+(it puts a new text node in place of the framework's own, so a later value from the server lands in
+a node that is no longer on screen), digits that jiggle (no `tabular-nums`), counting for seconds,
+counting before it is on screen, and a live region that reads out every step.
 
 **Chart draw-on.** `<path class="m-draw" pathLength="1" ...>` for a line, `class="m-grow"` with
 `--m-index` set per bar for bars, plus motion.js. `pathLength="1"` makes the dash maths the same
@@ -479,12 +524,26 @@ then read the licence file in `node_modules/<package>/` (and the page it links t
 none). Write into motion.md what you read, not what this table says. A licence that is not a
 standard open one (GSAP's) is the user's decision: show them the conditions and wait.
 
+**Through the app's own package manager.** The lockfile next to the app's `package.json` names it
+(at a monorepo's root when the app has none of its own):
+
+| lockfile | add a package | the locked install (a build in a copy, CI) |
+| --- | --- | --- |
+| `package-lock.json`, or none | `npm install three`; a workspace: `npm install three -w <app>` | `npm ci` |
+| `pnpm-lock.yaml` | `pnpm add three`; a workspace: `pnpm --filter <app> add three` | `pnpm install --frozen-lockfile` |
+| `yarn.lock` | `yarn add three`; a workspace: `yarn workspace <app> add three` | `yarn install --immutable` (Yarn 1: `--frozen-lockfile`) |
+| `bun.lock` or `bun.lockb` | `bun add three`, in the app's folder | `bun install --frozen-lockfile` |
+
+Commit the changed lockfile with `package.json`. Never a second lockfile: npm in a pnpm, yarn or
+bun app writes a `package-lock.json` next to theirs, and their frozen install in CI then fails (in
+a pnpm workspace npm stops at the first `workspace:*` dependency).
+
 Rules for every library:
 
-- **Local and bundled.** `npm install <package>`, imported from the app's own code. Never a
-  `<script src="https://...">`, an `import` from a URL, an import map to a CDN, or a hosted player:
-  a CDN sees every visitor's IP address, and a file changed there runs in the app. Lottie files and
-  models live in the repo.
+- **Local and bundled.** Installed through the app's own package manager, imported from the
+  app's own code. Never a `<script src="https://...">`, an `import` from a URL, an import map to a
+  CDN, or a hosted player: a CDN sees every visitor's IP address, and a file changed there runs in
+  the app. Lottie files and models live in the repo.
 - **Lazy.** Never in the first bundle. Load it when its element comes near the screen:
 
 ```js
@@ -531,9 +590,10 @@ brief (`forge-work/design/brief.md`), never from a style list and never from a s
 - **Per level.** Levels 1 and 2 have no hero visual: the heading, the type and the page's own
   entrance carry the first screen. Level 3: the signature moment may be a drawn line piece on a
   2D canvas; start from `../forge-design/wireform.example.js` and change its formulas until it is
-  the concept's own shape. Levels 4 and 5: a WebGL scene from the kit (section 9), tuned until it
-  could only belong here; a plain torus knot, a default particle cloud or the kit's own defaults
-  are a failed hero.
+  the concept's own shape. Levels 4 and 5: a WebGL scene from the kit (section 9), or the app's own
+  when no kit scene draws the concept's thing (scenes.md section 2), tuned until it could only
+  belong here; a plain torus knot, a default particle cloud or the kit's own defaults are a failed
+  hero.
 - **Technical look**: a near-black background from the tokens, 1px lines in the accent at
   different opacities, one glow pass, digits in `--font-mono` with `tabular-nums`, slow movement
   (a full turn takes 40 to 60 seconds). No scan lines that flicker, no glitch effects: they flash.
@@ -556,6 +616,24 @@ brief (`forge-work/design/brief.md`), never from a style list and never from a s
 | script added | per level: section 11 | the build output's file sizes |
 | focus | never lost: after a modal closes it is back on its button; after a page transition on the new heading | Tab through each transition |
 | layout shift | motion never pushes content around (CLS stays under 0.1) | skeletons have the size of their content |
+
+**Big enough to see.** A level only shows when its effects can be seen in a still by someone who
+did not build them: a tilt of 3 degrees, or layers that move 11px apart over a scroll, read as
+nothing at all. The least per level, on the first screen at rest, is in `../forge/levels.md`
+("What each look level shows"); here it is per effect, with the kit's options that reach it. It
+holds at rest too: depth that settles flat once the motion ends is gone from the first screen.
+Depth is not travel: section 1's 4 to 24px is for things that arrive. Reduced motion keeps its
+own rules.
+
+| effect (level) | at least | how to check it in a still |
+| --- | --- | --- |
+| entrance, reveal (2) | a rise of 8 to 24px with the fade, 220 to 350ms; a count-up from 0 | frames `-f1` to `-f4` differ: `changed.py --moves` |
+| tilt toward the pointer (3) | 6 degrees at the card's edge, 8 at most on a card with text: depth.js `tilt: 7` (its default, 5, is too little) | a frame with the pointer at one edge, after a second: the card's two sides differ in height (`changed.py --two-up` beside one with the pointer away) |
+| layers in a card (3) | the top layer 24px off the card, its shadow growing with it: `data-depth-layer="3"` at depth.js's `lift` of 9, or `lift: 12` for layer 2 | the same pair: the layer stands clear of its card |
+| layers or panels while scrolling (3) | 24px apart at 390 and 48px at 1440 over one screen of scroll (depth.js `scrollShift` of a scene, `stackGap` of a stack) | `getBoundingClientRect().top` of a front and a back layer before and after one screen of scroll: their distance changes by that much |
+| a sheet laid back (3) | its far edge at least a tenth narrower than its near edge, also at rest: `rotateX` of 20 degrees or more under a perspective of about 1000px (14 degrees at 1500px is a skew of a few pixels) | the still at rest: both edges measured in its pixels |
+| the scene (4 and 5) | at least a third of the screen's height at 1440 and its full width at 390; it moves by itself, and the pointer visibly moves its light or form | `shots.mjs --scene-frames` and `changed.py --moves` on them |
+| the journey (5) | one screen of scroll moves the camera; each chapter its own view | one still per chapter: no two alike |
 
 ## 8. Level 3: Expressive
 
@@ -620,8 +698,11 @@ export function story(section, onProgress = () => {}) {
 Reduced: the section is as tall as its content, every step is there at full strength, and the
 chart stands in its end state (`--progress` falls back to 1). Mistake: an ancestor with
 `overflow: hidden` or `auto` (sticky then never sticks: use `clip`), a section so short that the
-scene is over in one flick, text people must read moving with the scroll, and a `scroll` listener
-that sets `top` or `height`.
+scene is over in one flick, text people must read moving with the scroll, and a stage or anything
+on it placed by a script from the scroll position (`top`, `height`, a transform): the browser
+scrolls first and the script follows a frame later, so under a real mouse wheel it sits a step too
+low now and then, the more so while a slow device draws a long frame. Pin and place with CSS
+(`position: sticky`), and test it with wheel steps (section 12), never only with `scrollTo`.
 
 **Spring.** A real spring, from a duration token and a bounce, as a CSS `linear()` curve that the
 Web Animations API plays. Browsers without `linear()` get the `--ease-spring` curve.
@@ -701,18 +782,18 @@ behaviour is section 7 of `../forge-design/scenes.md`.
 // in the page's script, once the cards are in the page
 import { mount } from "./scenes/depth.js";
 
-const depth = mount(document.querySelector(".deck"), { tilt: 5 });
-// cards added later: depth.destroy(), then mount() again
+const depth = mount(document.querySelector(".deck"), { tilt: 7 });   // 6 to 8 degrees: section 7
+// cards added later: mount() again over them, or startMotion's mounts (section 4) do it
 ```
 
 In React, `mount(ref.current)` in a `useEffect` that returns its `destroy`. Panels stacked in
 perspective are `data-depth="stack"` on their container. A card stays a normal link or button: the
 tilt is a transform on top. Reduced: depth.js lays every card flat and still (also while the motion
-toggle is off); hover gives the shadow of `m-lift`. Mistake: a tilt over about 8 degrees (text gets
-hard to read), tilting a whole form or table, `overflow: hidden`, opacity or a filter on the card
-itself (it flattens the layers: put them on a child), a transform of your own on the card (depth.js
-owns it: use the CSS `rotate`, `translate` or `scale` properties), and depth.js mounted before the
-cards exist.
+toggle is off); hover gives the shadow of `m-lift`. Mistake: a tilt under 6 degrees (nobody sees
+it) or over 8 (text gets hard to read), tilting a whole form or table, `overflow: hidden`, opacity
+or a filter on the card itself (it flattens the layers: put them on a child), a transform of your
+own on the card (depth.js owns it: use the CSS `rotate`, `translate` or `scale` properties), and
+depth.js mounted before the cards exist.
 
 **The signature moment.** One moment that could only belong to this app, from the concept: a
 float that dips when a catch is saved, a stamp that lands on a paid invoice, a tide line that
@@ -722,23 +803,31 @@ written in the inventory as its own row.
 ## 9. Level 4: Showpiece
 
 Everything above, plus a WebGL hero from the scene kit, light and depth that follow the pointer,
-3D inside the interface and depth while scrolling. Which scene: `form.js` for a shape (an object,
-a tool, a craft), `field.js` for particles (a crowd, a flow, numbers; it takes `setData`),
-`aurora.js` for light (water, a sky, a sea; mode `water`), `contour.js` for lines over a map
-(places, depth, height); the full chooser is `../forge-design/scenes.md` section 2. The options and
+3D inside the interface and depth while scrolling. Which scene: `form.js` for a shape that winds
+(rope, a coil), `field.js` for particles (a crowd, a flow, numbers; it takes `setData`), `aurora.js`
+for light (a sky, weather; mode `water` only for clear, shallow water), `contour.js` for lines over a
+map (places, depth, height; one lake, trail or plot from its `outline`, `view: "tilt"` for 3D), or
+the app's own scene on `stage.js` for any other object of its world; the full chooser is
+`../forge-design/scenes.md` section 2. The options and
 API of each are the comment at its top; the mount per stack is below (a plain page, React and
 Next) and in scenes.md section 5 (also Vite and Django).
 
-- `npm install three` in the app; the level is the user's yes, so do not ask again. Read the
-  licence of the installed version (MIT, in `node_modules/three/LICENSE`) and write it in
-  `## Libraries`.
+- three in the app, through its own package manager (section 5: `npm install three`, `pnpm add
+  three` ...); the level is the user's yes, so do not ask again. Read the licence of the installed
+  version (MIT, in `node_modules/three/LICENSE`) and write it in `## Libraries`.
 - Copy `stage.js`, `glsl.js`, `lazy.js` and the scene into a `scenes/` folder of the app's scripts:
   the app serves them itself.
-- The hero container gets a poster: a still of the scene. Mount it once with `{ still: true }` at
-  the size of the hero and take a screenshot of the container with Playwright, as PNG or as JPEG
-  at quality 80 (`await page.locator(".hero-scene").screenshot({ path: "public/hero-poster.jpg",
-  type: "jpeg", quality: 80 })`), under 100 KB, next to the app's images. Playwright writes no
-  WebP; install no converter for it.
+- The hero container gets a poster: a still of the scene. Make it without touching the app's
+  code: open the page at the hero's size in a Playwright context with `reducedMotion: "reduce"`,
+  and the stage draws the same still frame as `{ still: true }`. Wait for that frame with
+  `await page.locator('.hero-scene[data-scene="live"]').waitFor()`: a screenshot taken before it
+  shows the empty box. Then take a screenshot of the container, as PNG or as JPEG at quality 80
+  (`await page.locator(".hero-scene").screenshot({ path: "public/hero-poster.jpg", type: "jpeg",
+  quality: 80 })`), under 100 KB, next to the app's images. An app with a theme switch or a phone
+  layout gets one per theme and per shape, with the text over the scene and all fixed chrome
+  hidden: `../forge-design/scenes.md` section 5, "A poster per theme and shape", has the script.
+  Open each file and look at it before you commit it. Playwright writes no WebP; install no
+  converter for it.
 
 **Mounting a kit scene in a plain page.** With no bundler, an import map points `three` at a file
 the app serves itself: copy `node_modules/three/build/three.module.js` and `three.core.js` to the
@@ -804,6 +893,15 @@ Mistake: `lazyScene` called during render (it runs on the server and on every re
 (a second WebGL context on every page change, until the browser drops the oldest), and the scene
 remounted on every prop change instead of fed through its methods.
 
+**Mounting where pages change without a reload.** A scene started once from the entry file
+(`if (document.querySelector(".hero-scene")) ...`) misses every page a client-side router draws
+later: Inertia, Livewire's `wire:navigate`, Turbo, Vue Router, SvelteKit. In HTML the server
+renders, start it through the `mounts` of section 4's `startMotion`: it starts when its container
+appears and is destroyed when it leaves. In a component, from the component's own lifecycle, also
+under Inertia: React as above; Vue `onMounted(() => { scene = lazyScene(box.value, loader, options); })`
+with `onUnmounted(() => scene.destroy())`; Svelte `onMount(() => lazyScene(box, loader, options).destroy)`.
+Then click from one screen to the next (section 12): the scene is live after the click too.
+
 ## 10. Level 5: Cinematic
 
 Everything above, plus a scroll-driven journey, custom shaders, GPU particles, forms that react to
@@ -821,13 +919,14 @@ the pointer and to the app's live data, and screens that change in 3D space.
 **The journey.** `journey.js` pins a stage element (`[data-journey-stage]`, sticky) in a tall
 section, flies the camera along a smooth path through the chapters' keyframes, walks the scene's
 `setProgress` with it and fires a `chapter` event on the section; the page lights the text. It
-directs `form.js`, `field.js`, `datascape.js` or a scene of the app's own; `aurora.js` and
-`contour.js` are flat shaders, so their section needs only `setProgress` with
-`stage.progressOf(section, "contain")`. Loaded through `lazyScene`, nothing of three comes before
-the section is near:
+directs `form.js`, `field.js`, `datascape.js` or a scene of the app's own. `aurora.js` and
+`contour.js` keep their own view (`contour.js` places its own camera): behind a section,
+`setProgress` with `stage.progressOf(section, "contain")` gives them level 4's depth while
+scrolling, not a journey. Loaded through `lazyScene`, nothing of three comes before the section
+is near (the markup and CSS: scenes.md section 6):
 
 ```js
-// trip.js of the app: the lake from far, then close, then from above
+// trip.js of a sailing school: its rope, coiled on deck, then the knot, then made fast to the ring
 import { lazyScene } from "./scenes/lazy.js";
 
 const section = document.querySelector(".journey");
@@ -835,12 +934,12 @@ const steps = [...section.querySelectorAll("[data-chapter]")];
 lazyScene(section, async () => {
   const [journey, form] = await Promise.all([import("./scenes/journey.js"), import("./scenes/form.js")]);
   return { mount: (el, options) => journey.mount(el, { ...options,
-    scene: (stageEl) => form.mount(stageEl, { side: "centre", progressEase: 0.05 }) }) };
+    scene: (stageEl) => form.mount(stageEl, { side: "centre", shapes: ["coil", "knot", "ring"], progressEase: 0.05 }) }) };
 }, {
   chapters: [
-    { camera: { position: [-1, 0.5, 9], target: [-2, 0, 0], fov: 32 }, progress: 0 },  // the whole lake
-    { camera: { position: [2, -1, 5], target: [0.5, 0, 0] }, progress: 0.5 },         // where the fish were
-    { camera: { position: [0, 8, 6], target: [0, 0, 0] }, progress: 1 },              // your best spot
+    { camera: { position: [-1, 0.5, 9], target: [-2, 0, 0], fov: 32 }, progress: 0 },  // the coiled line
+    { camera: { position: [2, -1, 5], target: [0.5, 0, 0] }, progress: 0.5 },         // the knot
+    { camera: { position: [0, 8, 6], target: [0, 0, 0] }, progress: 1 },              // made fast
   ],
 });
 section.addEventListener("chapter", (event) => {
@@ -852,8 +951,12 @@ Reduced: no pin and no trip; each chapter gets a still of its keyframe beside it
 (`[data-journey="still"]` in the page's CSS), and the stage element stays: it draws them. No
 WebGL: the poster stays and the chapters scroll over it. Mistake: chapters so short that one flick
 of the wheel skips two, text that people must read moving with the camera, the stage element
-hidden under reduced motion, a second WebGL scene on the same page, and an ancestor with
-`overflow: hidden` (sticky then never sticks).
+hidden under reduced motion, a second WebGL scene on the same page, an ancestor with
+`overflow: hidden` (sticky then never sticks), and labels, slips or a strip placed from the
+journey's eased progress or its camera: those trail the wheel on purpose, so under real wheel
+steps the text sits a step off now and then and cuts a card in half. Place them from the page's
+own scroll (CSS, or `getBoundingClientRect()` read in the frame that writes them), and test the
+pinned stage with section 12's wheel steps: `scrollTo` lands and waits, so it never shows this.
 
 **The data hook.** `setData` gets the app's own numbers, never made-up ones, as numbers from 0 to
 1 (what each scene does with them: its comment). Where:
@@ -977,8 +1080,27 @@ Reduced: the plain change of page. Mistake: a turn over 15 degrees or longer tha
 navigation (people feel it in their stomach), and a scene remounted on every page change.
 
 **Next and other client-side routers.** Next changes pages on the client, so neither of those
-runs and nothing turns, although the CSS is there. Wrap its navigation in a view transition that
-waits until the new route has rendered:
+runs and nothing turns, although the CSS is there. Next 15.2 and up: first read the docs of the
+installed version (from 16 in `node_modules/next/dist/docs/`, `01-app/02-guides/view-transitions.md`;
+in 15, `experimental.viewTransition` in its next.config docs). Where they name React's
+`<ViewTransition>`, use it: React starts the transition when the new route is ready, so the old
+page never stands frozen while the next one loads. Put it in a `template` per shell (a template is
+made again on each page change; a layout stays, so enter and exit never fire there):
+
+```jsx
+// app/(app)/template.jsx: the part that changes; the shell around it (menu, tab bar) stays put
+import { ViewTransition } from "react";   // a .tsx file also needs: /// <reference types="react/canary" />
+
+export default function Template({ children }) {
+  return <ViewTransition enter="m-page-in" exit="m-page-out" default="none">{children}</ViewTransition>;
+}
+```
+
+motion.css gives `m-page-in` a rise and `m-page-out` a fast fade. At level 5 give them the turn of
+the keyframes above: `::view-transition-new(.m-page-in) { animation-name: screen-in; }` and
+`::view-transition-old(.m-page-out) { animation-name: screen-out; }`, inside the same
+no-preference block. Older Next: wrap its navigation in a view transition that waits until the new
+route has rendered:
 
 ```jsx
 "use client";
@@ -1015,10 +1137,8 @@ export function TurnLink({ href, onClick, ...rest }) {
 }
 ```
 
-Newer Next versions may have a view transition option of their own (`experimental.viewTransition`):
-use it instead only when the docs of the installed version name it. Either way the proof is frames
-taken across a click (section 12), never a reload: a reload is a full page load and plays the CSS
-whether the client change works or not.
+Either way the proof is frames taken across a click (section 12), never a reload: a reload is a
+full page load and plays the CSS whether the client change works or not.
 
 ## 11. The budget per level
 
@@ -1026,11 +1146,16 @@ Measured on the built app: gzip sizes from the build output, frames and long tas
 proof script of section 12 (4x CPU slowdown for a mid-range phone).
 
 Build in a copy, never in the folder where the user's dev server runs: `next dev` and `next build`
-both write `.next`, and a build there can break the running server. A copy of the work branch
-outside the project does it: `git worktree add <a temp folder> <the work branch>`, then in that
-folder `npm ci` and the build (`npm run build`); read the sizes from its output (`du` plus `gzip
--c | wc -c` on the files the page loads), then `git worktree remove <that folder>`. The same holds
-for any stack whose dev server and build share an output folder.
+both write `.next`, and a build there can break the running server. A copy of what is committed,
+outside the project, does it: `git worktree add --detach <a temp folder> <the work branch>`
+(without `--detach` git refuses a branch that is checked out where the server runs), then in that
+folder the locked install of section 5 (`npm ci`, `pnpm install --frozen-lockfile` ...) and the
+build (`npm run build`). This copy only measures sizes, so a build that asks for settings gets
+made-up values on its own command line (`NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000
+SESSION_SECRET=<32 made-up characters> npm run build`), and their `.env` files stay where they are.
+Read the sizes from its output (`du` plus `gzip -c | wc -c` on the files the page loads), then `git
+worktree remove --force <that folder>`. The same holds for any stack whose dev server and build
+share an output folder.
 
 | level | motion code in the first load | loaded later | frames | also |
 | --- | --- | --- | --- | --- |
@@ -1040,29 +1165,52 @@ for any stack whose dev server and build share an output folder.
 | 4 Showpiece | the same as level 3: nothing of three | the hero (three after tree-shaking, the kit and one scene) under 200 KB, only on the screens that show it, after the page is idle; a poster under 100 KB | 60 on a mid-range laptop; 30 or more on a mid-range phone at low quality | the largest paint is the heading or the poster, never later than before |
 | 5 Cinematic | the same as level 3 | the scenes, the journey and the shaders together under 300 KB; one WebGL context per page | the same as level 4, also during the journey | GPU particles at the count the stage's quality picks |
 
-## 12. The proof that needs a click, a slow processor or no WebGL
+## 12. The proof that needs a click, a slow processor, the wheel or no WebGL
 
-shots.mjs only loads pages; it never clicks. Three things need more: content that arrives by a
-client-side page change (Next, section 4), a page change in 3D (section 10), and the budget on a
-slow processor or with WebGL off (section 11). Write this script to `forge-work/design/clicks.mjs`
-(it finds Playwright where shots.mjs does) and run it on the user's own app only:
+shots.mjs only loads pages; it never clicks. Six things need more: content that arrives by a page
+change without a reload (section 4), a page change in 3D (section 10), the budget on a slow
+processor or with WebGL off (section 11), a pinned stage under real wheel steps (sections 8 and
+10), frames with reduced motion on, and a moment shorter than one picture takes (the last bullet
+below). Write this script to `forge-work/design/clicks.mjs` (it
+finds Playwright where shots.mjs does) and run it on the user's own app only; one proof per run
+reads best (LINK `-` clicks nothing):
 
 ```js
-// clicks.mjs BASE FROM LINK OUT [--state FILE] [--no-webgl]
+// clicks.mjs BASE FROM LINK OUT [--state FILE] [--no-webgl] [--reduced] [--wheel SELECTOR]
 //   node forge-work/design/clicks.mjs <URL> /overview "Catches" forge-work/motion-shots/clicks --state forge-work/design/auth.json
+//   node forge-work/design/clicks.mjs <URL> / - forge-work/motion-shots/wheel --wheel "[data-journey-stage]"
 import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
 const [base, from, link, out, ...flags] = process.argv.slice(2);
-const state = flags.includes("--state") ? flags[flags.indexOf("--state") + 1] : undefined;
-const noWebgl = flags.includes("--no-webgl");
+const value = (name) => (flags.includes(name) ? flags[flags.indexOf(name) + 1] : undefined);
+const [state, pinned] = [value("--state"), value("--wheel")];
+const noWebgl = flags.includes("--no-webgl"), calm = flags.includes("--reduced");
 const browser = await chromium.launch({ args: noWebgl ? ["--disable-webgl"] : [] });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState: state,
-                                           reducedMotion: "no-preference" });
+                                           reducedMotion: calm ? "reduce" : "no-preference" });
+await context.addInitScript(() => {                             // every long task, from the first byte on
+  window.__long = [];
+  new PerformanceObserver((list) => { for (const entry of list.getEntries()) window.__long.push(entry.duration); })
+    .observe({ type: "longtask" });
+});
 const page = await context.newPage();
 page.on("console", (message) => { if (message.type() === "error") console.log("console error:", message.text()); });
 await page.goto(new URL(from, base).href, { waitUntil: "networkidle" });
 mkdirSync(out, { recursive: true });
+const settled = async () => {                                   // a kit scene's container holds its poster;
+  if (await page.locator("[data-scene-poster]").count()) {      // data-scene comes with its first frame
+    await page.locator("[data-scene]").first().waitFor({ timeout: 30000 }).catch(() => {});
+  }
+  return page.locator('[data-scene="live"]').count();
+};
+const live = await settled();                                   // measure once the scenes draw, not while three loads
+const renderer = await page.evaluate(() => {                    // "SwiftShader" or "llvmpipe": no GPU here
+  const gl = document.createElement("canvas").getContext("webgl");
+  const info = gl && gl.getExtension("WEBGL_debug_renderer_info");
+  return !gl ? "no WebGL" : info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : "unknown";
+});
+const startupLongestTaskMs = await page.evaluate(() => Math.round(Math.max(0, ...window.__long)));
 
 const cdp = await context.newCDPSession(page);                  // a mid-range phone: 4x slower
 await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
@@ -1076,30 +1224,87 @@ const speed = await page.evaluate(() => new Promise((done) => {
     : done({ fps: Math.round(frames / 3), longestTaskMs: Math.round(longest) }));
   requestAnimationFrame(tick);
 }));
-await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
 const fallback = await page.locator('[data-scene="fallback"]').count();
-console.log(JSON.stringify({ ...speed, webgl: !noWebgl, sceneFallbacks: fallback }));
-
-await page.getByRole("link", { name: link }).first().click();   // the page change a user makes
-for (let i = 1; i <= 8; i++) {
-  await page.screenshot({ path: `${out}/click-f${i}.png` });
-  await page.waitForTimeout(60);
+console.log(JSON.stringify({ ...speed, startupLongestTaskMs, renderer, scenesLive: live, webgl: !noWebgl,
+                             sceneFallbacks: fallback }));
+if (pinned) {                                                   // real wheel notches, still 4x slower
+  const stage = page.locator(pinned).first();                   // to its section's start, in every scroller:
+  await stage.evaluate((el) => el.parentElement.scrollIntoView({ block: "start", behavior: "instant" }));
+  await page.waitForTimeout(300);                               // also an app that scrolls inside a frame
+  await page.mouse.move(720, 450);
+  for (let i = 1; i <= 30; i++) {
+    await page.mouse.wheel(0, 100);
+    await page.waitForTimeout(50);
+    await page.screenshot({ path: `${out}/wheel-w${String(i).padStart(2, "0")}.png` });
+    console.log(`wheel step ${i}: the stage's top at ${Math.round(await stage.evaluate((el) => el.getBoundingClientRect().top))}px`);
+  }
 }
-await page.waitForLoadState("networkidle");
-await page.waitForTimeout(1500);                                // entrances and reveals are over
-await page.screenshot({ path: `${out}/click-after.png` });
-console.log("after the click:", page.url());
+await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+if (calm) {                                                     // reduced motion: nothing may move by itself
+  for (let i = 1; i <= 4; i++) {
+    await page.screenshot({ path: `${out}/rest-r${i}.png` });
+    await page.waitForTimeout(1000);
+  }
+}
+if (link !== "-") {
+  await page.evaluate(() => { window.__noReload = true; });     // still there after the click: no reload
+  await page.getByRole("link", { name: link }).first().click(); // the page change a user makes
+  for (let i = 1; i <= 8; i++) {
+    await page.screenshot({ path: `${out}/click-f${i}.png` });
+    await page.waitForTimeout(60);
+  }
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(1500);                              // entrances and reveals are over
+  await page.screenshot({ path: `${out}/click-after.png` });
+  const kept = await page.evaluate(() => window.__noReload === true);
+  console.log("after the click:", page.url(), kept ? "(changed without a reload)" : "(a full page load)",
+              `${await settled()} scene(s) live`);
+}
 await browser.close();
 ```
 
-- **Content after a client-side change**: look at `click-after.png`: the new screen's content is
-  there, nothing left blank where a reveal waits. Do it for each signed-in route, from a link of
-  the screen before it.
+- **Content after a page change without a reload**: the line says "changed without a reload" for
+  Next, Inertia, Livewire's `wire:navigate`, Turbo and SPA routers: then look at `click-after.png`
+  for each route, from a link of the screen before it: the new screen's content is there, nothing
+  left blank where a reveal waits, and a scene it has is live (the line counts them).
 - **A page change in 3D**: `python3 ../forge-design/changed.py --moves
   forge-work/motion-shots/clicks/click-f*.png` says it moves, and the frames show the turn, not a
   cut.
-- **Budget**: `fps` and `longestTaskMs` against the table of section 11 (frames with the 4x
-  slowdown, no long task over 50ms). From level 4 run it once more with `--no-webgl`:
-  `sceneFallbacks` is at least 1 on a page with a scene, and the poster shows in the pictures.
+- **Budget**: `fps` and `longestTaskMs` against the table of section 11, measured once the scene is
+  live (frames with the 4x slowdown, no long task over 50ms). `startupLongestTaskMs` is the start:
+  three compiling the scene's programs; over 50ms, write it down (the steps of a scene's start:
+  `../forge-design/scenes.md` section 8). Name `renderer` with the numbers:
+  SwiftShader or llvmpipe draw in software, with no GPU, so a scene's frame rate there is not the
+  level's budget. Then the run with `--no-webgl` is the page's own budget, and the scene's 60 a
+  second is left to a device with a GPU, named in the hand-over. From level 4 run it once more with
+  `--no-webgl`: `sceneFallbacks` is at least 1 on a page with a scene, and the poster shows.
+- **A pinned stage**: `--wheel` with the stage's selector (a sticky scene's stage, the journey's
+  `[data-journey-stage]`) turns the wheel 30 notches of 100px with the 4x slowdown, starting from
+  its section's top in whatever scrolls it (the window, or the panel of an app that scrolls inside a
+  frame). Look at every `wheel-w*.png`: the stage sits in the same place in each while it is pinned
+  (its top in the lines stays the same: 0, or the frame's top), no card is cut in half, no control
+  is pushed off the screen. `scrollTo` never shows this.
+- **Reduced motion**: `--reduced` takes `rest-r1.png` to `rest-r4.png`, a second apart, with
+  nothing scrolled. `python3 ../forge-design/changed.py --moves forge-work/motion-shots/<folder>/rest-r*.png`
+  must say nothing moves, on every screen: the app's own older loops too (a reset such as
+  `*:not(.loop) { animation: none }` keeps those running, and the kit hides the pause button there).
+- **A moment shorter than one picture takes** (a count of half a second, a stamp that lands): with
+  a live WebGL scene and no GPU one screenshot can take most of a second, so no frames show it.
+  Sample it in the page: this in clicks.mjs, right before the click (or after the `goto` for a
+  moment the page starts with), then print `await page.evaluate(() => window.__seen)` after it. The
+  values change over the moment and end where the element rests.
+
+```js
+await page.evaluate((selector) => {                             // what one element does, frame by frame
+  const el = document.querySelector(selector), start = performance.now();
+  window.__seen = [];
+  const look = (now) => {
+    const box = el.getBoundingClientRect();
+    window.__seen.push([Math.round(now - start), Math.round(box.top), getComputedStyle(el).opacity]);
+    if (now - start < 1500) requestAnimationFrame(look);        // a second and a half
+  };
+  requestAnimationFrame(look);
+}, ".stamp");
+```
 
 Write the numbers and the paths under `## Checks` of `forge-work/motion.md`.

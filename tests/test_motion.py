@@ -10,8 +10,8 @@ still frame for reduced motion and cleans up. Those two tests need Node.
 The level parts: the steps file reads the look level, asks the one question, has the table of what
 each level adds as forge/levels.json has it, builds per level and proves the result as rule 9 of
 forge/rules.md says; the reference has a part per level 3, 4 and 5 with patterns and a budget per
-level. Its scripts parse, and the spring, the live count and the data feed run in Node with a
-make-believe browser."""
+level. Its scripts parse, and the runtime (motion.js), the count-up, the spring, the live count and
+the data feed run in Node with a make-believe browser."""
 
 import json
 import os
@@ -299,6 +299,88 @@ const url = (name) => pathToFileURL(folder + "/" + name).href;
 """
 
 
+# A make-believe page for motion.js and the count-up: observers and frames that only record, and a page
+# whose elements a client-side router swaps out (as Livewire and Turbo swap <body>).
+RUNTIME_BROWSER = r"""
+const { pathToFileURL } = require("url");
+const [folder] = process.argv.slice(2);
+const frames = [], ios = [], observed = new Set(), disconnected = [];
+let mutation = null, watched = null, reveals = [], scenes = [];
+const element = (id, classes = []) => ({ id, dataset: {}, isConnected: true,
+  classList: { set: new Set(classes), add(name) { this.set.add(name); }, contains(name) { return this.set.has(name); } } });
+globalThis.Node = { TEXT_NODE: 3 };
+globalThis.window = { matchMedia: () => ({ matches: false }) };
+globalThis.getComputedStyle = () => ({ getPropertyValue: (name) => (name === "--duration-slower" ? " 480ms " : "") });
+globalThis.document = { documentElement: { dataset: {}, lang: "en" },
+  querySelectorAll(selector) {
+    if (selector.includes(".m-reveal")) return reveals.filter((e) => e.isConnected && !e.classList.contains("is-visible"));
+    return selector === ".scene" ? scenes.filter((e) => e.isConnected) : [];
+  } };
+globalThis.IntersectionObserver = class {
+  constructor(callback) { this.callback = callback; ios.push(this); }
+  observe(target) { observed.add(target.id); }
+  unobserve() {}
+  disconnect() { disconnected.push("io"); }
+};
+globalThis.MutationObserver = class {
+  constructor(callback) { mutation = callback; }
+  observe(target, options) { watched = target === document.documentElement && options.subtree === true; }
+  disconnect() { disconnected.push("mo"); }
+};
+globalThis.requestAnimationFrame = (callback) => frames.push(callback);
+globalThis.cancelAnimationFrame = () => {};
+const run = (now) => frames.splice(0).forEach((callback) => callback(now));
+const url = (name) => pathToFileURL(folder + "/" + name).href;
+(async () => {
+  const out = {};
+  const { startMotion } = await import(url("motion.mjs"));
+  reveals = [element("r1", ["m-reveal"])];
+  scenes = [element("s1")];
+  const started = [], stopped = [];
+  const stop = startMotion({ ".scene": (e) => { started.push(e.id); return () => stopped.push(e.id); } });
+  out.first = { observed: [...observed], started: [...started], motion: document.documentElement.dataset.motion, watched };
+  const again = startMotion({ ".scene": (e) => { started.push("again " + e.id); return () => {}; } });
+  again(); again();                                                 // a nested layout's cleanup, called twice
+  out.again = { same: again === stop, started: [...started], observers: ios.length,   // Turbo runs it again
+                disconnected: disconnected.length };                // the first call's runtime keeps running
+  reveals[0].isConnected = scenes[0].isConnected = false;          // a page change without a reload
+  reveals.push(element("tall", ["m-reveal"]));
+  scenes.push(element("s2"));
+  mutation([]);
+  mutation([]);
+  out.framesAsked = frames.length;                                  // two batches, one frame
+  run(16);
+  out.after = { observed: [...observed], started: [...started], stopped: [...stopped] };
+  const tall = reveals[1], reveal = ios[0].callback;
+  reveal([{ isIntersecting: true, intersectionRatio: 0.04, intersectionRect: { height: 50 }, target: tall }]);
+  out.thinSlice = tall.classList.contains("is-visible");
+  reveal([{ isIntersecting: true, intersectionRatio: 0.04, intersectionRect: { height: 200 }, target: tall }]);
+  out.slice96 = tall.classList.contains("is-visible");             // 200px of a block taller than the screen
+  stop();
+  out.stop = { disconnected: disconnected.slice().sort(), stopped: [...stopped] };
+  const fresh = startMotion();                                     // after a stop (React's second effect): a new one
+  stop();                                                           // an old stop again: the new one keeps running
+  out.fresh = fresh !== stop && ios.length === 4 && disconnected.length === 3;
+  fresh();
+  const { countUp } = await import(url("countup.mjs"));
+  const text = { nodeType: 3, data: "1,280" }, seen = [];
+  countUp({ firstChild: text, dataset: { value: "1280" } });
+  ios[ios.length - 1].callback([{ isIntersecting: true }]);
+  for (let now = 0; now <= 1000; now += 16) { seen.push(text.data); run(now); }
+  out.count = { first: seen[0], last: text.data, values: new Set(seen).size, framesLeft: frames.length };
+  const newer = { nodeType: 3, data: "49" };
+  countUp({ firstChild: newer, dataset: { value: "49" } });
+  ios[ios.length - 1].callback([{ isIntersecting: true }]);
+  run(0);
+  run(100);
+  newer.data = "52";                                                // the framework drew a newer value
+  for (let now = 116; now <= 1000; now += 16) run(now);
+  out.newerValueStays = newer.data;
+  console.log(JSON.stringify(out));
+})();
+"""
+
+
 def code_blocks(text, language):
     return re.findall(r"```%s\n(.*?)```" % language, text, re.S)
 
@@ -317,7 +399,7 @@ class StepsLevelTests(unittest.TestCase):
         top = "\n".join(self.steps.splitlines()[:6])
         for part in ["`/forge-design`", "`SKILL.md`", "`../forge/rules.md`", "section 9", "section 10"]:
             self.assertIn(part, top)
-        self.assertLessEqual(len(self.steps.splitlines()), 240)
+        self.assertLessEqual(len(self.steps.splitlines()), 260)  # about 250: detail goes to motion.md
 
     def test_reads_records_and_asks_for_the_level(self):
         for part in ["python3 ../forge/level.py get look", "python3 ../forge/level.py show look",
@@ -344,7 +426,8 @@ class StepsLevelTests(unittest.TestCase):
                      "../forge-design/shots.example.mjs", "--frames", "--video", "--reduced",
                      "python3 ../forge-design/changed.py forge-work/motion-shots/before forge-work/motion-shots/after",
                      "python3 ../forge-design/changed.py --moves", "python3 ../forge-design/motioncount.py . --level auto",
-                     "the same `motioncount.py . --level auto`", "python3 ../forge-design/motioncheck.py . --fail-on medium",
+                     "the gate's own run from the root", "python3 ../forge-design/motioncheck.py . --fail-on medium",
+                     "--scene-frames", "../forge-check/testdb.py", "Auto mode:", "yes or no",
                      "Agent or Task", "git branch --show-current", "git worktree list", "service worker",
                      "git switch", ".webm"]:
             self.assertIn(part, self.steps)
@@ -436,6 +519,36 @@ class ReferenceLevelTests(unittest.TestCase):
     def test_reduced_motion_gives_the_number_at_once(self):
         out = self.run_scripts("reduced")
         self.assertEqual((out["after 100ms"], out["end"], out["frames left"]), ("1,000", "500", 0))
+
+    def test_the_runtime_follows_page_changes_and_the_count_writes_its_own_text_node(self):
+        """motion.js for every stack: content and scenes a client-side page change brings are picked up
+        (the critic's Inertia, Livewire and SPA case), a block taller than the screen reveals at 96px, and
+        the count-up writes the page's own text node and leaves a newer value of the app alone."""
+        node = self.node()
+        with tempfile.TemporaryDirectory() as folder:
+            files = {"motion.mjs": block_with(self.text, "export function startMotion("),
+                     "tokens.mjs": block_with(self.text, "// tokens.js"),
+                     "countup.mjs": 'import { ms, reduce } from "./tokens.mjs";\n'
+                                    + block_with(self.text, "export function countUp("),
+                     "browser.cjs": RUNTIME_BROWSER}
+            for name, code in files.items():
+                with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
+                    handle.write(code)
+            done = subprocess.run([node, os.path.join(folder, "browser.cjs"), folder], timeout=60,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        out = json.loads(done.stdout)
+        self.assertEqual(out["first"], {"observed": ["r1"], "started": ["s1"], "motion": "on", "watched": True})
+        self.assertEqual(out["again"], {"same": False, "started": ["s1"], "observers": 2,  # no second scene or observer
+                                        "disconnected": 0})  # and its own stop leaves the first caller's runtime alone
+        self.assertTrue(out["fresh"])
+        self.assertEqual(out["framesAsked"], 1)
+        self.assertEqual(out["after"], {"observed": ["r1", "tall"], "started": ["s1", "s2"], "stopped": ["s1"]})
+        self.assertEqual((out["thinSlice"], out["slice96"]), (False, True))
+        self.assertEqual(out["stop"], {"disconnected": ["io", "io", "mo"], "stopped": ["s1", "s2"]})
+        self.assertEqual((out["count"]["first"], out["count"]["last"], out["count"]["framesLeft"]), ("0", "1,280", 0))
+        self.assertGreater(out["count"]["values"], 10)  # it counts, in the node that was there
+        self.assertEqual(out["newerValueStays"], "52")
 
 
 if __name__ == "__main__":

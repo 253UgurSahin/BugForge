@@ -1,5 +1,5 @@
 {
- "about": "Feature patterns for motioncount.py --level N, read at start. Each feature is found when one of its signals matches in the app's own code. view: style (stylesheets and <style> blocks), script (scripts, components, <script> blocks), markup (tags and attributes). Comments never count; a match must start outside a string unless strings is true. rule: the match must be in the declarations of a rule whose selector this pattern finds (\"\" for any rule); a rule for an m- class counts once an element carries the class. also: a second pattern the same file must hold, outside strings. same_file_as: only in a file where that feature (an earlier one) was found.",
+ "about": "Feature patterns for motioncount.py --level N, and the places that move in a script, read at start. places: each match in a script (comments blanked, <style> blocks aside) is one place that moves: what animates, and a style that moves written in a script (styled or css templates, sx and style objects, <motion.div animate>, Svelte's transition:). Each feature is found when one of its signals matches in the app's own code. view: style (stylesheets and <style> blocks), script (scripts, components, <script> blocks), markup (tags and attributes). Comments never count; a match must start outside a string unless strings is true. rule: the match must be in the declarations of a rule whose selector this pattern finds (\"\" for any rule); a rule for an m- class counts once an element carries the class. also: a second pattern the same file must hold, outside strings. same_file_as: only in a file where that feature (an earlier one) was found. with: only once that feature (an earlier one) was found in some file. inside: only in a file of that feature, or inside an element, up to six levels up, that such a file mounts the scene on (the selector of its lazyScene( call, .hero-scene, #hero, [data-hero]; with no such call, any it selects) or defines as a component (<Scene>, or its file Scene.tsx; <hero-scene> and <x-hero> stand for HeroScene and Hero); or inside the component of a template that holds such an element (<x-hero> for hero.blade.php), or in a partial or component that template names, when it is inside no element of its own file.",
  "ask": "Ask the user how strong the look should be, 1 to 5 (python3 ../forge/level.py show look has the table), then record it: python3 ../forge/level.py set look N --said '<their words>'",
  "min": {
   "1": 5,
@@ -20,6 +20,16 @@
   "journey.js",
   "depth.js",
   "depth.css"
+ ],
+ "places": [
+  "\\.animate\\(\\s*[\\[{]",
+  "startViewTransition\\s*\\(",
+  "new\\s+IntersectionObserver\\s*\\(",
+  "requestAnimationFrame\\s*\\(",
+  "\\bgsap\\.(?:to|from|fromTo|timeline)\\s*\\(",
+  "<(?:motion|m)\\.[a-z]\\w*(?=(?:[^<>]|=>){0,500}?\\s(?:animate|initial|exit|layout|while[A-Z]\\w*)\\b)",
+  "(?:^|[{,;`])[ \\t]*(?:transition|animation)(?:-name|-duration|Name|Duration)?\\s*:(?!\\s*(?:['\"`]?(?:none|0m?s?|initial|unset|inherit)\\b|true\\b|false\\b|!\\s*[01]\\b|null\\b|undefined\\b|string\\b|number\\b|[{\\[]))",
+  "(?<=\\s)(?:transition|in|out|animate):[a-z][\\w-]*"
  ],
  "features": [
   {
@@ -50,7 +60,7 @@
    "level": 2,
    "id": "entrance",
    "name": "an entrance (motion when the page loads)",
-   "needs": "make the main content arrive when the page loads: m-enter or m-stagger from motion.css on the element, a keyframe animation in a rule of its own, @starting-style, or element.animate()",
+   "needs": "make the main content arrive: m-enter or m-stagger of motion.css on it, a keyframe animation of its own, @starting-style, or element.animate()",
    "signals": [
     {
      "view": "style",
@@ -75,11 +85,19 @@
    "level": 2,
    "id": "transition",
    "name": "a page or view transition, or a counted number",
-   "needs": "add a page transition (@view-transition { navigation: auto; } or document.startViewTransition) or a number that counts up (requestAnimationFrame writing it into textContent)",
+   "needs": "add a page transition (@view-transition { navigation: auto; }, startViewTransition(), <ViewTransition>) or a count-up (motion.md section 4)",
    "signals": [
     {
      "view": "style",
      "re": "@view-transition\\b"
+    },
+    {
+     "view": "style",
+     "re": "::view-transition-(?:new|old|group|image-pair)\\s*\\((?!\\s*\\*)"
+    },
+    {
+     "view": "script",
+     "re": "<ViewTransition\\b"
     },
     {
      "view": "style",
@@ -100,7 +118,7 @@
     },
     {
      "view": "script",
-     "re": "\\.(?:textContent|innerText)\\s*=(?!=)\\s*[^;\\n]{0,200}?(?:Math\\.(?:round|floor|ceil|trunc)\\s*\\(|\\.toFixed\\s*\\(|\\.toLocaleString\\s*\\(|NumberFormat\\b|\\.format\\s*\\(|\\bNumber\\s*\\(|\\bString\\s*\\()",
+     "re": "\\.(?:textContent|innerText|data|nodeValue)\\s*=(?!=)\\s*[^;\\n]{0,200}?(?:Math\\.(?:round|floor|ceil|trunc)\\s*\\(|\\.toFixed\\s*\\(|\\.toLocaleString\\s*\\(|NumberFormat\\b|\\.format\\s*\\(|\\bNumber\\s*\\(|\\bString\\s*\\()",
      "also": "\\b(?:requestAnimationFrame|setInterval)\\s*\\("
     },
     {
@@ -114,7 +132,7 @@
    "level": 3,
    "id": "scroll",
    "name": "scroll-driven motion",
-   "needs": "add motion that follows the scroll: reveals with an IntersectionObserver, animation-timeline: view() in CSS, or a scroll listener that sets a progress value",
+   "needs": "add motion that follows the scroll: an IntersectionObserver reveal, animation-timeline: view(), or a sticky scene with story(), motion.md section 8",
    "signals": [
     {
      "view": "script",
@@ -145,7 +163,7 @@
    "level": 3,
    "id": "depth",
    "name": "CSS 3D or the kit's depth.js",
-   "needs": "add real depth: perspective with rotateX/rotateY on cards or panels, transform-style: preserve-3d, or mount the kit's depth.js (import it, data-depth on the cards)",
+   "needs": "add real depth: perspective with rotateX/rotateY on cards or panels, transform-style: preserve-3d, or the kit's depth.js (imported, data-depth on the cards)",
    "signals": [
     {
      "view": "style",
@@ -193,7 +211,7 @@
    "level": 4,
    "id": "scene",
    "name": "a WebGL scene",
-   "needs": "add a WebGL scene made for this app: import three (installed with npm, never a CDN), or a kit scene through lazyScene, on the screen that shows it",
+   "needs": "add a WebGL scene made for this app, on the screen that shows it: a kit scene through lazyScene, or three through the app's own package manager (motion.md section 5)",
    "signals": [
     {
      "view": "script",
@@ -205,7 +223,7 @@
     },
     {
      "view": "script",
-     "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`][^'\"`\\n]{0,300}(?<![\\w-])scenes/[\\w-]+(?:\\.m?js)?['\"`]"
+     "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`][^'\"`\\n]{0,300}(?<![\\w-])scenes/(?!(?:depth|lazy)(?:\\.m?js)?['\"`])[\\w-]+(?:\\.m?js)?['\"`]"
     },
     {
      "view": "script",
@@ -221,7 +239,7 @@
    "level": 4,
    "id": "pointer",
    "name": "pointer input reaching the scene",
-   "needs": "make the scene follow the pointer: a pointermove listener in the scene's file, setPointer(x, y), or mount it with the kit, whose stage reads the pointer itself",
+   "needs": "make the scene follow the pointer: a pointermove listener in the scene's file, setPointer(x, y), or a kit scene (its stage reads the pointer itself)",
    "signals": [
     {
      "view": "script",
@@ -234,7 +252,7 @@
     },
     {
      "view": "script",
-     "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`][^'\"`\\n]{0,300}(?<![\\w-])scenes/[\\w-]+(?:\\.m?js)?['\"`]"
+     "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`][^'\"`\\n]{0,300}(?<![\\w-])scenes/(?!(?:depth|lazy)(?:\\.m?js)?['\"`])[\\w-]+(?:\\.m?js)?['\"`]"
     },
     {
      "view": "script",
@@ -246,19 +264,22 @@
    "level": 4,
    "id": "fallback",
    "name": "a fallback for no WebGL",
-   "needs": "give the scene a still poster for no WebGL, weak devices and reduced motion: an element with data-scene-poster, a [data-scene=\"fallback\"] rule, or a branch for a missing WebGL context",
+   "needs": "give the scene a still for no WebGL and reduced motion: data-scene-poster on it, in the container's template (up to six levels down), or a branch for no WebGL",
    "signals": [
     {
      "view": "markup",
-     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sdata-scene-poster\\b"
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sdata-scene-poster\\b",
+     "inside": "scene"
     },
     {
      "view": "style",
-     "re": "\\[\\s*data-scene\\s*=\\s*['\\\"]?fallback\\b"
+     "re": "\\[\\s*data-scene\\s*=\\s*['\\\"]?fallback\\b",
+     "with": "scene"
     },
     {
      "view": "markup",
-     "re": "<(?!video\\b)[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sposter\\s*="
+     "re": "<(?!video\\b)[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sposter\\s*=",
+     "inside": "scene"
     },
     {
      "view": "script",
@@ -267,28 +288,20 @@
     },
     {
      "view": "script",
-     "re": "!\\s*(?:window\\.)?WebGL2?RenderingContext\\b"
+     "re": "!\\s*(?:window\\.)?WebGL2?RenderingContext\\b",
+     "with": "scene"
     }
    ]
   },
   {
    "level": 5,
    "id": "journey",
-   "name": "scroll progress driving the scene",
-   "needs": "let scroll drive the scene: call setProgress(p) from the section's scroll progress, or direct it with the kit's journey.js",
+   "name": "a scroll journey through the scene",
+   "needs": "build the journey with the kit's journey.js: chapters that move the camera through one scene (scenes.md section 6); setProgress alone is level 4's depth",
    "signals": [
     {
      "view": "script",
-     "re": "\\.setProgress\\s*\\("
-    },
-    {
-     "view": "script",
      "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`][^'\"`\\n]{0,300}(?<![\\w-])journey(?:\\.m?js)?['\"`]"
-    },
-    {
-     "view": "script",
-     "re": "addEventListener\\s*\\(\\s*['\"`]scroll['\"`]|\\bonscroll\\s*=",
-     "same_file_as": "scene"
     }
    ]
   },
@@ -296,7 +309,7 @@
    "level": 5,
    "id": "shader",
    "name": "a custom shader",
-   "needs": "write a custom shader for the scene (a ShaderMaterial with GLSL of its own), or use a kit scene, which brings its own",
+   "needs": "write a shader of the app's own: a ShaderMaterial (or RawShaderMaterial) in the app's code, on the kit's glsl.js (motion.md section 10); a kit scene alone is not one",
    "signals": [
     {
      "view": "script",
@@ -306,10 +319,6 @@
      "view": "script",
      "re": "\\bgl_FragColor\\b|\\bgl_Position\\b|\\bvoid\\s+main\\s*\\(\\s*(?:void\\s*)?\\)",
      "strings": true
-    },
-    {
-     "view": "script",
-     "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`][^'\"`\\n]{0,300}(?<![\\w-])scenes/(?:form|field|aurora|contour|datascape|glsl)(?:\\.m?js)?['\"`]"
     }
    ]
   },

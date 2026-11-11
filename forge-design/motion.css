@@ -251,6 +251,12 @@ html[data-motion] .m-reveal.is-visible { opacity: 1; }
     animation-duration: var(--duration-base);
     animation-timing-function: var(--ease-standard);
   }
+  /* A page change without a reload, with React's <ViewTransition enter="m-page-in"
+     exit="m-page-out"> (Next 15.2 and up, motion.md section 10): the old screen leaves fast, the
+     new one rises in. Clicks go through to the page while it plays. */
+  ::view-transition-old(.m-page-out) { animation: m-fade-out var(--duration-fast) var(--ease-exit) both; }
+  ::view-transition-new(.m-page-in) { animation: m-rise-in var(--duration-base) var(--ease-standard) both; }
+  ::view-transition { pointer-events: none; }
 
   /* Scroll-driven, where the browser has it; elsewhere the element just stands still. */
   @supports (animation-timeline: view()) {

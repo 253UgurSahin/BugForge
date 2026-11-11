@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
 """Check a project's animations for what makes motion slow, unsafe or hard to bear.
 
-Reads stylesheets (.css .scss .less), the <style> blocks and scripts of templates (.html, Blade,
-Django, Twig, Vue, Svelte, Astro) and scripts (.js .ts .jsx .tsx). It reports:
+Reads stylesheets (.css .scss .less .pcss), the <style> blocks and scripts of templates (.html, Blade, Django, Vue,
+Twig, Svelte, Astro, EJS, Handlebars, Nunjucks, Liquid, Edge, Razor ...) and scripts (.js .ts .jsx .tsx). It reports:
   high    animations or transitions, and no prefers-reduced-motion rule anywhere in the project
   high    an animation library or a Lottie file loaded from a CDN or another host
   medium  a layout property animated (width, height, top, left, right, bottom, margin, padding)
   medium  an animation that never stops: not in a no-preference block, not stopped in a reduce block
-  medium  a requestAnimationFrame loop in a file with no visibility or IntersectionObserver pause
+  medium  a requestAnimationFrame loop that never ends (it asks for its next frame with no condition), no pause
   medium  GSAP, three.js or Lottie used while no script asks matchMedia for reduced motion
   medium  a video that plays by itself and has no controls
   low     transition: all; a transition over 1 s or under 80 ms; will-change on * or on 6+ rules
-Not read: styles written in JavaScript, style="" attributes, indented .sass, minified files, and
-SKIP_FOLDERS, symlinks and (with a warning) binary files and files over 1 MB. A file you name is
-read whatever its type. Opt out for one line: forge:allow
+Not read: styles written in JavaScript, style="" attributes, indented .sass, minified files, and SKIP_FOLDERS,
+symlinks and (with a warning) binary files and files over 1 MB. A file you name is read whatever its type.
+Several PATHs are checked as one project (a monorepo's app and its packages). Opt out for one line: forge:allow
 
 Usage:
     python3 motioncheck.py .                    check this folder
     python3 motioncheck.py src --json           machine-readable output
     python3 motioncheck.py . --fail-on medium   exit 1 on medium findings too
 
-Exit codes: 0 nothing at or above --fail-on (default: high); 1 something is; 2 bad usage, no such
-path, or something not checked (unreadable, or a named file that is binary or over 1 MB).
+Exit codes: 0 nothing at or above --fail-on (default: high); 1 something is; 2 bad usage, no such path, the
+rules (motioncheck.json) missing or broken, or not all checked (unreadable, or a named file binary or over 1 MB).
 """
 
 import argparse
@@ -34,33 +34,15 @@ SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
 MAX_BYTES, MAX_WILL_CHANGE = 1024 * 1024, 5
 SKIP_FOLDERS = set(""".git node_modules vendor bower_components venv .venv .tox site-packages __pycache__ dist build
     out .next .nuxt .output .svelte-kit coverage .cache .idea .vscode staticfiles forge-work .claude""".split())
-STYLES, SCRIPTS = {".css", ".scss", ".less"}, {".js", ".mjs", ".cjs", ".ts", ".mts", ".jsx", ".tsx"}
-MARKUP = {".html", ".htm", ".php", ".djhtml", ".jinja", ".jinja2", ".j2", ".twig", ".vue", ".svelte", ".astro"}
-RULES = {  # rule: (severity, what, why, fix)
-    "no-reduced-motion": ("high", "animations, and no prefers-reduced-motion rule in the project",
-                          "movement on screen makes some people dizzy or sick; they ask their system for less",
-                          "add @media (prefers-reduced-motion: reduce) rules that swap movement for a fade or nothing"),
-    "cdn": ("high", "animation code or a Lottie file loaded from another host", "it sees each visitor's IP address, "
-            "and a file changed there runs in your app (privacy and supply chain)",
-            "npm install the package and import it, so the app serves it; copy Lottie files into the repo"),
-    "layout": ("medium", "a layout property is animated", "the page is laid out again on every frame: phones stutter",
-               "animate transform (translate, scale) or opacity; to open and close: grid-template-rows 0fr to 1fr"),
-    "infinite": ("medium", "an animation that never stops, outside a reduced-motion guard",
-                 "movement longer than 5 seconds must pause or stop (WCAG 2.2.2), and it drains batteries",
-                 "put it in @media (prefers-reduced-motion: no-preference), or stop its selector in a reduce block"),
-    "raf": ("medium", "a requestAnimationFrame loop, and no pause in this file", "it draws while nobody looks",
-            "stop the loop when an IntersectionObserver says it is off-screen, and on visibilitychange"),
-    "library": ("medium", "an animation library, and no script asks for reduced motion", "CSS cannot stop a script",
-                "check matchMedia('(prefers-reduced-motion: reduce)') and show the end state or one still frame"),
-    "video": ("medium", "a video plays by itself and has no controls", "people cannot pause it (WCAG 2.2.2)",
-              "add controls or a pause button of your own, and do not autoplay for reduced motion"),
-    "transition-all": ("low", "transition: all", "every property that changes animates, layout ones too",
-                       "name the properties: transition: transform ..., opacity ..."),
-    "duration": ("low", "a transition time outside 80 ms to 1 s", "under 80 ms nobody sees it; over 1 s people wait",
-                 "use the motion tokens: about 120 ms for small changes, 200 to 400 ms for larger ones"),
-    "will-change": ("low", "will-change used widely", "each one keeps a layer in memory; many slow a phone down",
-                    "remove it; add it to one element only after you measured a problem there"),
-}
+STYLES, SCRIPTS = {".css", ".scss", ".less", ".pcss"}, {".js", ".mjs", ".cjs", ".ts", ".mts", ".jsx", ".tsx"}
+MARKUP = {".html", ".htm", ".php", ".djhtml", ".jinja", ".jinja2", ".j2", ".twig", ".vue", ".svelte", ".astro", ".erb",
+          ".ejs", ".hbs", ".handlebars", ".mustache", ".njk", ".liquid", ".edge", ".eta", ".cshtml", ".razor",
+          ".gohtml", ".tmpl", ".tpl", ".latte", ".heex", ".eex", ".pug", ".jade", ".haml", ".slim", ".nunjucks"}
+try:  # rule: (severity, what, why, fix)
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "motioncheck.json"), encoding="utf-8") as raw:
+        RULES = {rule: tuple(item) for rule, item in json.load(raw)["rules"].items()}
+except (OSError, ValueError, LookupError, TypeError, AttributeError) as error:
+    RULES = error  # main() says so: exit 2
 STYLE_BLOCK = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.S | re.I)
 COMMENT = re.compile(r"/\*.*?\*/", re.S)
 LINE_COMMENT = re.compile(r"(?<![:\w])//[^\n]*")
@@ -88,11 +70,29 @@ USES = re.compile(r"""(?:\bfrom|\bimport|\brequire\s*\()\s*\(?\s*["'](gsap|three
 RAF = re.compile(r"requestAnimationFrame\(\s*(?:this\.)?([A-Za-z_$][\w$]*)\s*[),]")
 DEFINED = r"function\s+%s\b|\b%s\s*=\s*(?:async\s*)?(?:function\b|\(|[A-Za-z_$][\w$]*\s*=>)|\b%s\s*\([^()]*\)\s*\{"
 PAUSE = re.compile(r"visibilitychange|document\.hidden|visibilityState|IntersectionObserver")
+OPENS = re.compile(r"=>\s*(\{?)|\)\s*(\{)")  # where a function's body starts: an arrow's (a block or not), or ) {
+COND = re.compile(r"\b(?:if|while)\b|&&|\|\||\?")  # a condition on the call that asks for the next frame
 VIDEO = re.compile(r"<video\b(?![^>]*\bcontrols\b)[^>]*\bautoplay\b[^>]*>", re.I)  # plays by itself, no controls
+blank = lambda match: re.sub(r"[^\n]", " ", match.group(0))  # noqa: E731 (as spaces, line ends kept: lines stay right)
 
 
-def blank(match):  # the matched text as spaces, line breaks kept, so line numbers stay right
-    return re.sub(r"[^\n]", " ", match.group(0))
+def endless(code, name):
+    """The line where NAME, in its own body, asks for the next frame again with no condition on that call and no
+    return before it: a loop that never ends. 0 when there is none (a tween ends; one frame is no loop)."""
+    for found in re.finditer(DEFINED % (name, name, name), code):
+        head = OPENS.search(code, found.start())
+        start, depth = (head.end(), 1 if head.group(1) or head.group(2) else 0) if head else (len(code), 0)
+        end = len(code) if depth else code.find("\n", start) % (len(code) + 1)  # an arrow's expression: its line
+        for brace in re.finditer(r"[{}]", code[start:]) if depth else ():
+            depth += 1 if brace.group() == "{" else -1
+            if not depth:
+                end = start + brace.start()
+                break
+        for call in re.finditer(r"requestAnimationFrame\(\s*(?:this\.)?%s\s*[),]" % name, code[start:end]):
+            pre = code[start:start + call.start()]  # nested in a block of its own (an if, a callback): it can end
+            if pre.count("{") <= pre.count("}") and not COND.search(re.split("[;{}]", pre)[-1]) and "return" not in pre:
+                return code.count("\n", 0, start + call.start()) + 1
+    return 0
 
 
 def split(text, kind):
@@ -189,10 +189,11 @@ def check_script(path, text, state, found):
         for used in USES.finditer(row):
             state["libraries"].append((path, number, next(name for name in used.groups() if name)))
     state["asks_in_script"] = state["asks_in_script"] or bool(ASKS_IN_SCRIPT.search(text))
-    for call in RAF.finditer(text):
-        name = re.escape(call.group(1))
-        if re.search(DEFINED % (name, name, name), text) and not PAUSE.search(text):
-            found.append(finding("raf", path, text.count("\n", 0, call.start()) + 1, call.group(1) + "()"))
+    code = STRING.sub(blank, LINE_COMMENT.sub(blank, COMMENT.sub(blank, text))) if RAF.search(text) else ""
+    for name in [] if PAUSE.search(text) else dict.fromkeys(RAF.findall(code)):
+        line = endless(code, re.escape(name))
+        if line:
+            found.append(finding("raf", path, line, name + "()"))
             break
     for tag in VIDEO.finditer(text):
         found.append(finding("video", path, text.count("\n", 0, tag.start()) + 1))
@@ -228,11 +229,11 @@ def files_under(folder, not_checked):
 
 
 def scan_path(path, fail_on="high"):
-    """Check a file or folder. Returns the report: {"findings": [...], "summary": {...}}."""
-    found, checked, not_checked = [], 0, []
+    """Check a file or folder, or a list of them as one project. Returns {"findings": [...], "summary": {...}}."""
+    found, checked, not_checked, paths = [], 0, [], [path] if isinstance(path, str) else path
     state = dict(motion=[], stopped=set(), endless=[], will=[], frames=set(), libraries=[], asks=False,
                  asks_in_script=False)
-    for file_path in files_under(path, not_checked) if os.path.isdir(path) else [path]:
+    for file_path in (f for p in paths for f in (files_under(p, not_checked) if os.path.isdir(p) else [p])):
         try:
             with open(file_path, "rb") as handle:
                 data = handle.read(MAX_BYTES + 1)
@@ -241,7 +242,7 @@ def scan_path(path, fail_on="high"):
             continue
         if len(data) > MAX_BYTES or b"\0" in data[:8192]:  # too big, or binary (a NUL byte)
             print("skipped: %s (binary, or over 1 MB)" % file_path, file=sys.stderr)
-            not_checked += [file_path + " (binary, or over 1 MB)"] if file_path == path else []  # a named file
+            not_checked += [file_path + " (binary, or over 1 MB)"] if file_path in paths else []  # a named file
             continue
         checked += 1
         rows = data.decode("utf-8", errors="replace").replace("\r\n", "\n").split("\n")
@@ -270,7 +271,7 @@ def format_human(report):
                  else "No findings: the motion rules this script knows are kept.")
     missed = ", ".join(summary["not_checked"]) or "nothing"  # anything here: exit code 2
     lines += ["Files checked: %d. Could not check: %s." % (summary["files_checked"], missed),
-              "This reads the code. Frame rate, flashing and lost focus need the browser (forge-design motion Step 7)."]
+              "This reads the code. Frame rate, flashing and lost focus need a browser (forge-design motion Step 9.4)."]
     return "\n".join(lines).encode("utf-8", "backslashreplace").decode("utf-8")
 
 
@@ -278,13 +279,14 @@ def main(argv=None):
     """Run the check from the command line. Returns the exit code: 0, 1 or 2 (see the top)."""
     getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: no crash
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=__doc__)
-    parser.add_argument("path", help="file or folder to check")
+    parser.add_argument("path", nargs="+", help="file or folder to check (several: one project)")
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     parser.add_argument("--fail-on", choices=SEVERITIES, default="high",
                         help="exit 1 when a finding is this bad or worse (default: high)")
     args = parser.parse_args(argv)
-    if not (os.path.isfile(args.path) or os.path.isdir(args.path)):
-        print("error: %s does not exist, or is not a file or folder" % args.path, file=sys.stderr)
+    for problem in [p + " does not exist, or is not a file or folder" for p in args.path if not os.path.exists(p)] + (
+            [] if isinstance(RULES, dict) else ["motioncheck.json is missing or broken (%s)" % RULES]):
+        print("error: %s" % problem, file=sys.stderr)
         return 2
     report = scan_path(args.path, args.fail_on)
     try:
