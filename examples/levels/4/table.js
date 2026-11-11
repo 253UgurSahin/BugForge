@@ -35,6 +35,8 @@ import { createStage } from "../../vendor/scenes/stage.js";
 import { simplex2D, grain } from "../../vendor/scenes/glsl.js";
 import { reliefRows } from "./seabed.js";
 import { chartPrint } from "./print.js";
+  /* round 2: a pencil and a pair of dividers on the sheet, with the lamp's shadows of them */
+import { makeTools, toolGLSL } from "./tools.js";
 
 const X0 = 140, CW = 860, CH = 900;                // the sheet, in chart units
 const SW = CW / 100, SD = CH / 100;                // and in world units: 8.6 by 9
@@ -103,6 +105,7 @@ uniform vec4 uHinge;
 uniform float uFlap;
 varying vec2 vUv;
 varying vec3 vPos;
+${toolGLSL}
 ${simplex2D}
 ${grain}
 
@@ -159,10 +162,12 @@ void main() {
   vec2 along = vec2(-uHinge.w, uHinge.z);
   float span = ${(CURL / 100 / Math.SQRT2).toFixed(4)};
   float flapShade = uFlap * (0.35 + 0.65 * smoothstep(span * 0.96, 0.0, inSide)) * smoothstep(-0.01, 0.03, inSide) * smoothstep(0.035, -0.02, abs(dot(P.xz - uHinge.xy, along)) + inSide - span * 0.94);
-  float lit = sh * (1.0 - 0.55 * flapShade);
+    /* the instruments' shadows: they take the lamp's light where they fall, and a little of the room's */
+    float tools = toolShade(P);
+  float lit = sh * (1.0 - 0.55 * flapShade) * tools;
   /* the crease itself: the paper was folded here, a hairline of shade along it */
   float crease = exp(-dx * dx / 0.0016);
-  vec3 light = uRoom * mix(1.0, hill, uHill) * (1.0 - 0.3 * flapShade) + uLampColor * uLampPower * pool * face * lit;
+  vec3 light = uRoom * mix(1.0, hill, uHill) * (1.0 - 0.3 * flapShade) * mix(1.0, tools, 0.45) + uLampColor * uLampPower * pool * face * lit;
   vec3 col = albedo * light * (1.0 - 0.11 * crease * (1.0 - uNight * 0.5));
   /* paper has a little sheen where the lamp is seen in it, caught on every slope that faces it */
   vec3 V = normalize(cameraPosition - P);
@@ -473,6 +478,16 @@ export async function mount(container, options = {}) {
     uHinge: { value: new THREE.Vector4(hingeMid.x, hingeMid.z, out.x, out.y) }, uFlap: { value: 0 },
   };
   if (firstTheme === "day") uniforms.uBaseNight.value = bases.day; else uniforms.uBase.value = bases.night;
+    /* the instruments: laid on the relief as it stands (the full relief's height at a chart point, from the
+       same heights the sheet is drawn with; uRelief scales it as it rises and sinks) */
+    const surface = (x, y) => {
+        const fx = Math.min(Math.max((x - X0) / CW, 0), 1) * (COLS - 1), fy = Math.min(Math.max(y / CH, 0), 1) * (ROWS - 1);
+        const c = Math.min(Math.floor(fx), COLS - 2), r = Math.min(Math.floor(fy), ROWS - 2), tx = fx - c, ty = fy - r;
+        const h = (cc, rr) => shownH[rr * COLS + cc];
+        return ((h(c, r) * (1 - tx) + h(c + 1, r) * tx) * (1 - ty) + (h(c, r + 1) * (1 - tx) + h(c + 1, r + 1) * tx) * ty) * VS;
+    };
+    const tools = makeTools({ scene, toWorld, surface, uniforms });
+    Object.assign(uniforms, tools.uniforms);
   const sheetMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader: sheetVertex, fragmentShader: sheetFragment });
   const sheetGeometry = new THREE.PlaneGeometry(SW, SD, 172, 180).rotateX(-Math.PI / 2);
   const sheet = new THREE.Mesh(sheetGeometry, sheetMaterial);
@@ -673,6 +688,7 @@ export async function mount(container, options = {}) {
      sees the same moments, only fewer of them. */
   let settledAt = -99;   // when the opening ended (the wall clock), for the lean-in after it
   let level = 1.0, levelShown = level, progress = 0, opened = null, built = false, last = 0, flapTurn = 0, banks = 0;
+    let toolsShown = 0;
   const view = { x: 0, y: 0 };
   const ease = (dt, seconds) => (dt ? 1 - Math.exp(-dt / seconds) : 1);
   const clockNow = () => ((document.timeline && document.timeline.currentTime != null) ? document.timeline.currentTime : performance.now()) / 1000;
@@ -737,6 +753,9 @@ export async function mount(container, options = {}) {
       applyPose(-view.x * 0.1 - kLean * 0.035, view.y * 0.06 + kLean * 0.09 - leave * 0.12, leave * 0.18);
 
     uniforms.uRelief.value = kRelief * (1 - leave * 0.8);
+      /* the instruments come in once the sheet is built (they would float while it forms), on the relief as it is */
+      toolsShown += ((built ? 1 : 0) - toolsShown) * ease(dt, 0.35);
+      tools.place(uniforms.uRelief.value, toolsShown);
     const turn = Math.PI - (Math.PI - CURL_TURN) * kCurl;   // from folded flat, as the drawn sheet has it, to lifted
     if (Math.abs(turn - flapTurn) > 0.002) { flapTurn = turn; bendFlap(turn); }
     uniforms.uFlap.value = kCurl;

@@ -880,10 +880,13 @@ html:not(.js) :is(.tool, .tideclock) { display: none; }
   /* a phone: the whole sheet under the words, lying further back, and under it the slip as one bar: the window,
      the next twelve hours to play, the motion switch. The water's figures are the label on the chart (and
      stay on the slip for screen readers). */
-  :root { --l4-lay: 50deg; --l4-turn: -3deg; --l4-eye: 640px; --l4-eye-at: 52% -60%; }
-  .hero__text { padding-bottom: 25.5rem; }
-  .hero__scene { height: 25.5rem; }
-  .sheet { --l4-height: 21.5rem; --l4-right: 1.75rem; --l4-bottom: 4.6rem; }
+    /* (round 2: the hero fits the first screen of a phone, the whole sheet above the fold: a band of 20rem
+       under the buttons, the sheet laid a little flatter so all of it shows in it; at 25.5rem it ran past the
+       fold under the words) */
+  :root { --l4-lay: 54deg; --l4-turn: -3deg; --l4-eye: 640px; --l4-eye-at: 52% -60%; }
+  .hero__text { padding-bottom: 20rem; }
+  .hero__scene { height: 20rem; }
+  .sheet { --l4-height: 18rem; --l4-right: 2.25rem; --l4-bottom: 4.4rem; }
   .hero__slip {
     left: 0; right: 0; bottom: var(--space-2); width: auto; rotate: 0deg;
     display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--space-2);
