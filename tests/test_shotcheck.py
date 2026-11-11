@@ -1,5 +1,5 @@
-"""Tests for forge-test/shotcheck.py: two rounds of screenshots, compared pair by pair with
-forge-diff/imgdiff.py. The PNGs are made here, at run time, with zlib and struct."""
+"""Tests for forge-check/shotcheck.py: two rounds of screenshots, compared pair by pair with
+forge-check/imgdiff.py. The PNGs are made here, at run time, with zlib and struct."""
 
 import contextlib
 import io
@@ -16,8 +16,8 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252  # noqa: E402
 
-shotcheck = load("forge-test", "shotcheck")
-SCRIPT = os.path.join(ROOT, "forge-test", "shotcheck.py")
+shotcheck = load("forge-check", "shotcheck")
+SCRIPT = os.path.join(ROOT, "forge-check", "shotcheck.py")
 WHITE, DARK, BLUE = (255, 255, 255), (30, 30, 30), (40, 110, 230)
 
 

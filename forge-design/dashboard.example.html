@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order desk: dense dashboard example</title>
+<!-- forge-design dashboard example: the dense "HUD" level. One file, no script, no external request.
+     Every value on this page is example data for a made-up product and adds up: 606 orders in the
+     strip, in the main chart, in the matrix and in the bars with depth (P-06, ../forge-design/bars3d.css).
+     In a real app each number comes from a query. -->
+<style>
+:root {                      /* in an app these come from forge-work/design/tokens.json (theme.py) */
+  color-scheme: light dark;
+  --color-bg: #f3f5f4; --color-surface: #ffffff; --color-border: #c9d3d1; --color-text: #142025;
+  --color-text-muted: #51626a; --color-accent: #0f766e; --color-chart-1: #0f766e; --color-chart-2: #8a5200; --color-chart-3: #6540c2;
+  --color-danger: #b3261e; --color-success: #186b3b;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --gap: 12px; --pad: 12px; --label: 11px; --value: 22px;      /* the dense level, see dashboard.md */
+}
+@media (prefers-color-scheme: dark) {
+  :root { --color-bg: #0b1014; --color-surface: #111a20; --color-border: #2a3942; --color-text: #e6edf0;
+    --color-text-muted: #93a3ad; --color-accent: #5ad1c0; --color-chart-1: #5ad1c0; --color-chart-2: #f0b45a; --color-chart-3: #b79cf5;
+    --color-danger: #ff8f7d; --color-success: #7ddc9a; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font: 13px/1.45 var(--font-sans); }
+.hud { max-width: 1440px; margin: 0 auto; padding: 16px; container-type: inline-size; }
+header { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; margin-bottom: var(--gap); }
+h1 { font: 600 13px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; margin: 0; }
+h2 { font: 600 var(--label) var(--font-mono); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 8px;
+  color: var(--color-text-muted); display: flex; justify-content: space-between; gap: 8px; }
+.meta, .note { color: var(--color-text-muted); font-size: var(--label); margin: 0; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* readout strip: as many tiles per row as fit, never narrower than 150px. The lines are drawn per cell
+   (not as a gap over a border-coloured background), so a half-empty last row stays empty */
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin: 0 0 var(--gap);
+  border-top: 1px solid var(--color-border); border-left: 1px solid var(--color-border); }
+.strip div { background: var(--color-surface); padding: 8px var(--pad); min-width: 0;
+  border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+.strip dt { font: var(--label) var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-muted); }
+.strip dd { margin: 0; }
+.strip .v { font: 600 var(--value)/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
+.strip .v small { font-size: var(--label); font-weight: 400; color: var(--color-text-muted); }
+.delta { font-size: var(--label); }
+.good { color: var(--color-success); } .bad { color: var(--color-danger); }
+
+/* panels: a thin frame with corner ticks; the grid is main | connector | side. The side rows are equal and the
+   connector's ends fixed only because this page has no script: an app lets each panel take the height its content
+   needs and ends each leader line at the measured centre of its panel (dashboard.md section 7) */
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 36px minmax(230px, 300px); margin-bottom: var(--gap); }
+.side { display: grid; grid-auto-rows: 1fr; gap: var(--gap); }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr); gap: var(--gap); }
+.panel { position: relative; background: var(--color-surface); border: 1px solid var(--color-border); padding: var(--pad); min-width: 0; }
+.panel::before, .panel::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--color-accent); }
+.panel::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+.panel::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+.link { width: 100%; height: 100%; display: block; color: var(--color-text-muted); }
+
+/* charts: the SVG holds only the shapes and stretches; the labels are HTML, so text never scales */
+.chart { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; font: var(--label) var(--font-mono);
+  color: var(--color-text-muted); }
+.chart .y { display: flex; flex-direction: column; justify-content: space-between; text-align: right; line-height: 1; }
+.chart .x { grid-column: 2; display: flex; justify-content: space-between; }
+.grid > .panel { display: flex; flex-direction: column; }     /* the main chart takes the height that is left */
+.grid > .panel > .chart { flex: 1; grid-template-rows: minmax(220px, 1fr) auto; }
+.plot { position: relative; min-height: 84px; }
+.plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.plot svg * { vector-effect: non-scaling-stroke; fill: none; }
+.gridline { stroke: var(--color-border); }
+.s1 { stroke: var(--color-accent); stroke-width: 2; } .plot svg .s1fill { fill: var(--color-accent); opacity: .14; }
+.s2 { stroke: var(--color-text-muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.s3 { stroke: var(--color-chart-2); stroke-width: 2; }
+.limit { stroke: var(--color-danger); stroke-dasharray: 2 3; }
+.callout { position: absolute; left: 50.9%; top: calc(4% - 11px); transform: translateX(-100%); padding: 2px 6px; white-space: nowrap; color: var(--color-text);
+  background: var(--color-surface); border: 1px solid var(--color-border); }
+.key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 0; padding: 0; list-style: none; font-size: var(--label); }
+.key i { display: inline-block; width: 18px; border-top: 2px solid var(--color-accent); vertical-align: middle; margin-right: 6px; }
+.key .prev i { border-top: 2px dashed var(--color-text-muted); }
+details { margin-top: 8px; font-size: var(--label); }
+summary { cursor: pointer; color: var(--color-text-muted); }
+
+/* tables: the value matrix and the log are real tables, so they can be read and looked up */
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+th { font: var(--label) var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted); }
+th:first-child, td:first-child, .log td:nth-child(3), .log th:nth-child(3) { text-align: left; white-space: normal; }
+.matrix td { background: color-mix(in srgb, var(--color-accent) calc(var(--t, 0) * 7%), transparent); }
+.t1 { --t: 1; } .t2 { --t: 2; } .t3 { --t: 3; } .t4 { --t: 4; } .t5 { --t: 5; }   /* five steps, set by class */
+.scroll { overflow-x: auto; }
+.scroll:focus-visible, summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* dot field: state by shape as well as colour */
+.dots { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; max-width: 200px; margin: 0; }
+.dots i, .key b { width: 10px; height: 10px; border-radius: 50%; background: var(--color-accent); display: inline-block; }
+.dots .idle, .key .idle { background: none; border: 2px solid var(--color-text-muted); }
+.dots .fail, .key .fail { background: var(--color-danger); border-radius: 0; transform: rotate(45deg); }
+.key b { margin-right: 6px; }
+.sparks { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 12px; align-items: center; margin: 0; }
+.sparks dt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sparks dd { margin: 0; text-align: right; }
+.sparks svg { display: block; color: var(--color-accent); }
+
+/* bars3d.css, copied as it is: bars with depth (P-06). In an app it is a file of its own */
+.bars3d {
+  --bars3d-dx: 10px;                       /* the depth vector: right and up */
+  --bars3d-dy: 6px;
+  --bars3d-width: clamp(8px, 46%, 32px);   /* a bar's front face, in its column */
+  --bars3d-height: 220px;                  /* the plot, without the room above it for the labels */
+  --bars3d-light: white;                   /* light falls on the top face, the side is in shade */
+  --bars3d-shade: black;
+  --bars3d-on: var(--color-surface);       /* the panel's background: the crosshair passes behind a value */
+  position: relative;
+  box-shadow: none;                        /* depth.css gives a tilt card a shadow; a HUD has none */
+}
+.bars3d-plot {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  height: var(--bars3d-height);
+  padding-top: calc(var(--bars3d-dy) + 1.5em);        /* room for the top face and the value */
+  border-bottom: 1px solid var(--color-text-muted);   /* the zero baseline */
+  font-size: var(--text-xs, 12px);
+}
+.bars3d-col {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  clip-path: inset(-100vh -100vw 0 -100vw);           /* only below the baseline is cut off */
+}
+.bars3d-bar {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: var(--bars3d-width);
+  height: 100%;
+  margin-left: calc(var(--bars3d-width) / -2 - var(--bars3d-dx) / 2);
+  transform: translateY(calc((1 - var(--h, 0)) * 100%));
+  background: var(--color-chart-1);
+}
+.bars3d-top,
+.bars3d-side { position: absolute; pointer-events: none; transform-origin: bottom left; }
+.bars3d-top {
+  left: 0;
+  bottom: 100%;
+  width: 100%;
+  height: var(--bars3d-dy);
+  background: color-mix(in oklab, var(--color-chart-1), var(--bars3d-light) 35%);
+  transform: skewX(calc(atan2(var(--bars3d-dx), var(--bars3d-dy)) * -1));
+}
+.bars3d-side {
+  left: 100%;
+  bottom: 0;
+  width: var(--bars3d-dx);
+  height: 100%;
+  background: color-mix(in oklab, var(--color-chart-1), var(--bars3d-shade) 30%);
+  transform: skewY(calc(atan2(var(--bars3d-dy), var(--bars3d-dx)) * -1));
+}
+.bars3d-value {
+  position: absolute;
+  left: calc(50% + var(--bars3d-dx) / 2);
+  bottom: calc(100% + var(--bars3d-dy) + 2px);
+  translate: -50% 0;
+  padding: 0 2px;
+  background: var(--bars3d-on);
+  line-height: 1.25;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+.bars3d-cross {                                       /* behind the bars; moved on the compositor */
+  position: absolute;
+  inset: calc(var(--bars3d-dy) + 1.5em) 0 0;
+  z-index: 0;
+  pointer-events: none;
+  container-type: inline-size;
+}
+.bars3d-cross > i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  translate: calc((var(--x, 0) + .5) / var(--n, 1) * 100cqw) 0;
+  background: var(--color-text-muted);
+}
+.bars3d-labels {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  margin-top: 4px;
+  font-size: var(--text-xs, 12px);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.bars3d-labels > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .bars3d-bar {                                       /* rises once, then moves to a new value */
+    transition: transform var(--duration-slower, 700ms) var(--ease-standard, ease);
+    animation: bars3d-rise var(--duration-slower, 700ms) var(--ease-standard, ease) both;
+    animation-delay: calc(var(--i, 0) * var(--duration-stagger, 40ms));
+  }
+  .bars3d-cross > i { transition: translate var(--duration-fast, 120ms) var(--ease-standard, ease); }
+}
+@keyframes bars3d-rise { from { transform: translateY(100%); } }
+/* end of bars3d.css */
+
+/* P-06's values, by class (a strict Content-Security-Policy blocks style attributes); an app sets --h
+   from its data. The scale's top is 300: North's 269 is .897 */
+figure { margin: 0; }
+.depth .bars3d { --bars3d-height: 150px; }
+.depth .bars3d-plot, .depth .bars3d-labels { --n: 3; }
+.depth .bars3d-col:nth-child(2) { --i: 1; } .depth .bars3d-col:nth-child(3) { --i: 2; }
+.north { --h: .897; } .central { --h: .713; } .south { --h: .41; }
+
+@container (max-width: 860px) {          /* one column: the connector goes, the panels stack */
+  .grid, .row { grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
+  .link { display: none; }
+  .grid > .panel > .chart { grid-template-rows: 180px auto; }
+}
+</style>
+</head>
+<body>
+<main class="hud">
+<header>
+  <h1>Order desk / live</h1>
+  <p class="meta">Today 00:00 to 24:00 UTC, compared with yesterday. Updated <time datetime="2026-03-12T23:59Z">23:59 UTC</time>. Example data.</p>
+</header>
+
+<dl class="strip">
+  <div><dt>Orders</dt><dd><span class="v">606</span> <span class="delta good">+8.4% vs 559, better</span></dd></div>
+  <div><dt>Revenue</dt><dd><span class="v">19,089 <small>EUR</small></span> <span class="delta good">+7.9%, better</span></dd></div>
+  <div><dt>Latency p95</dt><dd><span class="v">212 <small>ms</small></span> <span class="delta bad">+14 ms, worse</span></dd></div>
+  <div><dt>Error rate</dt><dd><span class="v">0.42 <small>%</small></span> <span class="delta good">-0.10 pt, better</span></dd></div>
+  <div><dt>Queue</dt><dd><span class="v">17 <small>jobs</small></span> <span class="delta">oldest 2 min</span></dd></div>
+  <div><dt>Workers busy</dt><dd><span class="v">26 <small>of 32</small></span> <span class="delta bad">1 failed</span></dd></div>
+</dl>
+
+<div class="grid">
+  <section class="panel" aria-labelledby="p1">
+    <h2 id="p1"><span>Orders per 2 hours</span><span>P-01</span></h2>
+    <div class="chart">
+      <div class="y" aria-hidden="true"><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div>
+      <div class="plot">
+        <svg viewBox="0 0 110 100" preserveAspectRatio="none" role="img" aria-labelledby="c1t c1d">
+          <title id="c1t">Orders per 2 hours, today and yesterday</title>
+          <desc id="c1d">Today 606 orders: lowest 11 at 04:00, highest 96 at 14:00, last 34 at 22:00.
+            Yesterday 559 orders: lowest 10 at 04:00, highest 85 at 14:00, last 30 at 22:00.</desc>
+          <path class="gridline" d="M0 0H110M0 25H110M0 50H110M0 75H110M0 100H110"/>
+          <polygon class="s1fill" points="0,78 10,86 20,89 30,81 40,52 50,29 60,12 70,4 80,16 90,33 100,48 110,66 110,100 0,100"/>
+          <polyline class="s2" points="0,82 10,88 20,90 30,85 40,60 50,38 60,20 70,15 80,21 90,30 100,42 110,70"/>
+          <polyline class="s1" points="0,78 10,86 20,89 30,81 40,52 50,29 60,12 70,4 80,16 90,33 100,48 110,66"/>
+          <path class="gridline" d="M70 4H56"/>   <!-- leader line from the peak to its callout -->
+        </svg>
+        <span class="callout num">Peak 14:00 &middot; 96</span>
+      </div>
+      <div class="x" aria-hidden="true"><span>00</span><span>02</span><span>04</span><span>06</span><span>08</span><span>10</span><span>12</span><span>14</span><span>16</span><span>18</span><span>20</span><span>22</span></div>
+    </div>
+    <ul class="key"><li><i></i>Today, 606</li><li class="prev"><i></i>Yesterday, 559</li></ul>
+    <details>
+      <summary>Show the numbers as a table</summary>
+      <div class="scroll" tabindex="0" role="region" aria-label="Orders per 2 hours, table">
+        <table class="num">
+          <tr><th scope="row">Hour (UTC)</th><th>00</th><th>02</th><th>04</th><th>06</th><th>08</th><th>10</th><th>12</th><th>14</th><th>16</th><th>18</th><th>20</th><th>22</th></tr>
+          <tr><th scope="row">Today</th><td>22</td><td>14</td><td>11</td><td>19</td><td>48</td><td>71</td><td>88</td><td>96</td><td>84</td><td>67</td><td>52</td><td>34</td></tr>
+          <tr><th scope="row">Yesterday</th><td>18</td><td>12</td><td>10</td><td>15</td><td>40</td><td>62</td><td>80</td><td>85</td><td>79</td><td>70</td><td>58</td><td>30</td></tr>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <svg class="link" viewBox="0 0 36 300" preserveAspectRatio="none" aria-hidden="true">
+    <title>Connector lines from the main panel to the three side panels</title>
+    <path d="M0 150H36M14 150V50H36M14 150V250H36" fill="none" stroke="currentColor" vector-effect="non-scaling-stroke"/>
+  </svg>
+
+  <div class="side">
+    <section class="panel" aria-labelledby="p2">
+      <h2 id="p2"><span>Latency p95, ms</span><span>P-02</span></h2>
+      <div class="chart">
+        <div class="y" aria-hidden="true"><span>270</span><span>210</span><span>150</span></div>
+        <div class="plot">
+          <svg viewBox="0 0 110 120" preserveAspectRatio="none" role="img" aria-labelledby="c2t c2d">
+            <title id="c2t">Latency p95 per 2 hours, in milliseconds</title>
+            <desc id="c2d">First 180 at 00:00, lowest 170 at 04:00, highest 251 at 14:00 (1 ms over the limit of 250), last 212 at 22:00.</desc>
+            <path class="gridline" d="M0 0H110M0 60H110M0 120H110"/>
+            <path class="limit" d="M0 20H110"/>
+            <polyline class="s3" points="0,90 10,94 20,100 30,85 40,60 50,38 60,30 70,19 80,42 90,56 100,65 110,58"/>
+          </svg>
+        </div>
+      </div>
+      <p class="note">Dotted line: limit 250 ms. Over it once, 251 ms at 14:00.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="p3">
+      <h2 id="p3"><span>Orders, region by channel</span><span>P-03</span></h2>
+      <table class="matrix num">
+        <tr><td></td><th scope="col">Web</th><th scope="col">App</th><th scope="col">API</th></tr>
+        <tr><th scope="row">North</th><td class="t5">142</td><td class="t4">96</td><td class="t2">31</td></tr>
+        <tr><th scope="row">Central</th><td class="t5">118</td><td class="t3">74</td><td class="t1">22</td></tr>
+        <tr><th scope="row">South</th><td class="t3">71</td><td class="t2">43</td><td class="t1">9</td></tr>
+      </table>
+    </section>
+
+    <section class="panel" aria-labelledby="p4">
+      <h2 id="p4"><span>Workers</span><span>P-04</span></h2>
+      <p class="dots" role="img" aria-label="32 workers: 26 busy, 5 idle, 1 failed (worker 17)">
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="idle"></i><i></i><i></i><i></i><i></i>
+        <i class="fail"></i><i></i><i></i><i></i><i class="idle"></i><i></i><i></i><i></i><i></i><i></i><i class="idle"></i><i></i><i></i><i class="idle"></i><i></i><i class="idle"></i>
+      </p>
+      <ul class="key"><li><b></b>26 busy</li><li><b class="idle"></b>5 idle</li><li><b class="fail"></b>1 failed</li></ul>
+    </section>
+  </div>
+</div>
+
+<div class="row">
+  <section class="panel" aria-labelledby="p5">
+    <h2 id="p5"><span>Response time, last 12 hours</span><span>P-05</span></h2>
+    <dl class="sparks num">
+      <dt>Checkout</dt>
+      <dd><svg width="96" height="24" viewBox="0 0 96 24" role="img"><title>Checkout: 190 to 240 ms, last 212 ms</title>
+        <polyline points="2,18 10,17 19,19 27,15 36,12 44,8 52,5 61,3 69,9 78,12 86,14 94,11" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></dd>
+      <dd>212 ms</dd>
+      <dt>Search</dt>
+      <dd><svg width="96" height="24" viewBox="0 0 96 24" role="img"><title>Search: 80 to 96 ms, last 84 ms</title>
+        <polyline points="2,14 10,12 19,15 27,13 36,10 44,12 52,8 61,6 69,11 78,13 86,12 94,13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></dd>
+      <dd>84 ms</dd>
+      <dt>Payments</dt>
+      <dd><svg width="96" height="24" viewBox="0 0 96 24" role="img"><title>Payments: 300 to 410 ms, last 395 ms</title>
+        <polyline points="2,20 10,19 19,20 27,18 36,16 44,15 52,12 61,9 69,7 78,4 86,6 94,5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></dd>
+      <dd>395 ms</dd>
+      <dt>Email</dt>
+      <dd><svg width="96" height="24" viewBox="0 0 96 24" role="img"><title>Email: no change, 120 ms all day</title>
+        <polyline points="2,12 94,12" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></dd>
+      <dd>120 ms</dd>
+    </dl>
+  </section>
+
+  <section class="panel" aria-labelledby="p6">
+    <h2 id="p6"><span>Orders per region, with depth</span><span>P-06</span></h2>
+    <figure class="depth">
+      <div class="bars3d" role="img" aria-label="Orders per region today: North 269, Central 214, South 123. Yesterday: North 251, Central 198, South 110.">
+        <div class="bars3d-plot">
+          <div class="bars3d-col"><div class="bars3d-bar north"><span class="bars3d-top"></span><span class="bars3d-side"></span><span class="bars3d-value">269</span></div></div>
+          <div class="bars3d-col"><div class="bars3d-bar central"><span class="bars3d-top"></span><span class="bars3d-side"></span><span class="bars3d-value">214</span></div></div>
+          <div class="bars3d-col"><div class="bars3d-bar south"><span class="bars3d-top"></span><span class="bars3d-side"></span><span class="bars3d-value">123</span></div></div>
+        </div>
+      </div>
+      <div class="bars3d-labels" aria-hidden="true"><span>North</span><span>Central</span><span>South</span></div>
+    </figure>
+    <p class="note num">Yesterday: North 251, Central 198, South 110 (559). By channel: the matrix P-03.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="p7">
+    <h2 id="p7"><span>Sequence log</span><span>P-07</span></h2>
+    <div class="scroll" tabindex="0" role="region" aria-labelledby="p7">
+      <table class="log num">
+        <thead><tr><th scope="col">Seq</th><th scope="col">Time (UTC)</th><th scope="col">Event</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><td>4821</td><td>23:58:07</td><td>Order 606 paid</td><td class="good">OK</td></tr>
+          <tr><td>4820</td><td>23:54:52</td><td>Stock sync finished, 212 items</td><td class="good">OK</td></tr>
+          <tr><td>4819</td><td>23:51:10</td><td>Payment retry 2 of 3</td><td>Retry</td></tr>
+          <tr><td>4818</td><td>23:47:44</td><td>Worker 17 stopped answering</td><td class="bad">Failed</td></tr>
+          <tr><td>4817</td><td>23:40:03</td><td>Nightly export queued</td><td>Queued</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+</main>
+</body>
+</html>

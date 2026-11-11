@@ -3,7 +3,7 @@
 A template filled in the natural way, each sentence of a placeholder on its own line, must still pass
 the plan gate: no placeholder may invite a second line that starts with `Profile:` or `PWA:`.
 profiles.md stays within the spec's 300 lines. The example service worker keeps the caching rules
-of profiles.md, and its offline page is styled offline: the CSP of forge-pack's templates blocks
+of profiles.md, and its offline page is styled offline: the CSP of forge-build pack's templates blocks
 inline styles, so the page's CSS is a file the worker stores on install. That test needs Node."""
 
 import json
@@ -156,7 +156,7 @@ class ServiceWorkerTests(unittest.TestCase):
         self.assertEqual(answers["installed"],
                          ["http://localhost:8080/offline.css", "http://localhost:8080/offline.html"])
         # fetched fresh: laravel's nginx sends them without Cache-Control, so the browser's own
-        # HTTP cache may hold an old copy (the colours before forge-brand)
+        # HTTP cache may hold an old copy (the colours before forge-design brand)
         self.assertEqual(answers["install cache modes"], ["reload"])
 
     def test_offline_the_page_is_the_offline_page_with_its_css(self):

@@ -1,0 +1,231 @@
+/* Tidewatch design tokens. Concept: "the chart table", a paper sea chart under a lamp.
+   Light is the chart by day: warm paper, deep sea ink, chart magenta for the one accent.
+   Dark is the same chart at night under a red-safe lamp: the paper goes dark, the lamp is the accent.
+   Names stay, values change. Every text pair below is checked with forge-design/contrast.py. */
+
+:root {
+  color-scheme: light;
+
+  /* paper and ink */
+  --color-bg: #f2ebdd;            /* chart paper in room light */
+  --color-surface: #faf6ec;       /* paper under the lamp: tiles, slips, the dialog */
+  --color-sunk: #e8dfcc;          /* paper in shade: wells, hover, table stripes */
+  --color-border: #d5cab5;        /* a hairline printed in sepia */
+  --color-border-input: #6f7c82;  /* field edges, 3:1 on paper */
+  --color-rule: #0e2a3b;          /* a full ink rule */
+  --color-text: #0e2a3b;          /* deep sea ink, 12.5:1 on paper */
+  --color-text-muted: #4b5d68;    /* thinned ink, 5.8:1 on paper */
+  --color-accent: #a8155b;        /* chart magenta: the main action and the safe window, nothing else */
+  --color-accent-strong: #8c0f4b; /* the same, pressed */
+  --color-on-accent: #fff9f0;
+  --color-accent-2: #2f6f8c;      /* shoal blue: depth contours and water, never a control; the 3D scene's second colour */
+  --color-ink-block: #0e2a3b;     /* the footer: a field of ink */
+  --color-on-ink: #f2ebdd;
+  --color-on-ink-muted: #a9b8bd;
+  --color-backdrop: rgba(14, 42, 59, 0.46);
+  --color-water: #cde0e2;                    /* the water under the tide curve, the chart's shoal blue */
+  --color-day: #faf6ec;                      /* daylight hours on the tide curve */
+  --color-hatch: rgba(168, 21, 91, 0.62);    /* the safe-window hatch */
+  --color-window: rgba(168, 21, 91, 0.06);
+
+  /* the chart itself */
+  --color-chart-ink: #0e2a3b;
+  --color-chart-paper: #fbf7ec;   /* halo behind figures that sit on a line */
+  --color-chart-land: #e8d7ab;
+  --color-chart-dry: #cfd9aa;
+  --color-chart-shoal: #bedae0;
+  --color-chart-shoal-2: #dbeae8;
+  --color-chart-contour: var(--color-accent-2);   /* depth contours are drawn in the second hue */
+  --color-chart-magenta: #b01762;
+  --color-chart-pencil: #403d3b;
+  --color-chart-frame: #f2ebdd;   /* the paper under the neat line */
+  --color-chart-edge: #0e2a3b;    /* the neat line itself */
+  --color-fold-shade: rgba(96, 70, 22, 0.085);   /* the fold in the sheet: a soft valley, no line */
+  --color-fold-light: rgba(255, 255, 255, 0.2);
+  --color-lamp: #fffdf4;                      /* the pool of light on the paper */
+  --color-lamp-mid: rgba(255, 253, 244, 0.62);
+  --color-lamp-edge: rgba(255, 253, 244, 0);
+  --color-shade: rgba(121, 92, 38, 0.16);     /* where the lamp does not reach */
+
+  /* type: the chart speaks in serif, the app in sans, the instruments in mono */
+  --font-display: "Newsreader", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-sans: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Chivo Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --text-2xs: 0.625rem;    /* 10  the letter in a diamond */
+  --text-xs: 0.6875rem;    /* 11  labels in capitals */
+  --text-sm: 0.8125rem;    /* 13  notes, table figures */
+  --text-ui: 0.9375rem;    /* 15  buttons, links in the bar */
+  --text-base: 1rem;       /* 16  body */
+  --text-md: 1.125rem;     /* 18 */
+  --text-lg: 1.3125rem;    /* 21  the lead */
+  --text-xl: 1.625rem;     /* 26  names on cards and notes */
+  --text-2xl: 1.875rem;    /* 30  a destination */
+  --text-3xl: clamp(1.875rem, 1.35rem + 1.9vw, 2.875rem);   /* 30 to 46  section headings */
+  --text-4xl: clamp(2.5rem, 1.9rem + 1.6vw, 3.375rem);      /* 40 to 54  the day's figures */
+  --text-display: clamp(2.75rem, 1.05rem + 6.6vw, 6.75rem); /* 44 to 108 the headline */
+  --leading-display: 0.94;
+  --leading-tight: 1.12;
+  --leading-body: 1.55;
+  --tracking-display: -0.022em;
+  --tracking-caps: 0.1em;
+
+  /* space: one scale, nothing in between */
+  --space-1: 0.25rem;   /* 4 */
+  --space-2: 0.5rem;    /* 8 */
+  --space-3: 0.75rem;   /* 12 */
+  --space-4: 1rem;      /* 16 */
+  --space-5: 1.5rem;    /* 24 */
+  --space-6: 2rem;      /* 32 */
+  --space-7: 3rem;      /* 48 */
+  --space-8: 4rem;      /* 64 */
+  --space-9: 6rem;      /* 96 */
+  --space-10: 8rem;     /* 128 */
+
+  /* shape: printed, so square; two pixels where a finger presses */
+  --radius-none: 0;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-pill: 999px;
+
+  /* shadow: only for paper that lies on top of the chart */
+  --shadow-none: none;
+  --shadow-slip: 0 1px 0 rgba(14, 42, 59, 0.05), 0 10px 24px -14px rgba(74, 52, 14, 0.42);
+  --shadow-sheet: 0 1px 0 rgba(14, 42, 59, 0.06), 0 28px 64px -24px rgba(48, 34, 10, 0.5);
+
+  /* motion: level 1, feedback and fades only */
+  --duration-fast: 120ms;
+  --duration-base: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* fixed sizes */
+  --size-content: 82.5rem;                     /* 1320 */
+  --size-gutter: clamp(1.25rem, 4.2vw, 3.75rem);
+  --size-header: 4.5rem;                       /* 72 */
+  --size-control: 3rem;                        /* 48 */
+  --size-control-sm: 2.5rem;                   /* 40 */
+  --size-touch: 2.75rem;                       /* 44 */
+  --size-border: 1px;
+  --size-rule: 2px;
+  --size-ring: 2px;
+  --size-dialog: 33rem;                        /* 528 */
+  --size-bar: 3px;                             /* the solid top edge of a safe window */
+  --size-hatch: 6px;                           /* pitch of the window hatch, and of its small samples */
+  --size-hatch-sm: 5px;
+  --size-hero: 58.75rem;                       /* 940: the tallest the hero grows */
+  --size-headline: 41rem;                      /* 656: the hero text block */
+  --size-measure: 30rem;                       /* 480: a column of lead text */
+  --size-measure-wide: 38rem;                  /* 608 */
+  --size-slip: 16.5rem;                        /* 264: the slip of paper on the chart */
+  --size-scene-edge: 30rem;                    /* the chart never starts further left than this */
+  --size-lamp-spill: 9rem;                     /* how far the lamp light runs past the chart */
+  --size-poster: 46.25rem;                     /* 740: the chart's width on a narrow screen */
+  --size-reveal: 21rem;                        /* how much chart shows under the hero text there */
+  --size-plot: clamp(15rem, 25vw, 21rem);      /* height of the tide curve */
+  --size-strip: 3.5rem;                        /* the tide strip in a card */
+  --size-figure: 10rem;                        /* the small figures in the notes, and one row in them */
+  --size-row: 1.25rem;
+  --size-icon: 1rem;
+  --size-icon-sm: 0.75rem;
+  --size-mark: 1.375rem;                       /* the brand mark */
+  --size-switch: 2.25rem;                      /* the lamp switch: track, height, knob */
+  --size-switch-height: 1.25rem;
+  --size-knob: 0.75rem;
+  --size-spark: 5rem;                          /* the trend line in a tile */
+  --size-spark-height: 1.625rem;
+  --size-swatch: 0.75rem;                      /* the hatch sample next to a time */
+  --size-pip: 0.4375rem;                       /* one diamond of the difficulty grade */
+
+  /* paper grain, drawn here so no file is fetched */
+  --texture-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .34  0 0 0 0 .26  0 0 0 0 .12  0 0 0 .2 -.075'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+
+/* Night: the red-safe lamp. Blue and green ink go dark under red light, so the chart turns to ink on a glowing sheet. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-bg: #130c0a;
+    --color-surface: #1d1310;
+    --color-sunk: #0d0706;
+    --color-border: #3b2720;
+    --color-border-input: #8a6f62;
+    --color-rule: #f0dfd2;
+    --color-text: #f0dfd2;
+    --color-text-muted: #b79e90;
+    --color-accent: #ff6a4d;
+    --color-accent-strong: #ff8468;
+    --color-on-accent: #1a0b07;
+    --color-accent-2: #d08a66;
+    --color-ink-block: #1d1310;
+    --color-on-ink: #f0dfd2;
+    --color-on-ink-muted: #b79e90;
+    --color-backdrop: rgba(5, 2, 1, 0.72);
+    --color-water: #2a1611;
+    --color-day: #1d1310;
+    --color-hatch: rgba(255, 106, 77, 0.7);
+    --color-window: rgba(255, 106, 77, 0.07);
+    --color-chart-ink: #170705;
+    --color-chart-paper: rgba(0, 0, 0, 0);
+    --color-chart-land: rgba(18, 5, 3, 0.24);
+    --color-chart-dry: rgba(18, 5, 3, 0.38);
+    --color-chart-shoal: rgba(18, 5, 3, 0.3);
+    --color-chart-shoal-2: rgba(18, 5, 3, 0.15);
+    --color-chart-contour: #2a0c08;
+    --color-chart-magenta: #8f3525;
+    --color-chart-pencil: #120504;
+    --color-chart-frame: rgba(19, 12, 10, 0);
+    --color-chart-edge: #6e3527;
+    --color-fold-shade: rgba(0, 0, 0, 0.12);
+    --color-fold-light: rgba(255, 150, 120, 0.03);
+    --color-lamp: #a62d17;
+    --color-lamp-mid: #57170d;
+    --color-lamp-edge: rgba(19, 12, 10, 0);
+    --color-shade: rgba(0, 0, 0, 0.3);
+    --shadow-slip: 0 1px 0 rgba(0, 0, 0, 0.4), 0 10px 24px -14px rgba(0, 0, 0, 0.8);
+    --shadow-sheet: 0 0 0 1px rgba(255, 106, 77, 0.14), 0 28px 64px -24px rgba(0, 0, 0, 0.9);
+    --texture-grain: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #130c0a;
+  --color-surface: #1d1310;
+  --color-sunk: #0d0706;
+  --color-border: #3b2720;
+  --color-border-input: #8a6f62;
+  --color-rule: #f0dfd2;
+  --color-text: #f0dfd2;
+  --color-text-muted: #b79e90;
+  --color-accent: #ff6a4d;
+  --color-accent-strong: #ff8468;
+  --color-on-accent: #1a0b07;
+  --color-accent-2: #d08a66;
+  --color-ink-block: #1d1310;
+  --color-on-ink: #f0dfd2;
+  --color-on-ink-muted: #b79e90;
+  --color-backdrop: rgba(5, 2, 1, 0.72);
+  --color-water: #2a1611;
+  --color-day: #1d1310;
+  --color-hatch: rgba(255, 106, 77, 0.7);
+  --color-window: rgba(255, 106, 77, 0.07);
+  --color-chart-ink: #170705;
+  --color-chart-paper: rgba(0, 0, 0, 0);
+  --color-chart-land: rgba(18, 5, 3, 0.24);
+  --color-chart-dry: rgba(18, 5, 3, 0.38);
+  --color-chart-shoal: rgba(18, 5, 3, 0.3);
+  --color-chart-shoal-2: rgba(18, 5, 3, 0.15);
+  --color-chart-contour: #2a0c08;
+  --color-chart-magenta: #8f3525;
+  --color-chart-pencil: #120504;
+  --color-chart-frame: rgba(19, 12, 10, 0);
+  --color-chart-edge: #6e3527;
+  --color-fold-shade: rgba(0, 0, 0, 0.12);
+  --color-fold-light: rgba(255, 150, 120, 0.03);
+  --color-lamp: #a62d17;
+  --color-lamp-mid: #57170d;
+  --color-lamp-edge: rgba(19, 12, 10, 0);
+  --color-shade: rgba(0, 0, 0, 0.3);
+  --shadow-slip: 0 1px 0 rgba(0, 0, 0, 0.4), 0 10px 24px -14px rgba(0, 0, 0, 0.8);
+  --shadow-sheet: 0 0 0 1px rgba(255, 106, 77, 0.14), 0 28px 64px -24px rgba(0, 0, 0, 0.9);
+  --texture-grain: none;
+}

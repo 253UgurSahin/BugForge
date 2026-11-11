@@ -1,4 +1,4 @@
-"""Tests for forge-dashboard/chart.py: every chart type is valid, accessible SVG; data is escaped,
+"""Tests for forge-design/chart.py: every chart type is valid, accessible SVG; data is escaped,
 never run; axis ticks are 1-2-5 steps; nonsense is refused with exit 2 and nothing is written."""
 
 import contextlib
@@ -15,8 +15,8 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, symlink  # noqa: E402
 
-chart = load("forge-dashboard", "chart")
-SCRIPT = os.path.join(ROOT, "forge-dashboard", "chart.py")
+chart = load("forge-design", "chart")
+SCRIPT = os.path.join(ROOT, "forge-design", "chart.py")
 TOKENS = os.path.join(ROOT, "forge-design", "tokens.json")
 SVG = "{http://www.w3.org/2000/svg}"
 MONTHS = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"]
@@ -290,6 +290,14 @@ class Colours(ChartCase):
 
     def test_the_packs_own_token_file_works(self):
         self.assertEqual(self.report("--tokens", TOKENS)["colours"][0], "#3f4856")
+
+    def test_chart_1_as_a_reference_to_the_accent_is_the_accent(self):
+        """The template writes chart-1 as var(--color-accent), so it follows a rebrand and the dark theme."""
+        path = self.tokens(**{"chart-1": "var(--color-accent)", "chart-2": "#222222"})
+        self.assertEqual(self.report("--tokens", path)["colours"][:2], ["#0f766e", "#222222"])
+        for bad in ("var(--color-accent", "var(--x) ; color: red", "url(x)"):
+            code, out, err = run(self.write(self.DATA), "--type", "line", "--tokens", self.tokens(**{"chart-1": bad}))
+            self.assertEqual((code, out), (2, ""), bad)
 
     def test_bad_tokens_are_refused(self):
         for path in (self.tokens(accent=None), self.tokens(bg="white"), self.tokens(text="javascript:alert(1)"),

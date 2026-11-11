@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BugForge 3D-scènes</title>
+<style>
+/* Layout: one tall stage (the scene with a headline over its calm side), then a control bar and notes. */
+:root {
+  --color-bg: #f6f7f5; --color-surface: #ffffff; --color-border: #d9dedb; --color-text: #111715;
+  --color-text-muted: #56615c; --color-accent: #0c7a6b; --color-accent-2: #c2571a;
+  --chip: #e9ecea; --on-accent: #ffffff;
+  --font-display: system-ui, -apple-system, "Segoe UI", sans-serif; --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+:root[data-palette="violet"] { --color-accent: #5b3fd6; --color-accent-2: #c23a7e; }
+:root[data-palette="mono"] { --color-accent: #1b1f1e; --color-accent-2: #6d7873; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #070b0e; --color-surface: #0f161a; --color-border: #22303a; --color-text: #e9f0ee;
+    --color-text-muted: #93a39d; --color-accent: #3fd0bb; --color-accent-2: #ff9d4d; --chip: #141e23; --on-accent: #06211d;
+    color-scheme: dark;
+  }
+  :root:not([data-theme="light"])[data-palette="violet"] { --color-accent: #9c86ff; --color-accent-2: #ff7ab8; }
+  :root:not([data-theme="light"])[data-palette="mono"] { --color-accent: #f2f5f4; --color-accent-2: #8d9a95; }
+}
+:root[data-theme="dark"] {
+  --color-bg: #070b0e; --color-surface: #0f161a; --color-border: #22303a; --color-text: #e9f0ee;
+  --color-text-muted: #93a39d; --color-accent: #3fd0bb; --color-accent-2: #ff9d4d; --chip: #141e23; --on-accent: #06211d;
+  color-scheme: dark;
+}
+:root[data-theme="dark"][data-palette="violet"] { --color-accent: #9c86ff; --color-accent-2: #ff7ab8; }
+:root[data-theme="dark"][data-palette="mono"] { --color-accent: #f2f5f4; --color-accent-2: #8d9a95; }
+
+body { background: var(--color-bg); color: var(--color-text); font: 16px/1.55 var(--font-body); margin: 0; }
+.stage { position: relative; min-height: min(86vh, 820px); display: grid; align-items: center; overflow: hidden; }
+#scene { position: absolute; inset: 0; }
+.copy {
+  position: relative; max-width: 34rem;
+  padding-block: 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px), 6vw);
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--color-text-muted); margin: 0 0 14px; }
+h1 { font-family: var(--font-display); font-size: clamp(2.1rem, 5vw, 4.2rem); line-height: 1.04; letter-spacing: -.02em; margin: 0 0 18px; text-wrap: balance; }
+.lead { color: var(--color-text-muted); margin: 0; max-width: 30rem; min-height: 3.1em; }
+.bar {
+  display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center;
+  padding-block: 18px; border-top: 1px solid var(--color-border);
+  padding-left: max(16px, env(safe-area-inset-left, 0px), 6vw);
+  padding-right: max(16px, env(safe-area-inset-right, 0px), 6vw);
+}
+.group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.group > span { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-muted); margin-right: 4px; }
+button {
+  font: 500 14px/1 var(--font-body); color: var(--color-text); background: var(--chip);
+  border: 1px solid var(--color-border); border-radius: 999px; padding: 9px 14px; cursor: pointer;
+}
+button[aria-pressed="true"] { background: var(--color-accent); color: var(--on-accent); border-color: var(--color-accent); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.range { display: grid; gap: 4px; min-width: 0; flex: 1 1 240px; }
+.range label { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-muted); }
+.range input { width: 100%; accent-color: var(--color-accent); }
+.range small { color: var(--color-text-muted); font-size: 13px; }
+.notes {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px;
+  padding-block: 28px 48px; border-top: 1px solid var(--color-border);
+  padding-left: max(16px, env(safe-area-inset-left, 0px), 6vw);
+  padding-right: max(16px, env(safe-area-inset-right, 0px), 6vw);
+}
+.notes h2 { font-family: var(--font-display); font-size: 17px; margin: 0 0 6px; }
+.notes p { margin: 0; color: var(--color-text-muted); font-size: 15px; max-width: 60ch; }
+</style>
+</head>
+<body>
+
+<section class="stage" aria-labelledby="title">
+  <div id="scene" aria-hidden="true"></div>
+  <div class="copy">
+    <p class="eyebrow">BugForge · de 3D-scènekit</p>
+    <h1 id="title">Ken het water voordat je de haven uit vaart</h1>
+    <p class="lead" id="caption"></p>
+  </div>
+</section>
+
+<div class="bar">
+  <div class="group" role="group" aria-label="Scène">
+    <span>Scène</span>
+    <button type="button" data-scene-pick="form">Vorm</button>
+    <button type="button" data-scene-pick="field">Deeltjes</button>
+    <button type="button" data-scene-pick="water">Water</button>
+    <button type="button" data-scene-pick="aurora">Licht</button>
+    <button type="button" data-scene-pick="contour">Hoogtelijnen</button>
+    <button type="button" data-scene-pick="datascape">Data</button>
+  </div>
+  <div class="group" role="group" aria-label="Kleuren van de app">
+    <span>Kleuren</span>
+    <button type="button" data-palette-pick="" aria-pressed="true">Groenblauw</button>
+    <button type="button" data-palette-pick="violet" aria-pressed="false">Violet</button>
+    <button type="button" data-palette-pick="mono" aria-pressed="false">Zwart-wit</button>
+    <button type="button" id="theme">Donker thema</button>
+  </div>
+  <div class="range">
+    <label for="progress">Scrollen</label>
+    <input id="progress" type="range" min="0" max="1" step="0.01" value="0">
+    <small id="progress-note"></small>
+  </div>
+  <div class="group"><button type="button" id="data">Voer data in</button></div>
+</div>
+
+<div class="notes">
+  <div><h2>Beweeg je muis</h2><p>Over de scène, of tik op een telefoon. Elke scène reageert erop: licht, diepte, uitwijkende deeltjes, kringen in het water.</p></div>
+  <div><h2>De kleuren komen uit de app</h2><p>De scènes lezen de kleuren van de pagina. Wissel het palet of het thema en de scène volgt, zonder één kleur in de code.</p></div>
+  <div><h2>Voor iedereen</h2><p>Wie op zijn systeem "minder beweging" heeft aanstaan, krijgt één stil beeld. Zonder WebGL, of op een zwak toestel, neemt een stilstaande afbeelding het over.</p></div>
+  <div><h2>Waar het in de skills zit</h2><p>forge-design zet deze scènes vanaf niveau 4 in de app zelf, in de smaak van die app: zie forge-design/scenes.md. De voorbeeldapp in ../levels/4 en ../levels/5 laat zien hoe.</p></div>
+</div>
+
+<script type="importmap">{"imports": {"three": "../vendor/three/three.module.js"}}</script>
+<script type="module">
+import { mount as form } from '../vendor/scenes/form.js';
+import { mount as field } from '../vendor/scenes/field.js';
+import { mount as aurora } from '../vendor/scenes/aurora.js';
+import { mount as contour } from '../vendor/scenes/contour.js';
+import { mount as datascape } from '../vendor/scenes/datascape.js';
+
+const SCENES = {
+  form:    { make: (el) => form(el, { side: 'right' }),            what: 'Een vorm van licht: draden over een vervormd oppervlak die ademen, draaien en naar je muis leunen.', progress: 'De vorm verandert: ring, knoop, spiraal.' },
+  field:   { make: (el) => field(el, { side: 'right' }),           what: 'Tienduizenden deeltjes in een trage stroming; ze wijken uit rond je muis.', progress: 'De deeltjes vormen een wolk, een ring, een golf en een raster.' },
+  water:   { make: (el) => aurora(el, { mode: 'water', calm: 'left' }), what: 'Helder ondiep water van bovenaf, met lichtnetten; beweeg of tik voor kringen.', progress: 'De sfeer verschuift, zoals bij scrollen.' },
+  aurora:  { make: (el) => aurora(el, { mode: 'aurora', calm: 'left' }), what: 'Zacht licht in de kleuren van de app, als een poollicht van ver weg.', progress: 'De sfeer verschuift, zoals bij scrollen.' },
+  contour: { make: (el) => contour(el, { calm: 'left' }),          what: 'Levende hoogtelijnen, zoals op een zeekaart; je muis tilt het land onder zich op.', progress: 'Je reist over de kaart en zoomt, zoals bij scrollen.' },
+  datascape: { make: (el) => datascape(el, { side: 'right' }),     what: 'De cijfers van de app als sculptuur: zuilen die naar nieuwe waarden veren. Wijs er een aan.', progress: 'De camera draait een stukje rond, zoals bij scrollen.' },
+};
+
+const host = document.getElementById('scene');
+const caption = document.getElementById('caption');
+const slider = document.getElementById('progress');
+const sliderNote = document.getElementById('progress-note');
+let current = null;
+let currentName = '';
+
+async function show(name) {
+  if (name === currentName) return;
+  currentName = name;
+  if (current) current.destroy();
+  host.replaceChildren();
+  current = await SCENES[name].make(host);
+  if (slider.value !== '0' && current.setProgress) current.setProgress(Number(slider.value));
+  caption.textContent = SCENES[name].what;
+  sliderNote.textContent = SCENES[name].progress;
+  for (const button of document.querySelectorAll('[data-scene-pick]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.scenePick === name));
+  }
+}
+
+for (const button of document.querySelectorAll('[data-scene-pick]')) {
+  button.addEventListener('click', () => show(button.dataset.scenePick));
+}
+slider.addEventListener('input', () => { if (current && current.setProgress) current.setProgress(Number(slider.value)); });
+document.getElementById('data').addEventListener('click', () => {
+  if (!current || !current.setData) return;
+  const seed = Math.floor(performance.now()) % 997;
+  current.setData(Array.from({ length: 24 }, (_, i) => 0.5 + 0.45 * Math.sin(i * 0.5 + seed) * Math.cos(i * 0.17 + seed * 0.3)));
+});
+for (const chip of document.querySelectorAll('[data-palette-pick]')) {
+  chip.addEventListener('click', () => {
+    document.documentElement.dataset.palette = chip.dataset.palettePick;
+    for (const other of document.querySelectorAll('[data-palette-pick]')) other.setAttribute('aria-pressed', String(other === chip));
+    if (current && current.stage) current.stage.refreshTokens();
+  });
+}
+const themeButton = document.getElementById('theme');
+const isDark = () => document.documentElement.dataset.theme === 'dark' ||
+  (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+const label = () => { themeButton.textContent = isDark() ? 'Licht thema' : 'Donker thema'; };
+themeButton.addEventListener('click', () => {
+  document.documentElement.dataset.theme = isDark() ? 'light' : 'dark';
+  label();
+  if (current && current.stage) current.stage.refreshTokens();
+});
+label();
+show('form');
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-"""Tests for forge-pack/composecheck.py.
+"""Tests for forge-build/composecheck.py.
 
 Fake secrets are glued together at runtime, so this file never contains a
 secret-looking literal: the repo itself is scanned with secretscan.py in CI.
@@ -16,7 +16,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252, symlink  # noqa: E402
 
-mod = load("forge-pack", "composecheck")
+mod = load("forge-build", "composecheck")
 
 FAKE = "hunter" + "22-" + "Xy9"  # a password-looking value
 GOOD_COMPOSE = ("services:\n  app:\n    build: .\n    env_file: .env\n    healthcheck:\n"
@@ -216,7 +216,7 @@ class CommandLineTests(unittest.TestCase):
 
     def test_a_link_to_a_file_outside_the_folder(self):
         """Also one on another drive (Windows: the runners have the checkout on D: and the temp folder on C:)."""
-        template = os.path.join(ROOT, "forge-pack", "templates", "static", "docker-compose.yml")
+        template = os.path.join(ROOT, "forge-build", "templates", "static", "docker-compose.yml")
         symlink(self, template, os.path.join(self.dir, "docker-compose.yml"))
         with self.assertRaisesRegex(ValueError, "^docker-compose.yml is a link to a file outside "):
             mod.check_folder(self.dir)
@@ -241,7 +241,7 @@ class CommandLineTests(unittest.TestCase):
             self.assertTrue({"severity", "title", "where", "why", "fix"} <= set(f))
 
     def test_an_override_file_adds_to_the_main_file(self):
-        """forge-build's dev override publishes the db port for the tests: it keeps the restart policy,
+        """forge-build build's dev override publishes the db port for the tests: it keeps the restart policy,
         the build and the image of the main file, and every safety rule still applies to it."""
         self.write("docker-compose.yml", "services:\n  app:\n    build: .\n    restart: unless-stopped\n"
                                          "  store:\n    image: postgres:18\n    restart: unless-stopped\n")

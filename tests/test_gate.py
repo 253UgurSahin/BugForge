@@ -20,7 +20,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, symlink  # noqa: E402
-from test_phasecheck import HAS_GIT, OLD, PASSING, read, write  # noqa: E402
+from test_phasecheck import HAS_GIT, OLD, PASSING, levels, read, write  # noqa: E402
 
 gate = load("forge", "gate")
 phasecheck = load("forge", "phasecheck")
@@ -85,14 +85,16 @@ class TableTests(unittest.TestCase):
                                               "brand", "launch", "secure", "pack"])
         self.assertEqual(gate.MODES["improve"], ["audit", "inspect", "improve", "test", "secure"])
         self.assertEqual(set(gate.OPTIONAL), {"compare", "inspect", "dashboard", "motion"})
-        self.assertEqual((gate.ADDED, gate.ASKS), (("dashboard", "motion"), ("secure",)))
+        self.assertEqual((gate.ADDED, gate.ASKS), (["dashboard", "motion"], ["secure"]))
 
     def test_every_phase_has_checks_a_skill_and_secure_is_everywhere(self):
         for mode, phases in gate.MODES.items():
             self.assertIn("secure", phases)
             for phase in phases:
                 self.assertTrue(phasecheck.CHECKS[phase], phase)
-                self.assertTrue(os.path.isfile(os.path.join(ROOT, "forge-" + phase, "SKILL.md")), phase)
+                skill, _, part = gate.SKILL[phase].partition(" ")  # "forge-check secure": the skill and its part
+                self.assertTrue(os.path.isfile(os.path.join(ROOT, skill, "SKILL.md")), phase)
+                self.assertTrue(not part or os.path.isfile(os.path.join(ROOT, skill, "steps", part + ".md")), phase)
         self.assertEqual(set(phasecheck.CHECKS), set(gate.PHASES))
 
     def test_hidden_characters_are_escaped_and_never_count_as_words(self):
@@ -117,7 +119,7 @@ class InitTests(Project):
                 self.assertEqual((state["version"], state["mode"], state["phases"]), (1, mode, {}))
                 self.assertRegex(state["started"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$")
                 self.assertNotIn("about", state)
-                self.assertIn("Next: %s. Run /forge-%s" % (phases[0], phases[0]), out)
+                self.assertIn("Next: %s. Run /%s" % (phases[0], gate.SKILL[phases[0]]), out)
                 self.assertIn(", ".join(phases), out)
 
     def test_init_keeps_what_the_user_asked_for(self):
@@ -148,7 +150,7 @@ class InitTests(Project):
     def test_init_keeps_forge_work_out_of_git(self):
         self.gate("init", "--mode", "clone")
         self.assertEqual(read(os.path.join(self.root, "forge-work", ".gitignore")).splitlines()[-1], "*")
-        if HAS_GIT:  # screenshots and quotes of the original are never addable, not even before forge-build
+        if HAS_GIT:  # screenshots and quotes of the original are never addable, not even before forge-build build
             subprocess.run(["git", "init", "-q", self.root], check=True, timeout=60)
             self.finish("recon", "plan")
             status = subprocess.run(["git", "-C", self.root, "status", "--porcelain", "--untracked-files=all"],
@@ -262,7 +264,7 @@ class CheckTests(Project):
         self.assertIn("Exit checks for test (improve mode):", out)
 
     def test_only_clone_mode_runs_the_copy_check(self):
-        """copycheck.py compares the clone with the original's text that forge-recon kept (N18). Without a
+        """copycheck.py compares the clone with the original's text that forge-research recon kept (N18). Without a
         state the mode is not known, so check runs no copy check; with a clone state it does."""
         self.finish("build")
         write(self.root, "forge-work/original-text/source-1.txt", "zo zie je elke dag wat er moet gebeuren\n")
@@ -294,7 +296,7 @@ class CheckTests(Project):
         self.assertEqual(code, 1)
         self.assertIn("FAIL: the exit checks of plan did not finish within %d seconds." % gate.TIMEOUT, out)
         self.finish("plan")
-        with mock.patch.object(gate, "__file__", os.path.join(self.root, "nowhere", "forge", "gate.py")):
+        with mock.patch.object(gate, "HERE", os.path.join(self.root, "nowhere", "forge")):  # no phasecheck.py there
             code, _, err = self.gate("check", "plan")
         self.assertEqual(code, 1)
         self.assertIn("phasecheck.py", err)
@@ -400,7 +402,7 @@ class FreshReportTests(Project):
 
     def test_the_build_report_is_not_the_secure_phase(self):
         self.gate("init", "--mode", "idea")
-        self.approve("compare", "plan", "design", "build")  # forge-build runs forge-secure at its end
+        self.approve("compare", "plan", "design", "build")  # forge-build build runs forge-check secure at its end
         self.age("forge-work/security.md")  # so this report is from then, before test, brand and launch
         self.approve("dashboard", "motion", "test", "brand", "launch")
         code, out, _ = self.gate("done", "secure", "--approved", "go")
@@ -408,7 +410,7 @@ class FreshReportTests(Project):
         self.assertIn("forge-work/security.md is older than the last go (%s)" % self.state()["phases"]["launch"]["at"],
                       out)
         self.assertNotIn("secure", self.state()["phases"])
-        self.approve("secure")  # forge-secure ran again: a new report
+        self.approve("secure")  # forge-check secure ran again: a new report
 
     def test_a_report_from_an_earlier_round_does_not_count(self):
         self.finish("audit", "test", "secure")
@@ -432,7 +434,7 @@ class FreshReportTests(Project):
         self.gate("init", "--mode", "clone")
         self.approve("recon", "compare", "plan", "design", "build", "dashboard", "motion", "test", "diff")
         write(self.root, "forge-work/bugs.md", read(os.path.join(self.root, "forge-work", "bugs.md")) +
-              "\n## B007 [high] [fixed] Found by forge-secure\nfixed in: 7d6e5f4\n")
+              "\n## B007 [high] [fixed] Found by forge-check secure\nfixed in: 7d6e5f4\n")
         later = datetime.datetime.fromisoformat(self.state()["phases"]["diff"]["at"]).timestamp() + 5
         os.utime(os.path.join(self.root, "forge-work", "bugs.md"), (later, later))  # after diff's go
         code, out, _ = self.gate("check", "diff")
@@ -465,7 +467,7 @@ class FreshReportTests(Project):
         self.assertEqual(code, 1)
         self.assertIn("forge-work/parity.md is older than the last go (%s)" % self.state()["phases"]["test"]["at"], out)
         self.assertNotIn("diff", self.state()["phases"])
-        self.approve("diff")  # forge-diff ran again from its Step 1: a new report
+        self.approve("diff")  # forge-check diff ran again from its Step 1: a new report
 
     def test_a_secret_added_after_secure_stops_pack(self):
         self.gate("init", "--mode", "idea")
@@ -512,6 +514,51 @@ class SkipTests(Project):
                 self.assertIn("REFUSED: %s cannot be skipped. Only compare, inspect, dashboard, motion may be." % phase, out)
         self.assertEqual(self.state()["phases"], {})
 
+    def test_motion_is_skipped_only_at_look_level_1(self):
+        """W-forge-1: `skip motion --reason 'doe alles zelf'` was recorded at look level 5, so the level was never
+        built. From look level 2 motion builds the level (rules.md section 10): the user first records look 1."""
+        go = {"status": "done", "approved": "go", "at": "2026-10-27T09:51:44+00:00"}
+        phases = dict({phase: go for phase in ("compare", "plan", "design", "build")},
+                      dashboard={"status": "skipped", "reason": "no data screens", "at": "2026-10-27T09:52:00+00:00"})
+        for record, refused in ((None, False), (levels(look=1), False), (levels(look=2), True), (levels(look=5), True)):
+            with self.subTest(record=record):
+                self.write_state({"version": 1, "mode": "idea", "phases": phases, "started": "2026-10-27T09:00:00+00:00"})
+                if record:
+                    write(self.root, "forge-work/levels.json", record)
+                _, out, _ = self.gate("status")
+                self.assertIn("/forge-design motion  (may be skipped, at look level 1 only)", out)
+                self.assertIn("Or, when the user says so, at look level 1 only: ", out)
+                code, out, _ = self.gate("skip", "motion", "--reason", "doe alles zelf")
+                self.assertEqual((code, "motion" in self.state()["phases"]), (1, False) if refused else (0, True), out)
+                if refused:
+                    self.assertIn("REFUSED: look level %s is on record, and from level 2 motion builds the level: it "
+                                  "is not skipped, in auto mode too" % json.loads(record)["look"]["level"], out)
+                    self.assertIn("first level.py set look 1 --said '<their words>'", out)
+
+    def test_motion_is_not_skipped_while_the_look_level_cannot_be_read(self):
+        """V3G1-N3: with look 5 on record and levels.json then damaged, level.py get look exits 2 and prints nothing
+        on stdout, and the skip was recorded. Only no record (exit 1) or look 1 lets it through; a linked record too
+        is never read (level.py)."""
+        go = {"status": "done", "approved": "go", "at": "2026-10-27T09:51:44+00:00"}
+        phases = dict({phase: go for phase in ("compare", "plan", "design", "build")},
+                      dashboard={"status": "skipped", "reason": "no data screens", "at": "2026-10-27T09:52:00+00:00"})
+        self.write_state({"version": 1, "mode": "idea", "phases": phases, "started": "2026-10-27T09:00:00+00:00"})
+        write(self.root, "forge-work/levels.json", levels(look=5)[:-3])  # cut short: no longer JSON
+        code, out, _ = self.gate("skip", "motion", "--reason", "doe alles zelf")
+        self.assertEqual((code, "motion" in self.state()["phases"]), (1, False), out)
+        self.assertIn("REFUSED: level.py get look cannot read the look level, so motion is not skipped (rules.md "
+                      "section 10). Show the user what it says, and change nothing yourself: error: forge-work", out)
+        self.assertIn("is damaged: not what level.py writes", out)
+        outside = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, outside, ignore_errors=True)
+        write(outside, "levels.json", levels(look=1))  # look 1 there, but a link is never read
+        os.remove(os.path.join(self.root, "forge-work", "levels.json"))
+        symlink(self, os.path.join(outside, "levels.json"), os.path.join(self.root, "forge-work", "levels.json"))
+        code, out, _ = self.gate("skip", "motion", "--reason", "doe alles zelf")
+        self.assertEqual((code, "motion" in self.state()["phases"]), (1, False), out)
+        self.assertIn("so motion is not skipped", out)
+        self.assertIn("is a link", out)
+
     def test_skip_refuses_no_reason_out_of_order_and_other_modes(self):
         self.gate("init", "--mode", "clone")
         code, out, _ = self.gate("skip", "compare", "--reason", "go")
@@ -538,11 +585,22 @@ class AutoModeTests(Project):
         code, out, err = self.gate("done", "audit", "--auto", self.ASK)
         self.assertEqual((code, err), (0, ""), out)
         self.assertEqual(self.state()["phases"]["audit"]["approved"], "auto mode: " + self.ASK)
-        self.assertIn("Next: inspect. Auto mode: run /forge-inspect, fix what fails (rules.md 7)", out)
-        self.assertIn("done inspect --auto", out)
+        # W-forge-9: where it still stops, the checkpoint as a report, and that a new chat asks again (SKILL.md Resume)
+        self.assertIn("Next: inspect. Auto mode, if the user turned it on in this chat (a new chat asks again): run "
+                      "/forge-check inspect, fix what fails, stop where rules.md 7 says (the concept pick, the app's "
+                      "name, a Verdict: FAIL), give the checkpoint as a report, then ", out)
+        self.assertIn("done inspect --auto '<their words>'", out)
         self.assertIn("skip inspect --reason", out)
         self.assertNotIn("wait for their go", out)
-        self.assertIn("Auto mode", self.gate("status")[1])
+        self.assertIn("Auto mode, if the user turned it on in this chat", self.gate("status")[1])
+
+    def test_init_says_what_auto_mode_does_from_the_first_phase(self):
+        """W-forge-9: init printed only the plain next step, although the user may have asked for auto mode."""
+        code, out, _ = self.gate("init", "--mode", "idea")
+        self.assertEqual(code, 0)
+        self.assertIn("wait for their go", out)
+        self.assertIn("Auto mode, when the user asked for it in this chat: once check passes, done --auto '<their "
+                      "words>', the checkpoint as a report, and go on (rules.md 7).", out)
 
     def test_auto_still_needs_passing_checks_words_and_the_order(self):
         self.gate("init", "--mode", "improve")
@@ -574,7 +632,7 @@ class AutoModeTests(Project):
         self.assertIn("REFUSED: secure always needs the user's own go for it: --approved", out)
         self.assertNotIn("secure", self.state()["phases"])
         _, out, _ = self.gate("status")
-        self.assertIn("Next: secure. Run /forge-secure", out)  # the plain step: show the checkpoint and wait
+        self.assertIn("Next: secure. Run /forge-check secure", out)  # the plain step: show the checkpoint and wait
         self.assertIn("wait for their go", out)
         self.assertEqual(self.gate("done", "secure", "--approved", "ja, veilig genoeg")[0], 0)
 
@@ -586,11 +644,11 @@ class AutoModeTests(Project):
         self.finish("secure")
         code, out, _ = self.gate("done", "secure", "--approved", "go")
         self.assertEqual(code, 0, out)
-        self.assertIn("Next: pack. Auto mode:", out)  # the user's go for secure did not end auto mode
+        self.assertIn("Next: pack. Auto mode, if", out)  # the user's go for secure did not end auto mode
         self.gate("init", "--mode", "idea", "--force")
         self.finish("compare", "plan")
         self.gate("done", "compare", "--auto", self.ASK)
-        self.assertIn("Next: plan. Auto mode:", self.gate("status")[1])
+        self.assertIn("Next: plan. Auto mode, if", self.gate("status")[1])
         _, out, _ = self.gate("done", "plan", "--approved", "go, maar vanaf nu vraag je het weer")
         self.assertIn("Next: design. Run /forge-design", out)
         self.assertNotIn("Auto mode", out)
@@ -675,7 +733,7 @@ class StatusTests(Project):
                           ("secure", "waiting")])
         self.assertEqual(data["phases"][0]["approved"], "go")
         self.assertTrue(data["phases"][1]["optional"])
-        self.assertEqual(data["phases"][1]["skill"], "forge-inspect")
+        self.assertEqual(data["phases"][1]["skill"], "forge-check inspect")
         self.assertIn("Next: inspect.", data["next_step"])
 
     def test_no_state_yet(self):

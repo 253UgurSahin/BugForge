@@ -1,4 +1,4 @@
-"""Tests for forge-audit/inventory.py.
+"""Tests for forge-check/inventory.py.
 
 Each test builds a small fake project in a temporary folder.
 """
@@ -16,7 +16,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import load, run_cp1252, symlink  # noqa: E402
 
-mod = load("forge-audit", "inventory")
+mod = load("forge-check", "inventory")
 
 
 def run(*args):

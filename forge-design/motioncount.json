@@ -1,0 +1,342 @@
+{
+ "about": "Feature patterns for motioncount.py --level N, and the places that move in a script, read at start. places: each match in a script (comments blanked, <style> blocks aside) is one place that moves: what animates, and a style that moves written in a script (styled or css templates, sx and style objects, <motion.div animate>, Svelte's transition:). Each feature is found when one of its signals matches in the app's own code. view: style (stylesheets and <style> blocks), script (scripts, components, <script> blocks), markup (tags and attributes). Comments never count; a match must start outside a string unless strings is true. rule: the match must be in the declarations of a rule whose selector this pattern finds (\"\" for any rule); a rule for an m- class counts once an element carries the class. also: a second pattern the same file must hold, outside strings. same_file_as: only in a file where that feature (an earlier one) was found. with: only once that feature (an earlier one) was found in some file. inside: only in a file of that feature, or inside an element, up to six levels up, that such a file mounts the scene on (the selector of its lazyScene( call, .hero-scene, #hero, [data-hero]; with no such call, any it selects) or defines as a component (<Scene>, or its file Scene.tsx; <hero-scene> and <x-hero> stand for HeroScene and Hero); or inside the component of a template that holds such an element (<x-hero> for hero.blade.php), or in a partial or component that template names, when it is inside no element of its own file.",
+ "ask": "Ask the user how strong the look should be, 1 to 5 (python3 ../forge/level.py show look has the table), then record it: python3 ../forge/level.py set look N --said '<their words>'",
+ "min": {
+  "1": 5,
+  "2": 12,
+  "3": 20,
+  "4": 20,
+  "5": 20
+ },
+ "kit_files": [
+  "stage.js",
+  "glsl.js",
+  "lazy.js",
+  "form.js",
+  "field.js",
+  "aurora.js",
+  "contour.js",
+  "datascape.js",
+  "journey.js",
+  "depth.js",
+  "depth.css"
+ ],
+ "places": [
+  "\\.animate\\(\\s*[\\[{]",
+  "startViewTransition\\s*\\(",
+  "new\\s+IntersectionObserver\\s*\\(",
+  "requestAnimationFrame\\s*\\(",
+  "\\bgsap\\.(?:to|from|fromTo|timeline)\\s*\\(",
+  "<(?:motion|m)\\.[a-z]\\w*(?=(?:[^<>]|=>){0,500}?\\s(?:animate|initial|exit|layout|while[A-Z]\\w*)\\b)",
+  "(?:^|[{,;`])[ \\t]*(?:transition|animation)(?:-name|-duration|Name|Duration)?\\s*:(?!\\s*(?:['\"`]?(?:none|0m?s?|initial|unset|inherit)\\b|true\\b|false\\b|!\\s*[01]\\b|null\\b|undefined\\b|string\\b|number\\b|[{\\[]))",
+  "(?<=\\s)(?:transition|in|out|animate):[a-z][\\w-]*"
+ ],
+ "features": [
+  {
+   "level": 1,
+   "id": "reduced",
+   "name": "a reduced-motion rule",
+   "needs": "add @media (prefers-reduced-motion: reduce) to the app's stylesheet, turning movement off or into a fade (motion.css has one)",
+   "signals": [
+    {
+     "view": "style",
+     "re": "@media\\b[^{;]{0,300}prefers-reduced-motion"
+    },
+    {
+     "view": "style",
+     "re": "@apply\\b[^;{}]{0,300}(?<![\\w-])motion-(?:reduce|safe):"
+    },
+    {
+     "view": "markup",
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sclass(?:Name)?\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,2000}(?<![\\w-])motion-(?:reduce|safe):"
+    },
+    {
+     "view": "script",
+     "re": "\\bmatchMedia\\s*\\(\\s*['\"`][^'\"`\\n]{0,200}prefers-reduced-motion"
+    }
+   ]
+  },
+  {
+   "level": 2,
+   "id": "entrance",
+   "name": "an entrance (motion when the page loads)",
+   "needs": "make the main content arrive: m-enter or m-stagger of motion.css on it, a keyframe animation of its own, @starting-style, or element.animate()",
+   "signals": [
+    {
+     "view": "style",
+     "re": "(?<![\\w-])animation(?:-name)?\\s*:(?!\\s*(?:none|initial|unset|inherit)\\b)",
+     "rule": "^(?!.*(?::(?:hover|focus|focus-visible|focus-within|active)\\b|view-transition))"
+    },
+    {
+     "view": "markup",
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sclass(?:Name)?\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,2000}(?<![\\w-])animate-(?!(?:spin|pulse|ping|bounce|none)(?![\\w-]))[\\w-]"
+    },
+    {
+     "view": "style",
+     "re": "@starting-style\\b[^{}]{0,200}\\{[^{}]{0,500}"
+    },
+    {
+     "view": "script",
+     "re": "\\.animate\\s*\\(\\s*[\\[{]"
+    }
+   ]
+  },
+  {
+   "level": 2,
+   "id": "transition",
+   "name": "a page or view transition, or a counted number",
+   "needs": "add a page transition (@view-transition { navigation: auto; }, startViewTransition(), <ViewTransition>) or a count-up (motion.md section 4)",
+   "signals": [
+    {
+     "view": "style",
+     "re": "@view-transition\\b"
+    },
+    {
+     "view": "style",
+     "re": "::view-transition-(?:new|old|group|image-pair)\\s*\\((?!\\s*\\*)"
+    },
+    {
+     "view": "script",
+     "re": "<ViewTransition\\b"
+    },
+    {
+     "view": "style",
+     "re": "(?<![\\w-])view-transition-name\\s*:(?!\\s*none\\b)",
+     "rule": ""
+    },
+    {
+     "view": "markup",
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sstyle\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,500}view-transition-name\\s*:"
+    },
+    {
+     "view": "script",
+     "re": "\\bstartViewTransition\\s*\\("
+    },
+    {
+     "view": "script",
+     "re": "(?<![\\w-])viewTransitionName\\s*:"
+    },
+    {
+     "view": "script",
+     "re": "\\.(?:textContent|innerText|data|nodeValue)\\s*=(?!=)\\s*[^;\\n]{0,200}?(?:Math\\.(?:round|floor|ceil|trunc)\\s*\\(|\\.toFixed\\s*\\(|\\.toLocaleString\\s*\\(|NumberFormat\\b|\\.format\\s*\\(|\\bNumber\\s*\\(|\\bString\\s*\\()",
+     "also": "\\b(?:requestAnimationFrame|setInterval)\\s*\\("
+    },
+    {
+     "view": "style",
+     "re": "(?<![\\w-])(?:transition|animation)(?:-name|-duration)?\\s*:(?!\\s*(?:none|0s|initial|unset)\\b)",
+     "rule": "\\.m-count(?![\\w-])"
+    }
+   ]
+  },
+  {
+   "level": 3,
+   "id": "scroll",
+   "name": "scroll-driven motion",
+   "needs": "add motion that follows the scroll: an IntersectionObserver reveal, animation-timeline: view(), or a sticky scene with story(), motion.md section 8",
+   "signals": [
+    {
+     "view": "script",
+     "re": "\\bnew\\s+IntersectionObserver\\s*\\("
+    },
+    {
+     "view": "style",
+     "re": "(?<![\\w-])animation-timeline\\s*:(?!\\s*(?:auto|none|initial|unset)\\b)",
+     "rule": ""
+    },
+    {
+     "view": "style",
+     "re": "(?<![\\w.-])(?:view|scroll)\\(",
+     "rule": ""
+    },
+    {
+     "view": "script",
+     "re": "\\bnew\\s+(?:Scroll|View)Timeline\\s*\\("
+    },
+    {
+     "view": "script",
+     "re": "addEventListener\\s*\\(\\s*['\"`]scroll['\"`]|\\bonscroll\\s*=",
+     "also": "(?i)progress\\w*\\s*=(?!=)|setProgress\\s*\\(|setProperty\\s*\\(\\s*['\\\"`]--[\\w-]*progress"
+    }
+   ]
+  },
+  {
+   "level": 3,
+   "id": "depth",
+   "name": "CSS 3D or the kit's depth.js",
+   "needs": "add real depth: perspective with rotateX/rotateY on cards or panels, transform-style: preserve-3d, or the kit's depth.js (imported, data-depth on the cards)",
+   "signals": [
+    {
+     "view": "style",
+     "re": "(?<![\\w-])perspective\\s*:(?!\\s*(?:none|initial|unset)\\b)",
+     "rule": ""
+    },
+    {
+     "view": "style",
+     "re": "transform-style\\s*:\\s*preserve-3d",
+     "rule": ""
+    },
+    {
+     "view": "style",
+     "re": "(?<![\\w-])(?:rotate[XY]|rotate3d|translateZ|perspective)\\s*\\(",
+     "rule": ""
+    },
+    {
+     "view": "style",
+     "re": "(?<![\\w-])translate3d\\s*\\(\\s*[^,()]+,\\s*[^,()]+,\\s*(?!-?0(?:\\.0*)?(?:px|r?em|%)?\\s*\\))[^)\\s]",
+     "rule": ""
+    },
+    {
+     "view": "markup",
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sstyle\\s*=\\s*\\{?\\s*['\"`][^'\"`]{0,500}(?:rotate[XY]|rotate3d|translateZ|perspective)\\s*\\("
+    },
+    {
+     "view": "script",
+     "re": "\\.style\\.(?:transform|setProperty)\\s*[=(][^;\\n]{0,300}?(?:rotate[XY]|rotate3d|translateZ|perspective)\\s*\\("
+    },
+    {
+     "view": "script",
+     "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`][^'\"`\\n]{0,300}(?<![\\w-])depth(?:\\.m?js)?['\"`]"
+    },
+    {
+     "view": "markup",
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sdata-depth\\b"
+    },
+    {
+     "view": "markup",
+     "re": "<script\\b[^<>]{0,500}\\ssrc\\s*=\\s*['\\\"][^'\\\"]{0,300}(?<![\\w-])depth\\.m?js['\\\"]"
+    }
+   ]
+  },
+  {
+   "level": 4,
+   "id": "scene",
+   "name": "a WebGL scene",
+   "needs": "add a WebGL scene made for this app, on the screen that shows it: a kit scene through lazyScene, or three through the app's own package manager (motion.md section 5)",
+   "signals": [
+    {
+     "view": "script",
+     "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`](?:three(?:/[\\w./-]*)?|[^'\"`\\n]{0,300}/three(?:\\.module|\\.core)?(?:\\.min)?\\.m?js)['\"`]"
+    },
+    {
+     "view": "script",
+     "re": "\\bgetContext\\s*\\(\\s*['\"`](?:webgl2?|experimental-webgl)['\"`]"
+    },
+    {
+     "view": "script",
+     "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`][^'\"`\\n]{0,300}(?<![\\w-])scenes/(?!(?:depth|lazy)(?:\\.m?js)?['\"`])[\\w-]+(?:\\.m?js)?['\"`]"
+    },
+    {
+     "view": "script",
+     "re": "\\blazyScene\\s*\\("
+    },
+    {
+     "view": "markup",
+     "re": "<script\\b[^<>]{0,500}\\ssrc\\s*=\\s*['\\\"][^'\\\"]{0,300}(?<![\\w-])three(?:\\.module|\\.core)?(?:\\.min)?\\.m?js['\\\"]"
+    }
+   ]
+  },
+  {
+   "level": 4,
+   "id": "pointer",
+   "name": "pointer input reaching the scene",
+   "needs": "make the scene follow the pointer: a pointermove listener in the scene's file, setPointer(x, y), or a kit scene (its stage reads the pointer itself)",
+   "signals": [
+    {
+     "view": "script",
+     "re": "addEventListener\\s*\\(\\s*['\"`](?:pointermove|mousemove|touchmove)['\"`]|\\bon(?:pointermove|mousemove|touchmove)\\s*=|\\bon(?:Pointer|Mouse|Touch)Move\\s*=",
+     "same_file_as": "scene"
+    },
+    {
+     "view": "script",
+     "re": "\\.setPointer\\s*\\("
+    },
+    {
+     "view": "script",
+     "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`][^'\"`\\n]{0,300}(?<![\\w-])scenes/(?!(?:depth|lazy)(?:\\.m?js)?['\"`])[\\w-]+(?:\\.m?js)?['\"`]"
+    },
+    {
+     "view": "script",
+     "re": "\\blazyScene\\s*\\("
+    }
+   ]
+  },
+  {
+   "level": 4,
+   "id": "fallback",
+   "name": "a fallback for no WebGL",
+   "needs": "give the scene a still for no WebGL and reduced motion: data-scene-poster on it, in the container's template (up to six levels down), or a branch for no WebGL",
+   "signals": [
+    {
+     "view": "markup",
+     "re": "<[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sdata-scene-poster\\b",
+     "inside": "scene"
+    },
+    {
+     "view": "style",
+     "re": "\\[\\s*data-scene\\s*=\\s*['\\\"]?fallback\\b",
+     "with": "scene"
+    },
+    {
+     "view": "markup",
+     "re": "<(?!video\\b)[A-Za-z][\\w.-]*\\b[^<>]{0,2000}?\\sposter\\s*=",
+     "inside": "scene"
+    },
+    {
+     "view": "script",
+     "re": "\\bif\\s*\\(\\s*!\\s*(?:[\\w$]+\\.)*(?:gl|ctx|context|webgl|renderer)\\s*\\)|\\b(?:gl|ctx|context)\\s*===?\\s*null\\b",
+     "also": "\\bgetContext\\s*\\(\\s*['\"`](?:webgl2?|experimental-webgl)['\"`]"
+    },
+    {
+     "view": "script",
+     "re": "!\\s*(?:window\\.)?WebGL2?RenderingContext\\b",
+     "with": "scene"
+    }
+   ]
+  },
+  {
+   "level": 5,
+   "id": "journey",
+   "name": "a scroll journey through the scene",
+   "needs": "build the journey with the kit's journey.js: chapters that move the camera through one scene (scenes.md section 6); setProgress alone is level 4's depth",
+   "signals": [
+    {
+     "view": "script",
+     "re": "(?:\\bfrom|\\bimport)\\s*\\(?\\s*['\"`][^'\"`\\n]{0,300}(?<![\\w-])journey(?:\\.m?js)?['\"`]"
+    }
+   ]
+  },
+  {
+   "level": 5,
+   "id": "shader",
+   "name": "a custom shader",
+   "needs": "write a shader of the app's own: a ShaderMaterial (or RawShaderMaterial) in the app's code, on the kit's glsl.js (motion.md section 10); a kit scene alone is not one",
+   "signals": [
+    {
+     "view": "script",
+     "re": "\\b(?:Raw)?ShaderMaterial\\b"
+    },
+    {
+     "view": "script",
+     "re": "\\bgl_FragColor\\b|\\bgl_Position\\b|\\bvoid\\s+main\\s*\\(\\s*(?:void\\s*)?\\)",
+     "strings": true
+    }
+   ]
+  },
+  {
+   "level": 5,
+   "id": "data",
+   "name": "a data hook",
+   "needs": "feed the app's own data into the scene: scene.setData(values) or a uniform set from the data",
+   "signals": [
+    {
+     "view": "script",
+     "re": "\\.setData\\s*\\(\\s*[^)\\s]"
+    },
+    {
+     "view": "script",
+     "re": "\\buniforms\\s*(?:\\.\\s*[\\w$]+|\\[[^\\]\\n]{1,100}\\])\\s*\\.\\s*value\\s*=(?!=)\\s*[^;\\n]{0,200}?\\b(?:data|values|stats|metrics|props|state|store|rows|series|items|readings?|json|response|payload)\\b"
+    }
+   ]
+  }
+ ]
+}

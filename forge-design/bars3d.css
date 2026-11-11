@@ -1,0 +1,141 @@
+/* bars3d.css: bars with depth for a dashboard at level 4 and 5 (forge-design dashboard, reference
+   section 13). Copy it into the app's styles; it reads only the app's tokens (--color-*, --text-*,
+   --duration-*, --ease-*) and works without script.
+
+   An oblique projection in CSS: each bar is a front face with a top face and a side face, on one
+   baseline and with no perspective, so a near bar never looks bigger than a far bar of the same
+   value. Every value is printed on its bar, and the same numbers stand in a table next to the chart.
+
+     <figure>
+       <figcaption>Orders per region, today</figcaption>
+       <div class="bars3d" data-depth="tilt" data-depth-glare="false"     the plane: depth.js may lean it
+            role="img" aria-label="Orders per region: North 269, Central 214, South 123">
+         <div class="bars3d-plot" data-depth-layer="1">                  depth.js writes transform here
+           <div class="bars3d-cross" aria-hidden="true"><i></i></div>    the crosshair, behind the bars
+           <div class="bars3d-col"><div class="bars3d-bar"><span class="bars3d-top"></span>
+             <span class="bars3d-side"></span><span class="bars3d-value">269</span></div></div>
+           ...one column per value
+         </div>
+       </div>
+       <div class="bars3d-labels" aria-hidden="true"><span>North</span>...</div>
+       <table>...the same values: the table is how they are read...</table>
+     </figure>
+
+   Set per chart --n (the number of columns) on .bars3d-plot and .bars3d-labels; per column --i (0,
+   1, 2 ...: the stagger) and per bar --h, its value as a part of the scale's top, 0 to 1 (269 of a
+   scale of 300 is .897). No outline of the period before stands behind a bar: where it is lower it
+   hides, a value nobody sees; print it ("214, yesterday 222") or put it in the table.
+   The crosshair's column is --x on .bars3d-plot; put its <i> in only while the crosshair is on
+   (reference section 13). Write them from script (element.style.setProperty)
+   or with the framework's style binding: a style attribute in server HTML needs a CSP that allows it.
+
+   Why it is built this way: a bar always has the full height of the plot and is moved down by
+   translateY((1 - h) x 100%), and its column clips only below the baseline, so a bar grows and
+   morphs on the compositor. scaleY would squash the top and side faces, and animating height is
+   layout. The faces are children of the bar, skewed by the depth vector (--bars3d-dx, --bars3d-dy),
+   so they ride along. depth.js writes transform on a layer, so the lean goes on the plane and its
+   layer, never on a bar. Reduced motion: the bars stand at their values at once, nothing leans.
+*/
+
+.bars3d {
+  --bars3d-dx: 10px;                       /* the depth vector: right and up */
+  --bars3d-dy: 6px;
+  --bars3d-width: clamp(8px, 46%, 32px);   /* a bar's front face, in its column */
+  --bars3d-height: 220px;                  /* the plot, without the room above it for the labels */
+  --bars3d-light: white;                   /* light falls on the top face, the side is in shade */
+  --bars3d-shade: black;
+  --bars3d-on: var(--color-surface);       /* the panel's background: the crosshair passes behind a value */
+  position: relative;
+  box-shadow: none;                        /* depth.css gives a tilt card a shadow; a HUD has none */
+}
+.bars3d-plot {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  height: var(--bars3d-height);
+  padding-top: calc(var(--bars3d-dy) + 1.5em);        /* room for the top face and the value */
+  border-bottom: 1px solid var(--color-text-muted);   /* the zero baseline */
+  font-size: var(--text-xs, 12px);
+}
+.bars3d-col {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  clip-path: inset(-100vh -100vw 0 -100vw);           /* only below the baseline is cut off */
+}
+.bars3d-bar {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: var(--bars3d-width);
+  height: 100%;
+  margin-left: calc(var(--bars3d-width) / -2 - var(--bars3d-dx) / 2);
+  transform: translateY(calc((1 - var(--h, 0)) * 100%));
+  background: var(--color-chart-1);
+}
+.bars3d-top,
+.bars3d-side { position: absolute; pointer-events: none; transform-origin: bottom left; }
+.bars3d-top {
+  left: 0;
+  bottom: 100%;
+  width: 100%;
+  height: var(--bars3d-dy);
+  background: color-mix(in oklab, var(--color-chart-1), var(--bars3d-light) 35%);
+  transform: skewX(calc(atan2(var(--bars3d-dx), var(--bars3d-dy)) * -1));
+}
+.bars3d-side {
+  left: 100%;
+  bottom: 0;
+  width: var(--bars3d-dx);
+  height: 100%;
+  background: color-mix(in oklab, var(--color-chart-1), var(--bars3d-shade) 30%);
+  transform: skewY(calc(atan2(var(--bars3d-dy), var(--bars3d-dx)) * -1));
+}
+.bars3d-value {
+  position: absolute;
+  left: calc(50% + var(--bars3d-dx) / 2);
+  bottom: calc(100% + var(--bars3d-dy) + 2px);
+  translate: -50% 0;
+  padding: 0 2px;
+  background: var(--bars3d-on);
+  line-height: 1.25;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+.bars3d-cross {                                       /* behind the bars; moved on the compositor */
+  position: absolute;
+  inset: calc(var(--bars3d-dy) + 1.5em) 0 0;
+  z-index: 0;
+  pointer-events: none;
+  container-type: inline-size;
+}
+.bars3d-cross > i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  translate: calc((var(--x, 0) + .5) / var(--n, 1) * 100cqw) 0;
+  background: var(--color-text-muted);
+}
+.bars3d-labels {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  margin-top: 4px;
+  font-size: var(--text-xs, 12px);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.bars3d-labels > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .bars3d-bar {                                       /* rises once, then moves to a new value */
+    transition: transform var(--duration-slower, 700ms) var(--ease-standard, ease);
+    animation: bars3d-rise var(--duration-slower, 700ms) var(--ease-standard, ease) both;
+    animation-delay: calc(var(--i, 0) * var(--duration-stagger, 40ms));
+  }
+  .bars3d-cross > i { transition: translate var(--duration-fast, 120ms) var(--ease-standard, ease); }
+}
+@keyframes bars3d-rise { from { transform: translateY(100%); } }

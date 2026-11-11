@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """The forge gate: which phase comes next, and may this phase be marked done?
 
-forge-work/state.json records the mode and each phase that is done (with the user's words of go and the
-time) or skipped (with the reason). A phase is done only when its exit checks pass (phasecheck.py, next
-to this script), the words are given and every earlier phase (MODES) is done or skipped. In auto mode the
-words are those the user asked for it with (done --auto): no new go per phase, but for secure (ASKS).
-Only this script writes state.json: a temporary file, then a rename. Run it from the project root. init
-also writes forge-work/.gitignore (`*`), so git never picks up the notes and screenshots in there.
+forge-work/state.json records the mode and each phase that is done (with the user's words of go and the time)
+or skipped (with the reason). A phase is done only when its exit checks pass (phasecheck.py, next to this script),
+the words are given and every earlier phase (MODES) is done or skipped. In auto mode the words are those the user
+asked for it with (done --auto): no new go per phase, but for secure (ASKS). motion is skipped only at look level 1.
+Only this script writes state.json. Run it from the project root. init also writes forge-work/.gitignore (`*`).
 
 Usage:
     python3 gate.py init --mode idea --about 'a booking app for my salon'   (clone, idea or improve)
@@ -16,11 +15,11 @@ Usage:
 
 Exit codes:
     0  state started, checks passed, phase recorded, or status shown
-    1  refused: a check fails, no words or no reason, an earlier phase is still open, the phase may not
-       be skipped, --auto for secure, or a state exists already (init without --force)
-    2  a phase not in this mode, or a damaged or linked state.json (a link is never read); for status, done
-       and skip also no state.json here (check then only looks at the files: run status first); for init,
-       done and skip a linked forge-work (init: or its .gitignore): nothing written
+    1  refused: a check fails, no words or no reason, an earlier phase is still open, the phase may not be skipped
+       (motion: only at look level 1 or none), --auto for secure, or a state exists already (init without --force)
+    2  a phase not in this mode; a damaged or linked state.json (a link is never read); for status, done and
+       skip no state.json here (check then only looks at the files: run status first); for init, done and skip a
+       linked forge-work (init: or its .gitignore): nothing written
 """
 
 import argparse
@@ -39,22 +38,23 @@ LINKED = ("%s is a link. forge writes only into a folder of its own in the proje
           "Change nothing yourself: tell the user and ask them to look (ls -la forge-work).")
 VERSION = 1  # of the state.json format
 TIMEOUT = 1800  # seconds for one phase's exit checks: up to two scripts of 600 seconds each, and more
-MODES = {
-    "clone": ["recon", "compare", "plan", "design", "build", "dashboard", "motion", "test", "diff", "brand",
-              "launch", "secure", "pack"],
-    "idea": ["compare", "plan", "design", "build", "dashboard", "motion", "test", "brand", "launch", "secure", "pack"],
-    "improve": ["audit", "inspect", "improve", "test", "secure"],
-}
+HERE = os.path.dirname(os.path.abspath(__file__))  # phases.json, phasecheck.py and level.py are next to this script
+try:  # phases.json: each mode's phases, which may be skipped, each one's skill, what the gate says (see its _about)
+    with open(os.path.join(HERE, "phases.json"), encoding="utf-8") as table:
+        table = json.load(table)
+    MODES, OPTIONAL, ONLY, ADDED, ASKS, PARTS, STEPS = (table[key] for key in (
+        "modes", "optional", "skip_only", "added", "asks", "parts", "steps"))
+except (OSError, ValueError, LookupError, TypeError) as table_error:
+    sys.exit("error: forge/phases.json is missing or broken (%s)" % table_error)
 PHASES = list(dict.fromkeys(phase for phases in MODES.values() for phase in phases))
-OPTIONAL = ("compare", "inspect", "dashboard", "motion")  # may be skipped with the user's reason; secure never
-ADDED = ("dashboard", "motion")  # newer than some projects: a state from before them records neither
-ASKS, AUTO = ("secure",), "auto mode: "  # auto mode never records ASKS; what it records starts with AUTO
+SKILL = {**{phase: "forge-" + phase for phase in PHASES},  # the skill to run for a phase: its own, or the part of one
+         **{phase: "forge-%s %s" % (skill, phase) for skill, parts in PARTS.items() for phase in parts}}
+AUTO = "auto mode: "  # what auto mode records starts with this
 PYTHON = shlex.quote(sys.executable) if os.name == "nt" and sys.executable else "python3"  # no python3 on Windows
 PLACEHOLDER = re.compile(r"^(<.*>|\{\{.*\}\}|TEXT)$", re.S)  # copied from the docs, not said by the user
 TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:[+-]\d\d:\d\d)?\Z")  # as this script writes it
-# What a terminal hides or acts on (control, format, line separators): no words, and shown as \u escapes.
-ESCAPE = {code: "\\u%04x" % code for code in [*range(0x10000), *range(0xE0000, 0xE0080)]
-          if unicodedata.category(chr(code)) in ("Cc", "Cf", "Cs", "Zl", "Zp")}
+ESCAPE = {code: "\\u%04x" % code for code in [*range(0x10000), *range(0xE0000, 0xE0080)]  # hidden or acted on:
+          if unicodedata.category(chr(code)) in ("Cc", "Cf", "Cs", "Zl", "Zp")}  # no words, shown as \u escapes
 
 
 class StateError(Exception):
@@ -156,11 +156,10 @@ def last_go(state, phase):
 
 
 def exit_checks(root, phase, state=None, as_json=False, until=None):
-    """Run phasecheck.py for PHASE in ROOT and show what it says: 0 when every check passes, else 1. With a
-    STATE: in its mode, and the report must be newer than the last go before it and its inputs before UNTIL."""
-    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "phasecheck.py")
-    command = [sys.executable, script, phase] + (["--mode", state["mode"], "--since", last_go(state, phase)]
-                                                 + (["--until", until] if until else []) if state else [])
+    """Run phasecheck.py for PHASE in ROOT and show what it says: 0 when every check passes, else 1. With a STATE: in
+    its mode, and the report must be newer than the last go before it and its inputs before UNTIL (its own go)."""
+    command = [sys.executable, os.path.join(HERE, "phasecheck.py"), phase] + (state and [
+        "--mode", state["mode"], "--since", last_go(state, phase)] + (["--until", until] if until else []) or [])
     try:
         done = subprocess.run(command + (["--json"] if as_json else []), cwd=root, stdin=subprocess.DEVNULL,
                               capture_output=True, encoding="utf-8", errors="replace", timeout=TIMEOUT,
@@ -174,16 +173,13 @@ def exit_checks(root, phase, state=None, as_json=False, until=None):
 
 
 def next_step(state):
-    """The next step in plain words, with the commands to run."""
+    """The next step in plain words, with the commands to run: one of phases.json's steps, filled in."""
     waiting, gate = still_open(state), PYTHON + " " + shlex.quote(os.path.abspath(__file__))
     if not waiting:
-        return "All phases are done. Tell the user what they have now, what is left, and that shipping is their step."
-    text = ("Next: {0}. Run /forge-{0}, then {1} check {0}. Show the user the skill's checkpoint plus one line "
-            "with the gate result, and wait for their go. Then: {1} done {0} --approved '<their exact words>'")
-    if state.get("auto") and waiting[0] not in ASKS:  # the last phase but ASKS was recorded with --auto
-        text = "Next: {0}. Auto mode: run /forge-{0}, fix what fails (rules.md 7), then {1} done {0} --auto '<ask>'"
-    skip = ". Or, when the user says so: {1} skip {0} --reason '<their reason>'".format(waiting[0], gate)
-    return text.format(waiting[0], gate) + (skip if waiting[0] in OPTIONAL else "")
+        return STEPS["done"]
+    text = STEPS["auto" if state.get("auto") and waiting[0] not in ASKS else "plain"]  # ASKS: never --auto
+    return (text + STEPS["skip"] * (waiting[0] in OPTIONAL)).format(waiting[0], gate, SKILL[waiting[0]],
+                                                                     ONLY.get(waiting[0], ""))
 
 
 def refuse(text):
@@ -204,8 +200,8 @@ def cmd_init(root, args):
     state = {"version": VERSION, "mode": args.mode, "phases": {}, "started": now()}
     state.update({"about": args.about.strip()} if shows(args.about or "") else {})  # for a later session, too
     write_whole(root, "state.json", state)
-    print("Started forge in %s mode in %s.\nPhases: %s.\n%s"
-          % (args.mode, root, ", ".join(MODES[args.mode]), next_step(state)))
+    print("Started forge in %s mode in %s.\nPhases: %s.\n%s\n%s"
+          % (args.mode, root, ", ".join(MODES[args.mode]), next_step(state), STEPS["init"]))
     return 0
 
 
@@ -214,7 +210,7 @@ def cmd_status(root, args):
     for phase in MODES[state["mode"]]:
         entry = state["phases"].get(phase, {})
         status = entry.get("status") or ("next" if phase == still_open(state)[0] else "waiting")
-        rows.append(dict(entry, phase=phase, status=status, skill="forge-" + phase, optional=phase in OPTIONAL))
+        rows.append(dict(entry, phase=phase, status=status, skill=SKILL[phase], optional=phase in OPTIONAL))
     if args.json:
         print(json.dumps({"mode": state["mode"], "about": state.get("about"), "started": state["started"],
                           "phases": rows, "next_step": next_step(state)}, indent=2))
@@ -222,7 +218,7 @@ def cmd_status(root, args):
     print("forge, %s mode, started %s" % (state["mode"], state["started"]))
     print("About: %s\n" % quote(state["about"]) if "about" in state else "")
     for row in rows:
-        detail = "/" + row["skill"] + ("  (may be skipped)" if row["optional"] else "")
+        detail = "/" + row["skill"] + ("  (may be skipped%s)" % ONLY.get(row["phase"], "") if row["optional"] else "")
         if row["status"] in ("done", "skipped"):  # quote() shows line breaks and hidden characters as escapes
             label = "approved" if row["status"] == "done" else "reason"
             detail = "%s  %s: %s" % (row["at"], label, quote(row[label]))
@@ -234,8 +230,7 @@ def cmd_status(root, args):
 def cmd_check(root, args):
     """The exit checks: of the state's mode when there is one (a phase of another mode: exit 2), else of the files."""
     state = load_state(root, args.phase) if os.path.lexists(os.path.join(root, STATE)) else None
-    own = state["phases"].get(args.phase, {}).get("at") if state else None  # done already: a later change is not its
-    return exit_checks(root, args.phase, state, args.json, own)
+    return exit_checks(root, args.phase, state, args.json, state and state["phases"].get(args.phase, {}).get("at"))
 
 
 def cmd_mark(root, args):
@@ -248,6 +243,11 @@ def cmd_mark(root, args):
     if skipping and phase not in OPTIONAL:
         return refuse("secure can never be skipped: nothing ships without Verdict: PASS." if phase == "secure"
                       else "%s cannot be skipped. Only %s may be." % (phase, ", ".join(OPTIONAL)))
+    got = subprocess.run([sys.executable, os.path.join(HERE, "level.py"), "get", "look"], cwd=root, timeout=120,
+                         input=b"", capture_output=True) if skipping and phase in ONLY else None
+    if got and (got.returncode, got.stdout[:2] if got.returncode == 0 else got.stderr) not in ((0, b"1 "), (1, b"")):
+        said = " ".join((got.stderr or got.stdout).decode("utf-8", "replace").split())  # "4 Showpiece", or why not
+        return refuse(STEPS["held"].format(said[:1]) if got.returncode == 0 else STEPS["unread"].format(said[:400]))
     if not shows(words) or PLACEHOLDER.match(words):
         return refuse("--reason needs the user's reason for skipping it." if skipping else "--approved and --auto "
                       "need the user's own words, as they typed them in this chat. No go yet: wait for it.")

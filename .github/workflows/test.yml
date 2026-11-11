@@ -40,11 +40,11 @@ jobs:
       # Run every test: each script's tests plus the repo conventions in tests/test_repo.py.
       - run: python -m unittest discover -s tests -v
       # Dogfood: the repo itself must pass its own secret scan.
-      - run: python forge-secure/secretscan.py .
+      - run: python forge-check/secretscan.py .
 
   templates:
-    # forge-pack's container templates, one job per stack profile. Each is installed in a scratch
-    # folder the way forge-pack installs it, then compose must accept it and packcheck.py must
+    # forge-build pack's container templates, one job per stack profile. Each is installed in a scratch
+    # folder the way forge-build pack installs it, then compose must accept it and packcheck.py must
     # find nothing at all.
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -66,7 +66,7 @@ jobs:
       - name: Install the template in a scratch folder
         run: |
           dir="$RUNNER_TEMP/$PROFILE"
-          cp -r "forge-pack/templates/$PROFILE" "$dir"
+          cp -r "forge-build/templates/$PROFILE" "$dir"
           mv "$dir/dockerignore" "$dir/.dockerignore"
           mv "$dir/env.example" "$dir/.env.example"
           cp "$dir/.env.example" "$dir/.env"
@@ -77,4 +77,4 @@ jobs:
           COMPOSE_PROFILES=dev docker compose -f "$RUNNER_TEMP/$PROFILE/docker-compose.yml" config -q
       # Dockerfile, compose file, .dockerignore and .env.example: not even a low finding.
       - name: packcheck
-        run: python forge-pack/packcheck.py "$RUNNER_TEMP/$PROFILE" --fail-on low
+        run: python forge-build/packcheck.py "$RUNNER_TEMP/$PROFILE" --fail-on low

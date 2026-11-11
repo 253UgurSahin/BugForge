@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Is a phase's work there, besides its report? The forge gate's checks of the work files: the feature
-list, the design tokens, the end-to-end specs, the screenshots forge-diff compared and the app's new
-name. phasecheck.py runs it for the exit checks of a phase. Run it from the project root. It reads
-files; it changes nothing.
+list, the design tokens and component specs, the end-to-end specs, the screenshots forge-check diff
+compared and the app's new name. phasecheck.py runs it for the exit checks of a phase (lookcheck.py, next
+to it, checks that a new look shows). Run it from the project root. It reads files; it changes nothing.
 
 Usage:
     python3 workcheck.py features forge-work/features.csv --theirs
@@ -11,21 +11,24 @@ Usage:
     python3 workcheck.py specs 'e2e/**/*.spec.*' 'e2e/**/*.test.*'
     python3 workcheck.py compared forge-work/screens
     python3 workcheck.py named forge-work/brand.json --json
+    python3 workcheck.py components forge-work/design/components.md
 
 features FILE: features.csv in the contract: the header feature,area,priority,original,clone,notes,
   6 cells a row, values parity.py reads (empty is yes for original, no for clone), a feature name, a
-  reason for each skip; not only the example rows of ../forge-recon/features.csv; and a must-have
+  reason for each skip; not only the example rows of ../forge-research/features.csv; and a must-have
   that is not skipped. --theirs: one that the original has (original yes), so parity.py can score it.
 built FILE: each must-have is built (clone yes), or partial or skip with a note on what is missing or
   why, and at least one is built.
 tokens FILE TEMPLATE: the JSON FILE holds values of its own, not every value of TEMPLATE (keys that
   start with _ are notes).
 specs PATTERN...: a file like one of the patterns (** is any folders), outside node_modules.
-compared FOLDER: when FOLDER holds reference screenshots (S07.png, S07-mobile.png), forge-diff
+compared FOLDER: when FOLDER holds reference screenshots (S07.png, S07-mobile.png), forge-check diff
   compared them: one .diff.json at least, and each one a JSON object. No reference screenshot
   (recon could take none): nothing to compare.
 named FILE: the "name" in the JSON FILE (brand.json) is in a file of the app, in any case: outside
   forge-work/, dependencies, builds, e2e/, .env files, links and FILE itself.
+components FILE: under ## Components of FILE (components.md), one block per component as forge-design
+  design Step 5 writes it: each with its `states` line (code blocks count, comments do not).
 
 Exit codes:
     0  the check passes
@@ -47,6 +50,8 @@ VALUES = (("priority", 2, ("must", "should", "could")), ("original", 3, ("yes", 
           ("clone", 4, ("yes", "partial", "no", "skip", "")))  # as parity.py reads them: empty is yes, no
 SKIP = {".git", "node_modules", "vendor", "venv", ".venv", "__pycache__", ".next", "dist", "build", "out",
         "coverage", "forge-work", "e2e"}  # dependencies, builds, notes and tests: not the app people see
+COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.S)  # an HTML comment: the template's notes, not a spec
+STATES = re.compile(r"(?im)^[ \t>*_-]*states\b[ \t*_:]*[^\s*_:]")  # a block's `  states    default, hover, ...`
 
 
 def read(path):
@@ -90,10 +95,10 @@ def check_features(name, theirs=False):
     body, failed = feature_rows(name)
     if failed:
         return failed
-    example = os.path.join(PACK, "forge-recon", "features.csv")
+    example = os.path.join(PACK, "forge-research", "features.csv")
     examples = [row for _, row in csv_rows(read(example))] if os.path.isfile(example) else []
     if body and all(row in examples for _, row in body):
-        return False, "%s has only example rows of ../forge-recon/features.csv, not this app's features" % name, []
+        return False, "%s has only example rows of ../forge-research/features.csv, not this app's features" % name, []
     musts = sum(1 for _, row in body if row[2].lower() == "must" and row[4].lower() != "skip"
                 and not (theirs and row[3].lower() == "no"))
     return musts > 0, "%s has the contract header and %d row(s) with priority must, not skipped%s" % (
@@ -133,7 +138,7 @@ def check_specs(*patterns):
         if found:
             return True, "end-to-end specs: %s" % found[0].replace(os.sep, "/"), []
     return False, "no end-to-end spec: no file like %s" % " or ".join(patterns), [
-        "Write one spec per flow, set up as the top of ../forge-test/e2e.example.spec.ts says."]
+        "Write one spec per flow, set up as the top of ../forge-check/e2e.example.spec.ts says."]
 
 
 def check_compared(folder):
@@ -142,7 +147,7 @@ def check_compared(folder):
     diffs = [name for name in names if name.endswith(".diff.json")]
     if shots and not diffs:
         return False, "%s has %d reference screenshot(s) and no .diff.json" % (folder, len(shots)), [
-            "Compare each reference screenshot with the clone's of the same name: ../forge-diff/imgdiff.py --json."]
+            "Compare each reference screenshot with the clone's of the same name: ../forge-check/imgdiff.py --json."]
     broken = []
     for name in diffs:
         try:
@@ -174,7 +179,18 @@ def check_named(config):
             except OSError:
                 continue
     return False, "the name %s from %s is in no file of the app" % (name or "(none)", config), [
-        "Put it in the app name setting, the titles, the manifest and the README (forge-brand Step 6)."]
+        "Put it in the app name setting, the titles, the manifest and the README (forge-design brand Step 6)."]
+
+
+def check_components(name):
+    """forge-design design Step 5: the specs /forge-build builds from, a block per component, not a line about them."""
+    parts = re.split(r"(?im)^ {0,3}##[ \t]+components\b.*$", COMMENT.sub("", read(name)), maxsplit=1)
+    blocks = STATES.findall(re.split(r"(?m)^ {0,3}##[ \t]", parts[1])[0] if len(parts) > 1 else "")
+    if not blocks:
+        return False, "%s: ## Components holds no component block with a states line" % name, [
+            "Write one block per component, or per kind (every button in one), with its variants, sizes, states, "
+            "motion, tokens and a11y lines, as forge-design design Step 5 shows; on the user's own app with files."]
+    return True, "%s: ## Components holds %d component block(s), each with its states" % (name, len(blocks)), []
 
 
 def shown(path):
@@ -197,7 +213,8 @@ def main(argv=None):
             ("built", ["file"], "each must-have built, or partial or skipped with a note"),
             ("tokens", ["file", "template"], "tokens with values of their own"),
             ("specs", ["pattern"], "an end-to-end spec"), ("compared", ["folder"], "the screenshots compared"),
-            ("named", ["file"], "the app carries the name in brand.json")):
+            ("named", ["file"], "the app carries the name in brand.json"),
+            ("components", ["file"], "a block per component, each with its states")):
         sub = commands.add_parser(command, help=words)
         for argument in arguments:
             sub.add_argument(argument, nargs="+" if argument == "pattern" else None)
@@ -207,7 +224,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     run = {"features": lambda: check_features(args.file, args.theirs), "built": lambda: check_built(args.file),
            "tokens": lambda: check_tokens(args.file, args.template), "specs": lambda: check_specs(*args.pattern),
-           "compared": lambda: check_compared(args.folder), "named": lambda: check_named(args.file)}
+           "compared": lambda: check_compared(args.folder), "named": lambda: check_named(args.file),
+           "components": lambda: check_components(args.file)}
     try:
         ok, what, output = run[args.command]()
     except (OSError, ValueError, RecursionError, csv.Error) as error:  # missing, a folder, not UTF-8, JSON or CSV

@@ -7,11 +7,31 @@ Sells: {{nothing: the app is free | one-off (deposits, orders) | subscriptions |
 Domain: {{TO-FILL until the user gives it}}
 Pages: / {{/pricing | none: prices on the service or product list | none: free}} /privacy /terms /contact {{/dpa}}
 Testimonials: {{none | the person, and the date of their written OK}}
+Runs at: {{http://localhost:8080, the compose stack built from this folder on branch forge/launch; service worker: none}}
+Concept: {{B (Bridge at night), as the Concept line of forge-work/design/brief.md names it}}
+Level: {{4 (Showpiece)}}
 
 <!-- Replace every {{...}}, then delete this comment. A business detail nobody gave you stays TO-FILL.
+     Level: the look level as `python3 ../forge/level.py get look` prints it (level.py check look reads it).
      Pricing: one row per tier (subscriptions) or per service or product (one-off). Delete the rows and checklist
      items that do not fit, such as the "Subscriptions" items for a booking app that takes deposits. Nothing sold:
      the Pricing section is one line that says so and where the site says it is free; delete the Stripe items. -->
+
+## Landing page
+
+In the brand voice, in the concept and at the level above. Tick each part once you saw it on the rebuilt stack.
+
+- [ ] Hero: the angle as headline (what, for whom), one line, one button. Levels 1 to 3: a screenshot of the new
+      app. Levels 4 and 5: the concept's 3D scene, loaded lazily, with a poster; the headline readable over it.
+- [ ] The problem: the top two "hate" themes from feedback.md (or the user's words), in your own words.
+- [ ] How it works: three steps of the core flow.
+- [ ] Features: the rows with original = no first (what others lack), then the rest; only rows with clone = yes.
+- [ ] Prices where they stand (Step 3 of the skill), an FAQ (price, cancelling, your data), a call to action.
+- [ ] Footer: pricing (if a page), privacy, terms, contact, the business details; "Cookie settings" with a banner.
+- [ ] /contact shows contact details only: a form is a new data flow (rate limit, spam check, queued email, privacy
+      policy).
+- [ ] Theme variables only (a missing colour is a /forge-design change), self-hosted fonts, images with width and
+      height, no third-party scripts. PWA: yes: every page links the manifest and apple-touch-icon, sets theme-color.
 
 ## Pricing
 
@@ -22,7 +42,7 @@ Testimonials: {{none | the person, and the date of their written OK}}
 
 - Competitor prices: {{from compare.md | read again YYYY-MM-DD, untrusted.py: no hits | none (compare skipped)}}
 - Price feedback: {{14 of 112 reviews mention price (feedback.md) | none}}
-- plan.md: {{unchanged | Payments section updated, decisions log row of YYYY-MM-DD}}
+- plan.md: {{unchanged | Payments section updated after the user's yes (YYYY-MM-DD), decisions log row}}
 - Shown: {{on /pricing | on the service list and the booking page, with the cancelling and no-show rules}}
 - Checkout by hand, test mode, iDEAL "Authorize": {{Solo ok, Team ok | Haircut deposit ok}} ({{YYYY-MM-DD}})
 
@@ -75,7 +95,7 @@ Check against acm.nl (selling to consumers), the KvK and the Belastingdienst. No
       a month's notice.
 - [ ] Consumers, where the right of withdrawal applies: the withdrawal button works during the 14 days and sends an
       email receipt (EU rule from 19 June 2026: check the date of the Dutch law on acm.nl).
-- [ ] A data processing agreement with each processor (forge-secure's AVG checklist), and one offered to each
+- [ ] A data processing agreement with each processor (the AVG checklist of /forge-check secure), and one offered to each
       business customer whose clients' data the app holds.
 
 ## Launch checklist (the user's steps)
@@ -88,8 +108,21 @@ Check against acm.nl (selling to consumers), the KvK and the Belastingdienst. No
       IDs in the app's database and the Customer Portal set up again; live keys only in the server's `.env`; a
       live webhook endpoint with its own signing secret.
 - [ ] iDEAL becomes Wero: read Stripe's iDEAL to Wero migration page before going live.
-- [ ] Domain, TLS and a reverse proxy in front of the containers (RUN.md from forge-pack).
+- [ ] Domain, TLS and a reverse proxy in front of the containers (RUN.md from /forge-build pack).
 - [ ] SMTP with SPF, DKIM and DMARC; a support address someone reads; a backup restored once.
 - [ ] The trademark checks still "to run" in brand.md.
 - [ ] First users: a beta list, the places competitors' unhappy users talk (compare.md), the first 10 users
       spoken to by hand. Posts say who you are; never pose as a customer.
+
+## Shown
+
+What the user sees on their own screen (rules.md section 9 of the forge pack).
+
+- Before and after: forge-work/launch/shots/before and after; changed.py: {{VISIBLE CHANGE, 41% of home-1440-light.png}};
+  --overflow and --contrast: {{no line}}
+- Moves: {{changed.py --moves on f1 to f4 of / (home-390-f[1-4].png): something moves; levels 4 and 5 also on
+  home-1440-s*.png: the hero scene moves | level 1: no frames taken}}
+- Clip: {{forge-work/launch/shots/motion/home-1440.webm | none (level 1)}}
+- motioncount.py --level auto: {{exit 0}}; level.py check look: {{exit 0}}
+- Walk of the new pages: {{round r2, walkcheck.py exit 0 | test level under 3: not walked}}
+- Told the user: {{the branch, the address, where to look first, the reduced-motion setting, how to go back}}

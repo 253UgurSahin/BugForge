@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""Is the work of one forge phase there and finished? These are the exit checks the forge gate runs
-before it records a phase as done: `gate.py check PHASE` and `gate.py done PHASE` run this script.
-Run it from the project root. It reads files and runs the other skills' scripts; it changes nothing.
-The checks of each phase are in phasecheck.json next to it, each with the skill line it rests on.
-Two scripts next to it do part of the work: doccheck.py (the reports) and workcheck.py (the rest).
+"""Is the work of one forge phase there and finished? These are the exit checks the forge gate runs before it
+records a phase as done: `gate.py check PHASE` and `gate.py done PHASE` run this script. Run it from the project
+root: it reads files and runs the other skills' scripts, and changes nothing. The checks of each phase are in
+phasecheck.json, each with the skill line it rests on; doccheck.py, workcheck.py and lookcheck.py do part of them.
 
 Usage:
     python3 phasecheck.py plan
     python3 phasecheck.py secure --since 2026-10-27T09:51:44+00:00 --mode improve --json
 
---since TIME: the phase's report must be newer than TIME, the last go before the phase, so a report from
-before test's fixes, from the build or from an earlier round does not count: test-plan.md (test),
-parity.md (diff; also newer than bugs.md and features.csv, which the fix loop and forge-build change),
-security.md (secure), audit.md, inspect.md and improve.md, all in forge-work/.
+--since TIME: the last go before the phase. The phase's report, the level's evidence in forge-work/ and the
+shots and frames lookcheck.py reads must be newer, so a report from before test's fixes, the build or an
+earlier round does not count: test-plan.md (test), parity.md (diff; also newer than bugs.md and features.csv,
+which the fix loop and forge-build build change), security.md (secure), audit.md, inspect.md, improve.md.
 --until TIME: the phase's own go, once it is done: a bugs.md or features.csv changed later is a later phase's.
 --mode MODE: clone, idea or improve, for the checks that differ by mode (where test's specs are).
 Without it, the mode in forge-work/state.json; without that, only the checks every mode shares.
@@ -41,6 +40,7 @@ UNSEEN = re.compile(r"<!--.*?(?:-->|\Z)|^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1|\Z)"
 FRESH = {"test": "forge-work/test-plan.md", "diff": "forge-work/parity.md", "secure": "forge-work/security.md",
          "audit": "forge-work/audit.md", "inspect": "forge-work/inspect.md", "improve": "forge-work/improve.md"}
 INPUTS = {"diff": ("forge-work/bugs.md", "forge-work/features.csv")}  # a fresh report is newer than these too
+AGED = ("forge/level.py", "forge/lookcheck.py")  # the scripts that get --since: what they read must be of this round
 
 
 def read_text(*parts):
@@ -86,9 +86,8 @@ def check_json(root, name, *keys):
 
 
 def run_script(root, script, *args):
-    """Run another forge script in ROOT: (exit code, None when it hung and -1 when it crashed; its output;
-    its errors; the command as the skills write it). An argument that starts with ../ is a file of the
-    pack. The script writes UTF-8 and is read as such, also where pipes are cp1252 (Windows)."""
+    """Run another forge script in ROOT: (exit code, None when it hung and -1 when it crashed; its output; its
+    errors; the command as the skills write it). A ../ argument is a file of the pack. Read as UTF-8 (cp1252 too)."""
     args = [os.path.join(PACK, arg[3:]) if arg.startswith("../") else arg for arg in args]
     shown = " ".join([PYTHON, "../" + script] + [arg.replace(PACK + os.sep, "../") for arg in args])
     try:
@@ -97,20 +96,17 @@ def run_script(root, script, *args):
                               env=dict(os.environ, PYTHONIOENCODING="utf-8"))
     except subprocess.TimeoutExpired:
         return None, "", "", shown
-    crashed = "Traceback (most recent call last)" in done.stderr
-    return -1 if crashed else done.returncode, done.stdout, done.stderr, shown
+    return -1 if "Traceback (most recent" in done.stderr else done.returncode, done.stdout, done.stderr, shown
 
 
 def ran(code, out, err, shown):
-    """The answer for one run of a script: it passes when it exits 0 and printed its report. Every forge
-    script prints what it checked, so no output means it checked nothing."""
+    """The answer for one run of a script: a pass when it exits 0 and printed its report (none: it checked nothing)."""
     if code is None:
         return False, "%s did not finish within %d seconds" % (shown, TIMEOUT)
     if code == 0 and out.strip():
         return True, "%s exits 0" % shown
-    meaning = ("it crashed: this is a bug in that script" if code == -1
-               else "it printed nothing, so it checked nothing" if code == 0
-               else {1: "it found problems", 2: "it could not check"}.get(code, "it stopped"))
+    meaning = ("it crashed: this is a bug in that script" if code == -1 else "it printed nothing, so it checked nothing"
+               if code == 0 else {1: "it found problems", 2: "it could not check"}.get(code, "it stopped"))
     lines = [line.rstrip()[:200] for line in (err + out).splitlines() if line.strip()]
     return False, "%s exits %d: %s" % (shown, 1 if code == -1 else code, meaning), cut(lines)
 
@@ -121,8 +117,8 @@ def check_run(root, script, *args):
 
 
 def check_tool(root, script, *args):
-    """Run doccheck.py or workcheck.py, next to this script, with --json: each of its checks comes out as
-    a line of this phase. When it cannot check (exit 2, a crash), it fails as check_run does."""
+    """Run a script next to this one (doccheck.py, workcheck.py, lookcheck.py, level.py) with --json: each of its
+    checks comes out as a line of this phase. When it cannot check (exit 2, a crash), it fails as check_run does."""
     code, out, err, shown = run_script(root, script, *(args + ("--json",)))
     try:
         if code in (0, 1):
@@ -134,16 +130,14 @@ def check_tool(root, script, *args):
 
 def check_doc(root, name, *args):
     """NAME, a report, as doccheck.py checks it with ARGS. A missing NAME is named once, like any file."""
-    if not os.path.isfile(os.path.join(root, name)):
-        return False, "%s is missing" % name
-    return check_tool(root, "forge/doccheck.py", name, *args)
+    there = os.path.isfile(os.path.join(root, name))
+    return check_tool(root, "forge/doccheck.py", name, *args) if there else (False, "%s is missing" % name)
 
 
 def check_work(root, command, *args):
-    """workcheck.py COMMAND ARGS: the feature list, the tokens, the specs, the screenshots, the name."""
-    if command in ("features", "built", "tokens", "named") and not os.path.isfile(os.path.join(root, args[0])):
-        return False, "%s is missing" % args[0]
-    return check_tool(root, "forge/workcheck.py", command, *args)
+    """workcheck.py COMMAND ARGS: the feature list, the tokens, the components, the specs, the screenshots, the name."""
+    there = command in ("specs", "compared") or os.path.isfile(os.path.join(root, args[0]))  # else a file to read
+    return check_tool(root, "forge/workcheck.py", command, *args) if there else (False, "%s is missing" % args[0])
 
 
 def accepted(root, name):
@@ -155,23 +149,21 @@ def accepted(root, name):
 
 def check_scan(root, report, script, *args):
     """A scanner, as check_run runs it. Its exit 1 passes too when REPORT names risks the user accepted:
-    forge-secure lets the user accept one specific risk (The gate). Secrets never: they use check_run."""
+    forge-check secure lets the user accept one specific risk (The gate). Secrets never: they use check_run."""
     result = run_script(root, script, *args)
     answer = ran(*result)
-    if result[0] != 1 or not accepted(root, report):
-        return answer
-    return True, "%s; %s has accepted risks: each finding must be one of them" % (answer[1], report), answer[2]
+    return answer if result[0] != 1 or not accepted(root, report) else (
+        True, "%s; %s has accepted risks: each finding must be one of them" % (answer[1], report), answer[2])
 
 
 def check_counts(root, name):
-    """The Counts line of forge-secure's report. With Verdict: PASS, a critical or high finding counted
-    there needs the user's acceptance under ## Accepted risks (forge-secure, The gate)."""
+    """The Counts line of forge-check secure's report. With Verdict: PASS, a critical or high finding counted
+    there needs the user's acceptance under ## Accepted risks (forge-check secure, The gate)."""
     text = UNSEEN.sub("", read_text(root, name))
     lines = re.findall(r"(?im)^[ \t>*_]*counts[ \t*_]*:(.*)$", text)
-    numbers = [re.search(r"(\d+)\s*%s" % word, lines[0]) if len(lines) == 1 else None
-               for word in ("critical", "high")]
+    numbers = [re.search(r"(\d+)\s*%s" % word, lines[0]) if len(lines) == 1 else None for word in ("critical", "high")]
     if not all(numbers):
-        return False, "%s needs one line `Counts: 0 critical, 0 high, 1 medium, 0 low`, as in forge-secure's " \
+        return False, "%s needs one line `Counts: 0 critical, 0 high, 1 medium, 0 low`, as in forge-check secure's " \
                       "report (found: %s)" % (name, " / ".join(line.strip() for line in lines)[:80] or "none")
     serious = sum(int(number.group(1)) for number in numbers)
     if serious and re.search(r"(?m)^Verdict: PASS[ \t]*$", text) and not accepted(root, name):
@@ -191,15 +183,22 @@ def check_fresh(root, name, since, until, *inputs):
     later = [other for other in inputs if os.path.isfile(os.path.join(root, other))
              and written < os.path.getmtime(os.path.join(root, other)) <= end]
     if later:
-        return False, "%s is older than %s, which the fix loop or forge-build changed after it. Run the " \
+        return False, "%s is older than %s, which the fix loop or forge-build build changed after it. Run the " \
                       "phase's skill again from its first step, so it writes a new one" % (name, " and ".join(later))
     also = " and than " + " and ".join(inputs) + (" at its go (%s)" % until if until else "") if inputs else ""
     return True, "%s is newer than the last go (%s)%s" % (name, since, also)
 
 
+def picked(root, name, section, start):
+    """'when' [NAME, SECTION, START]: a line that starts with START under NAME's ## SECTION, comments and code aside."""
+    text = UNSEEN.sub("", read_text(root, name)) if os.path.isfile(os.path.join(root, name)) else ""
+    part = (re.split(r"(?im)^ {0,3}##[ \t]+%s.*$" % re.escape(section), text, maxsplit=1) + [""])[1]
+    start = r"(?im)^ {0,3}" + r"[ \t]+".join(map(re.escape, start.split()))  # any spaces, as lookcheck reads it
+    return bool(re.search(start, re.split(r"(?m)^ {0,3}##[ \t]", part)[0]))
+
+
 def load_table(path):
-    """{phase: [entry]} from phasecheck.json. An entry's check names a function here (check_ + the name)
-    and its arguments; 'modes', 'profiles' and 'when' limit where it runs; 'why' is the skill line it rests on."""
+    """{phase: [entry]} from phasecheck.json: a check is a function here (check_ + its name); its _about has the keys."""
     with open(path, encoding="utf-8") as handle:
         table = json.load(handle)
     return {phase: [dict(entry, run=globals()["check_" + entry["check"][0]], args=entry["check"][1:])
@@ -216,7 +215,7 @@ def mode_of(root):
 
 
 def profile_of(root):
-    """The profile on plan.md's one Profile: line, or None: no plan.md (forge-pack on its own), no line."""
+    """The profile on plan.md's one Profile: line, or None: no plan.md (forge-build pack on its own), no line."""
     try:
         found = re.findall(r"(?im)^[ \t>#*_]*profile[ \t*_]*:(.*)$",
                            UNSEEN.sub("", read_text(root, "forge-work", "plan.md")))
@@ -226,21 +225,22 @@ def profile_of(root):
 
 
 def run_checks(root, phase, since=None, mode=None, until=None):
-    """Every exit check of PHASE in ROOT for MODE (None: not known) and plan.md's profile, plus the age of
-    its report when SINCE is given: a list of {"ok", "what", "output"}. A missing file is named once. A
-    check with 'when' runs only when that path is there; else its line says it was skipped."""
+    """Every exit check of PHASE in ROOT for MODE (None: not known) and plan.md's profile, plus its report's age with
+    SINCE: a list of {"ok", "what", "output"}. A missing file is named once; a check whose 'when' fails says skipped."""
     profile = profile_of(root)
     entries = [entry for entry in CHECKS[phase] if mode in entry.get("modes", [mode])
                and profile in entry.get("profiles", [profile])]
     fresh = [{"run": check_fresh, "args": [FRESH[phase], since, until, *INPUTS.get(phase, ())]}] \
         if since and phase in FRESH else []
-    results = []
+    results, age = [], ["--since", since] if since else []
     for entry in entries + fresh:
+        when = entry.get("when") or "."  # a path that is there, or [FILE, SECTION, START] (picked)
         try:
-            if "when" in entry and not os.path.exists(os.path.join(root, entry["when"])):
-                answers = True, "%s skipped: no %s" % (" ".join(entry["args"]), entry["when"])
+            if not (os.path.exists(os.path.join(root, when)) if isinstance(when, str) else picked(root, *when)):
+                answers = True, "%s skipped: no %s" % (" ".join(entry["args"]), when if isinstance(when, str) else
+                                                       "%s under ## %s of %s" % (when[2], when[1], when[0]))
             else:
-                answers = entry["run"](root, *entry["args"])
+                answers = entry["run"](root, *entry["args"], *(age if entry["args"][0] in AGED else []))
         except FileNotFoundError:
             answers = False, "%s is missing" % entry["args"][0]
         except (OSError, ValueError, RecursionError) as error:  # a folder, or not UTF-8 or JSON

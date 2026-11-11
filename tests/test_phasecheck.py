@@ -13,19 +13,22 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252  # noqa: E402
+from test_motioncount import sample_app  # noqa: E402  (an app at each look level, as motioncount.py counts it)
 
 phasecheck = load("forge", "phasecheck")
 gate = load("forge", "gate")
 HAS_GIT = shutil.which("git") is not None
-STATIC = os.path.join(ROOT, "forge-pack", "templates", "static")
+STATIC = os.path.join(ROOT, "forge-build", "templates", "static")
 OLD = 1500000000  # 2017: a file time long before any go
 FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
 
@@ -42,13 +45,50 @@ def write(root, name, text):
         handle.write(text)
 
 
+def png(rgb):
+    """A 4 x 4 PNG of one colour, made at run time."""
+    rows = b"".join(b"\0" + bytes(rgb) * 4 for _ in range(4))
+    chunk = lambda kind, body: struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 4, 8, 2, 0, 0, 0)) + \
+        chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+
+
+def shown(root, folder, after=(15, 123, 108), parts=("before", "after"), name="home-390-light.png"):
+    """FOLDER/before and FOLDER/after (or the PARTS given) with a shot of one screen each, as Show the result leaves
+    them: white before, AFTER's colour after (white too: no visible change)."""
+    for part, rgb in zip(parts, ((255, 255, 255), after)):
+        os.makedirs(os.path.join(root, folder, part), exist_ok=True)
+        with open(os.path.join(root, folder, part, name), "wb") as handle:
+            handle.write(png(rgb))
+
+
+def frames(root, folder, name="home", kind="f", moving=True):
+    """FOLDER/<NAME>-390-f1.png to -f4.png (KIND s: <NAME>-1440-s1.png to -s6.png), as shots.mjs --frames and
+    --scene-frames take them: each frame a shade darker than the one before it (MOVING), or all the same."""
+    os.makedirs(os.path.join(root, folder), exist_ok=True)
+    for number in range(1, 5 if kind == "f" else 7):
+        shade = 255 - 30 * number * moving
+        with open(os.path.join(root, folder, "%s-%s-%s%d.png" % (name, "390" if kind == "f" else "1440", kind,
+                                                                  number)), "wb") as handle:
+            handle.write(png((shade, shade, shade)))
+
+
 def template(folder, name):
     return read(os.path.join(ROOT, folder, name))
 
 
-def example(skill):
-    """The report in SKILL's Output section: the first markdown block of its SKILL.md."""
-    return template(skill, "SKILL.md").split("```markdown\n")[1].split("\n```\n")[0] + "\n"
+def example(phase):
+    """The report in the Output section of PHASE's steps: the first markdown block of its steps file (a phase that
+    is a skill of its own: of its SKILL.md)."""
+    skill, _, part = gate_skill(phase).partition(" ")
+    name = os.path.join("steps", part + ".md") if part else "SKILL.md"
+    return template(skill, name).split("```markdown\n")[1].split("\n```\n")[0] + "\n"
+
+
+def gate_skill(phase):
+    """The skill of PHASE as forge/phases.json gives it: "forge-check secure", or "forge-improve"."""
+    parts = json.loads(template("forge", "phases.json"))["parts"]
+    return next(("forge-%s %s" % (skill, phase) for skill, names in parts.items() if phase in names), "forge-" + phase)
 
 
 def filled(path, **lines):
@@ -97,13 +137,20 @@ PLAN = filled("forge-plan/plan.md", Profile="static", PWA="no", Mode="clone")
 CASES = "| case | flow | type | steps | expected | auto | result |\n| --- | --- | --- | --- | --- | --- | --- |\n" \
         "| F01-H1 | book a slot | happy | pick 10:00 | booked | e2e | pass |\n" \
         "| F01-E1 | | edge: slot taken | | message | e2e | fail B001 |\n"
-TEST_PLAN = re.sub(r"(?m)^\| case \|.*\n(?:\|.*\n)*", CASES, filled("forge-test/test-plan.md"))
+TEST_PLAN = re.sub(r"(?m)^\| case \|.*\n(?:\|.*\n)*", CASES, filled("forge-check/test-plan.md")).replace("Level: 3 (Standard)", "Level: 2 (Basic)")
 SPEC = "import { test } from '@playwright/test';\ntest('F01-H1 book a slot', async ({ page }) => {});\n"
 TOKENS = json.dumps(dict(json.loads(template("forge-design", "tokens.json")),
                          font={"sans": "IBM Plex Sans, system-ui, sans-serif", "mono": "ui-monospace, monospace"}))
-BUILD_LOG = "# Build log\n\n| ID | date | status | what | notes |\n| --- | --- | --- | --- | --- |\n" \
+# components.md ends with ## Components: one block under it, as forge-design design Step 5 writes it.
+COMPONENTS = filled("forge-design/components.md") + "\n```\nButton\n  variants  primary, secondary, ghost\n" \
+             "  states    default, hover, active, focus-visible, disabled, loading\n  used on   S02, S07\n```\n"
+CONCEPT = "<!doctype html><title>Slotwise: concept A</title><main><h1>Today: 12 bookings</h1></main>\n"
+REVIEW = "# Look review: Slotwise\nServed: docker compose on http://localhost:8080\n\n" \
+         "## Round 1 (2026-10-27, commit 3f2a1c9, judge: fresh eyes)\n| screen | score / 22 | no | weakest things | " \
+         "fixes |\n| --- | --- | --- | --- | --- |\n| home | 19 | | the stat row is loud | stat row in text-muted |\n"
+BUILD_LOG = "# Build log\nLevel: 2 (Polished)\n\n| ID | date | status | what | notes |\n| --- | --- | --- | --- | --- |\n" \
             "| S01 | 2026-10-27 | done | booking page | |\n"
-SECURITY = "# Security check\nDate: 2026-10-27\nVerdict: PASS\nCounts: 0 critical, 0 high, 1 medium, 0 low\n\n" \
+SECURITY = "# Security check\nDate: 2026-10-27\nLevel: 3 (Standard)\nVerdict: PASS\nCounts: 0 critical, 0 high, 1 medium, 0 low\n\n" \
            "## What was checked\n- secretscan, codecheck, deps (npm), headers (http://localhost:8080), trackers\n\n" \
            "## Coverage\n| OWASP 2021 | result |\n| --- | --- |\n| A03 Injection | ok: codecheck, flowcheck |\n\n" \
            "## Findings\n### X001 [medium] Login has no rate limit\nwhere: app/login.ts:12\n\n" \
@@ -144,16 +191,38 @@ INSPECT = "# Inspect: slotwise.example\nDate: 2026-10-27   Pages: 1   Mode: own 
           "has no label.\n\n## What was checked\n- Pages: https://slotwise.example/. headers.py, pagecheck.py\n\n" \
           "## Findings\n### I001 [medium] The email field has no label\nwhere: https://slotwise.example/, line 40\n\n" \
           "## Not checked\n- Lighthouse: Chrome is not installed.\n"
-DASHBOARD = "# Dashboard: Slotwise\nDate: 2026-10-27\n\n## Audience\nThe salon owner, each morning.\n\n" \
+DASHBOARD = "Level: 2 (Polished)\n# Dashboard: Slotwise\nDate: 2026-10-27\n\n## Audience\nThe salon owner, each morning.\n\n" \
             "## Numbers\n| number | definition | source | unit | period | compared with | form |\n" \
             "|---|---|---|---|---|---|---|\n| Bookings | confirmed bookings | bookings.status | count | this week | " \
             "last week | number with a sparkline |\n\n## Layout\nStandard density, 12 columns, one column at 390px.\n\n" \
             "## Charts\nBookings per day: a line, drawn by chart.py.\n\n## States\nEmpty: how to add a booking.\n\n" \
+            "## Built\n| item | where | how |\n|---|---|---|\n| numbers | src/dashboard.html:2 | the tiles |\n" \
+            "| chart | src/dashboard.html:4 | bookings per day |\n| table | src/dashboard.html:5 | the bookings |\n" \
+            "| sparkline | src/dashboard.html:3 | in the tile |\n| period filter | src/dashboard.html:1 | GET ?week= |\n" \
+            "| states | src/dashboard.html:6 | skeleton, empty, error |\n\n" \
             "## Checks\ndashcheck.py exit 0. A second user sees none of the first user's numbers.\n"
-MOTION = "# Motion: Slotwise\nDate: 2026-10-27\n\n## Direction\nCalm: motion only where a state changes.\n\n" \
+DASHBOARD_HTML = "<form method=get><select name=week></select></form>\n<dl><dt>Bookings</dt><dd>12</dd></dl>\n" \
+                 "<svg role=img><title>Bookings this week</title></svg>\n<svg role=img><title>Per day</title></svg>\n" \
+                 "<table><caption>Bookings</caption></table>\n<p class=empty>No bookings yet.</p>\n"
+MOTION ="Level: 2 (Polished)\n# Motion: Slotwise\nDate: 2026-10-27\n\n## Direction\nCalm: motion only where a state changes.\n\n" \
          "## Inventory\n| screen | moment | motion | why |\n|---|---|---|---|\n| S03 | booking saved | toast slides " \
          "in | feedback |\n\n## Tokens\nduration fast 120ms, base 200ms; ease out.\n\n## Libraries\nNone: CSS " \
          "only.\n\n## Checks\nmotioncheck.py exit 0. Reduced motion checked at 390px and 1440px.\n"
+LEVELS = json.dumps({part: {"level": level, "said": "niveau %d" % level, "at": "2026-10-27T09:00:00+00:00"}
+                     for part, level in (("look", 2), ("dashboard", 2), ("test", 2), ("secure", 3))})
+
+
+def levels(**chosen):
+    """LEVELS with the levels CHOSEN (look=4) in place of its own."""
+    return json.dumps(dict(json.loads(LEVELS), **{part: {"level": level, "said": "niveau %d" % level,
+                                                         "at": "2026-10-27T09:00:00+00:00"}
+                                                  for part, level in chosen.items()}))
+MOTION_CSS = "@keyframes rise { from { opacity: 0; transform: translateY(8px); } }\n" \
+             "@media (prefers-reduced-motion: no-preference) {\n" + "".join(
+                 "  .%s { transition: opacity 200ms; }\n" % name for name in
+                 ("btn", "card", "toast", "dialog", "tab", "nav", "chip", "row", "m-enter", "m-stagger", "m-lift")) + \
+             "  .hero { animation: rise 400ms both; }\n  @view-transition { navigation: auto; }\n}\n"
+MOTION_HTML = "<title>Slotwise</title>\n<main class=\"m-enter\"><ul class=\"m-stagger\"><li class=\"m-lift\">10:00</li></ul></main>\n"
 IMPROVE = "# Improve: Slotwise\nDate: 2026-10-27   Branch: forge/improve-20261027   Started from: main at 3f2a1c9\n" \
           "Picked: A001. The user said: \"fix A001\"\n\n## To do\n## Fixed\n### A001 [high] Any logged-in user can " \
           "open any invoice\ncommit: 9b1e2f4 fix(A001): check the owner first\n\n## Skipped\n## For you\n" \
@@ -172,44 +241,58 @@ def work_branch(root, branch="forge/improve-20261027"):
 
 
 def copy_static_pack(root):
-    """The static profile's container files from forge-pack, as forge-pack copies them, RUN.md filled in,
+    """The static profile's container files from forge-build pack, as forge-build pack copies them, RUN.md filled in,
     in a project with the files its Dockerfile copies in."""
     for source, target in (("Dockerfile", "Dockerfile"), ("docker-compose.yml", "docker-compose.yml"),
                            ("nginx.conf", "nginx.conf"), ("dockerignore", ".dockerignore"),
                            ("env.example", ".env.example")):
         shutil.copy(os.path.join(STATIC, source), os.path.join(root, target))
-    write(root, "RUN.md", filled("forge-pack/templates/static/RUN.md"))
+    write(root, "RUN.md", filled("forge-build/templates/static/RUN.md"))
     write(root, "package.json", '{"name": "slotwise", "private": true}\n')
     write(root, "package-lock.json", '{"name": "slotwise", "lockfileVersion": 3, "packages": {}}\n')
 
 
 # What each phase leaves behind when it is finished, in every mode it runs in: enough for its exit checks.
 PASSING = {
-    "recon": lambda root: (write(root, "forge-work/recon.md", filled("forge-recon/recon-map.md")),
+    "recon": lambda root: (write(root, "forge-work/recon.md", filled("forge-research/recon-map.md")),
                            write(root, "forge-work/features.csv", FEATURES)),
     "compare": lambda root: write(root, "forge-work/compare.md", COMPARE),
     "plan": lambda root: (write(root, "forge-work/plan.md", PLAN),
                           write(root, "forge-work/features.csv", FEATURES)),
     "design": lambda root: (write(root, "forge-work/design/tokens.json", TOKENS),
-                            write(root, "forge-work/design/brief.md", filled("forge-design/brief.md")),
-                            write(root, "forge-work/design/components.md", filled("forge-design/components.md"))),
+                            write(root, "forge-work/design/brief.md", filled("forge-design/brief.md", Level="2 (Polished)")),
+                            write(root, "forge-work/levels.json", LEVELS),
+                            write(root, "forge-work/design/components.md", COMPONENTS),
+                            write(root, "forge-work/design/world.md", "# The world of Slotwise\nA salon's week.\n"),
+                            [write(root, "forge-work/design/concepts/%s" % name, CONCEPT)  # the board and the three
+                             for name in ("index.html", "a/index.html", "b/index.html", "c/index.html")]),
     "build": lambda root: (write(root, "forge-work/build-log.md", BUILD_LOG), copy_static_pack(root),
-                           write(root, "forge-work/features.csv", FEATURES),
-                           write(root, "forge-work/security.md", SECURITY)),  # forge-build Step 7 runs forge-secure
-    "dashboard": lambda root: write(root, "forge-work/dashboard.md", DASHBOARD),
-    "motion": lambda root: (write(root, "forge-work/motion.md", MOTION),
-                            write(root, "index.html", "<title>Slotwise</title>\n")),
+                           write(root, "forge-work/features.csv", FEATURES), write(root, "forge-work/levels.json", LEVELS),
+                           write(root, "forge-work/security.md", SECURITY),  # forge-build build Step 7 runs forge-check secure
+                           shown(root, "forge-work/design/shots"),  # Steps 1 and 7: the shots before and after
+                           write(root, "forge-work/design/review.md", REVIEW)),  # Step 7.4: the look review
+    "dashboard": lambda root: (write(root, "forge-work/dashboard.md", DASHBOARD), write(root, "forge-work/levels.json", LEVELS),
+                               write(root, "src/dashboard.html", DASHBOARD_HTML),  # Step 11: ## Built names its lines
+                               shown(root, "forge-work/dashboard"), frames(root, "forge-work/dashboard/motion")),
+    "motion": lambda root: (write(root, "forge-work/motion.md", MOTION), write(root, "forge-work/levels.json", LEVELS),
+                            write(root, "index.html", MOTION_HTML), write(root, "src/style.css", MOTION_CSS),
+                            shown(root, "forge-work/motion-shots"), frames(root, "forge-work/motion-shots/after")),
     "test": lambda root: (write(root, "forge-work/test-plan.md", TEST_PLAN), write(root, "forge-work/bugs.md", BUGS),
-                          write(root, "e2e/f01-book.spec.ts", SPEC)),
+                          write(root, "e2e/f01-book.spec.ts", SPEC), write(root, "forge-work/levels.json", LEVELS)),
     "diff": lambda root: (write(root, "forge-work/features.csv", FEATURES), write(root, "forge-work/bugs.md", BUGS),
                           write(root, "forge-work/parity.md", PARITY)),  # Step 4 writes parity.md last
     "brand": lambda root: (write(root, "forge-work/brand.json", BRAND_JSON), write(root, "forge-work/brand.md", BRAND),
                            write(root, "forge-work/design/tokens.json", TOKENS),
-                           write(root, "index.html", "<title>Slotwise</title>\n")),
-    "launch": lambda root: (write(root, "forge-work/launch.md", filled("forge-launch/launch.md")),
+                           write(root, "index.html", "<title>Slotwise</title>\n"), shown(root, "forge-work/brand/shots")),
+    "launch": lambda root: (write(root, "forge-work/launch.md", filled("forge-launch/launch.md", Level="2 (Polished)")),
                             write(root, "public/og.png", "not really a PNG\n"),
-                            write(root, "forge-work/brand.json", BRAND_JSON)),  # forge-brand's, for the sweep
+                            write(root, "forge-work/brand.json", BRAND_JSON),  # forge-design brand's, for the sweep
+                            write(root, "forge-work/levels.json", LEVELS),  # the look level, and the app at that level
+                            write(root, "index.html", MOTION_HTML), write(root, "src/style.css", MOTION_CSS),
+                            shown(root, "forge-work/launch/shots"), frames(root, "forge-work/launch/shots/motion")),
     "secure": lambda root: (write(root, "forge-work/security.md", SECURITY),
+                            write(root, "forge-work/levels.json", LEVELS),
+                            write(root, "forge-work/sbom.json", '{"bomFormat": "CycloneDX", "components": []}\n'),
                             write(root, "index.html", "<title>Slotwise</title>\n")),
     "pack": copy_static_pack,
     "audit": lambda root: write(root, "forge-work/audit.md", AUDIT),
@@ -283,10 +366,16 @@ class TableTests(unittest.TestCase):
                     self.assertIn(profile, phasecheck.PROFILES)
 
     def test_when_is_a_path_in_the_project(self):
+        """A path, or [FILE, SECTION, START]: a file of the project, a ## heading of it and the start of a line."""
         for phase, checks in phasecheck.CHECKS.items():
             for entry in [entry for entry in checks if "when" in entry]:
                 with self.subTest(phase=phase, check=entry["check"]):
-                    self.assertFalse(os.path.isabs(entry["when"]) or ".." in entry["when"].split("/"), entry["when"])
+                    when = entry["when"]
+                    path = when if isinstance(when, str) else when[0]
+                    self.assertFalse(os.path.isabs(path) or ".." in path.split("/"), when)
+                    if not isinstance(when, str):
+                        self.assertEqual((len(when), all(isinstance(part, str) and part.strip() for part in when)),
+                                         (3, True), when)
 
     def test_every_fresh_report_is_a_file_its_phase_checks(self):
         for phase, name in phasecheck.FRESH.items():
@@ -321,7 +410,7 @@ class PhaseTests(Checks):
 
     def test_a_failure_says_which_skill_line_it_rests_on(self):
         out = self.assert_fails("diff", "forge-work/parity.md is missing")
-        self.assertIn("why: forge-diff, Step 4", out)
+        self.assertIn("why: forge-check diff, Step 4", out)
         self.finish("compare")
         self.assertNotIn("why:", self.assert_passes("compare"))
 
@@ -461,7 +550,7 @@ class PhaseTests(Checks):
         bugs = "".join("## B%03d [critical] [open] Bug number %d\n" % (n, n) for n in range(1, 31))
         write(self.root, "forge-work/bugs.md", "# Bugs\n\n" + bugs)
         out = self.assert_fails("test", "more lines: run it to see them")
-        self.assertLess(len(out.splitlines()), 24)
+        self.assertLess(len(out.splitlines()), 26)
 
     def test_diff_needs_every_must_have(self):
         self.finish("diff")
@@ -470,7 +559,7 @@ class PhaseTests(Checks):
 
     def test_launch_sweeps_its_pages_for_the_names_to_avoid(self):
         """Launch writes the public pages after brand ran its sweep: the original's or a rival's name on one
-        of them fails launch too. brand.json is forge-brand's, which comes before launch in both its modes."""
+        of them fails launch too. brand.json is forge-design brand's, which comes before launch in both its modes."""
         self.finish("launch")
         write(self.root, "pricing.html", "<p>Switching from Calendly? Bring your slots along.</p>\n")
         out = self.assert_fails("launch", "sweep.py . --config forge-work/brand.json exits 1: it found problems",
@@ -499,7 +588,7 @@ class PhaseTests(Checks):
                 name = "forge-work/%s.md" % phase
                 write(self.root, name, "# %s: Slotwise\nDate: 2026-10-27\n" % phase.title())
                 out = self.assert_fails(phase, "%s has no ## %s" % (name, titles))
-                self.assertIn("why: forge-%s, Output" % phase, out)
+                self.assertIn("why: %s, Output" % gate_skill(phase), out)
                 write(self.root, name, "# %s\n\n" % phase.title() + "".join("## %s\n" % title
                                                                             for title in titles.split(", ## ")))
                 self.assert_fails(phase, "%s has no text of its own under ## %s" % (name, titles))
@@ -513,20 +602,59 @@ class PhaseTests(Checks):
                               "why: forge-improve, Output")
 
     def test_the_report_in_each_skills_output_passes(self):
-        """The example in forge-audit's, forge-inspect's and forge-improve's Output passes as it is: its
-        findings are ### headings under ## Findings or ## Fixed. forge-compare's shows only the parts with a
+        """The example in forge-check audit's, forge-check inspect's and forge-improve's Output passes as it is: its
+        findings are ### headings under ## Findings or ## Fixed (forge-improve's look item once the report it names,
+        at the level it says, and Step 4's shots are there). forge-research compare's shows only the parts with a
         fixed shape; with its other sections, in the order its Output gives, it passes too."""
         for phase in ("audit", "inspect", "improve"):
             if phase == "improve" and not HAS_GIT:
                 continue  # its check runs gitguard.py, which needs git
             with self.subTest(phase=phase):
                 self.finish(phase)
-                write(self.root, "forge-work/%s.md" % phase, example("forge-" + phase))
+                write(self.root, "forge-work/%s.md" % phase, example(phase))
+                if phase == "improve":
+                    write(self.root, "forge-work/levels.json", levels(look=4))
+                    write(self.root, "forge-work/design/redesign.md", "# Redesign: Slotwise\nLevel: 4 (Showpiece)\n")
+                    shown(self.root, "forge-work/improve/shots")
+                    # design at level 4 builds motion and 3D too (forge-improve Step 2): its report and the app
+                    write(self.root, "forge-work/motion.md", MOTION.replace("Level: 2 (Polished)", "Level: 4 (Showpiece)"))
+                    for name, text in sample_app(4, 20).items():
+                        write(self.root, name, text)
+                    shown(self.root, "forge-work/improve/shots", parts=("before-frames", "after-frames"),
+                          name="home-390-f2.png")
+                    for kind in "fs":  # its proof: "--moves on home: something moves", the scene's frames too
+                        frames(self.root, "forge-work/improve/shots/after-frames", kind=kind)
                 self.assert_passes(phase)
+                if phase == "improve":  # with that motion as its own item, as Step 2 asks, the example passes too
+                    text = example(phase)
+                    write(self.root, "forge-work/improve.md", text if "### motion" in text else text.replace(
+                        "## Skipped\n", "### motion [look] Motion at level 4, with the redesign\nreport: "
+                                        "forge-work/motion.md\n## Skipped\n"))
+                    out = self.assert_passes(phase)
+                    self.assertIn("forge-design/motioncount.py . --level auto exits 0", out)
         others = ("Positioning", "What they hate", "What is missing", "What is unsolved", "Fix plan", "Angles")
-        write(self.root, "forge-work/compare.md", example("forge-compare").replace(
+        write(self.root, "forge-work/compare.md", example("compare").replace(
             "## Sources", "".join("## %s\n1. Written for this app.\n\n" % title for title in others) + "## Sources"))
         self.assert_passes("compare")
+
+    def test_dashboard_names_where_each_item_of_its_level_is_built(self):
+        """A Level line and a numbers table are not a level 4 or 5 dashboard: ## Built must tie each item of the
+        level to a file and line of the app, in dashboard.md and in each dashboard-<screen>.md next to it."""
+        self.finish("dashboard")
+        self.assert_passes("dashboard")
+        built = DASHBOARD[DASHBOARD.index("## Built"):DASHBOARD.index("## Checks")]
+        write(self.root, "forge-work/dashboard.md", DASHBOARD.replace(built, ""))
+        self.assert_fails("dashboard", "forge-work/dashboard.md has no ## Built", "why: forge-design dashboard, Output")
+        write(self.root, "forge-work/dashboard.md", DASHBOARD.replace("src/dashboard.html:4", "Chart.tsx:4"))
+        self.assert_fails("dashboard", "dashbuilt.py forge-work/dashboard.md --level auto exits 1",
+                          "why: forge-design dashboard, Step 11: dashbuilt.py")
+        write(self.root, "forge-work/dashboard.md", DASHBOARD)
+        write(self.root, "forge-work/dashboard-admin.md", DASHBOARD.replace("| sparkline |", "| tiles |"))
+        self.assert_fails("dashboard", "dashbuilt.py forge-work/dashboard.md --level auto exits 1")
+        write(self.root, "forge-work/dashboard-admin.md", DASHBOARD)
+        self.assert_passes("dashboard")
+        write(self.root, "forge-work/levels.json", levels(dashboard=4))
+        self.assert_fails("dashboard", "dashbuilt.py forge-work/dashboard.md --level auto exits 1")
 
     def test_brand(self):
         self.finish("brand")
@@ -565,10 +693,11 @@ class PhaseTests(Checks):
             with self.subTest(text=text):
                 write(self.root, "forge-work/security.md", SECURITY.replace("Verdict: PASS\n", text))
                 self.assert_fails("secure", "needs exactly one line `Verdict: PASS`")
-        report = template("forge-secure", "SKILL.md").split("```markdown\n")[1].split("```\n")[0]
+        report = template("forge-check", "steps/secure.md").split("```markdown\n")[1].split("```\n")[0]
         report = re.sub(r"\d+ high", "0 high", report.replace("Verdict: FAIL", "Verdict: PASS"))
+        report = re.sub(r"(?m)^Level: .*$", "Level: 3 (Standard)", report)  # the level on record in LEVELS
         write(self.root, "forge-work/security.md", report)
-        self.assert_passes("secure")  # forge-secure's own report format passes
+        self.assert_passes("secure")  # forge-check secure's own report format passes
 
     def test_pack(self):
         self.finish("pack")
@@ -620,9 +749,9 @@ class FindingTests(Checks):
         """recon.md with only the placeholders outside code filled in, and plan.md with only the one-line
         ones outside code: both passed. A template's placeholders count everywhere but in comments now."""
         self.finish("recon", "plan")
-        write(self.root, "forge-work/recon.md", outside_code(template("forge-recon", "recon-map.md")))
+        write(self.root, "forge-work/recon.md", outside_code(template("forge-research", "recon-map.md")))
         out = self.assert_fails("recon", "forge-work/recon.md still has",
-                                "placeholder(s) of ../forge-recon/recon-map.md", "{{goal}}", "{{Entity}}",
+                                "placeholder(s) of ../forge-research/recon-map.md", "{{goal}}", "{{Entity}}",
                                 "{{high | medium | guess}}")
         self.assertIn("Write this app's own facts in their place", out)
         plan = re.sub(r"(?m)^Profile: x$", "Profile: static", outside_code(template("forge-plan", "plan.md")))
@@ -652,8 +781,8 @@ class FindingTests(Checks):
         write(self.root, "forge-work/recon.md", "# Recon: x (web)\n")
         out = self.assert_fails("recon", "forge-work/recon.md has no ## Sources, ## Core loop, ## Screens, "
                                          "## Reference screenshots, ## Flows")
-        self.assertIn("why: forge-recon, Output: recon.md from the template, every section filled in", out)
-        recon = filled("forge-recon/recon-map.md")
+        self.assertIn("why: forge-research recon, Output: recon.md from the template, every section filled in", out)
+        recon = filled("forge-research/recon-map.md")
         only_the_example = recon.replace("## Components\n\nSlotwise: written for this app.", "## Components")
         write(self.root, "forge-work/recon.md", only_the_example)  # the template's Button row and nothing else
         self.assert_fails("recon", "no text of its own under ## Components")
@@ -685,7 +814,7 @@ class FindingTests(Checks):
 
     def test_n12_clone_mode_lists_the_original_brand_colours(self):
         self.finish("design")
-        components = filled("forge-design/components.md").replace(
+        components = COMPONENTS.replace(
             "## Original brand colours\n\nSlotwise: written for this app.", "## Original brand colours")
         components = re.sub(r"(?m)^- #hex \(their accent\)$", "", components)
         write(self.root, "forge-work/design/components.md", components)
@@ -693,11 +822,11 @@ class FindingTests(Checks):
         self.assert_passes("design", "--mode", "idea")  # idea mode has no original
 
     def test_n12_the_theme_command_is_filled_in(self):
-        """forge-design Step 3 fills in the theme.py command that forge-build and forge-brand run."""
+        """forge-design design Step 3 fills in the theme.py command that forge-build build and forge-design brand run."""
         self.finish("design")
         command = next(line for line in template("forge-design", "components.md").split("\n")
                        if line.startswith("Command:"))
-        components = re.sub(r"(?m)^Command:.*$", lambda _: command, filled("forge-design/components.md"))
+        components = re.sub(r"(?m)^Command:.*$", lambda _: command, COMPONENTS)
         write(self.root, "forge-work/design/components.md", components)
         self.assert_fails("design", "<the file above>", "<4|3|no>")
 
@@ -708,17 +837,17 @@ class FindingTests(Checks):
         self.remove("forge-work/security.md")
         self.assert_fails("build", "forge-work/build-log.md has no table with the columns status and what",
                           "composecheck.py . exits 2: it could not check", "forge-work/security.md is missing",
-                          "why: forge-build, Step 7: /forge-secure has run")
+                          "why: forge-build build, Step 7: /forge-check secure has run")
         write(self.root, "forge-work/build-log.md", BUILD_LOG.split("| S01")[0])
         self.assert_fails("build", "build-log.md has no table with the columns status and what and a row")
 
     def test_n18_a_clone_that_shares_a_sentence_with_the_original(self):
         """The clone shared runs of words with the original and every gate passed. In clone mode build, brand
-        and launch run copycheck.py when forge-recon kept the original's text in forge-work/original-text/: a
+        and launch run copycheck.py when forge-research recon kept the original's text in forge-work/original-text/: a
         shared run of 6+ words fails until it is rewritten or, with the user's OK, in copy-allow.txt. Without
         the kept text the line says it skipped; idea mode, which has no original, never runs it."""
         sentence = "<main>\n<p>Zo zie je elke dag wat er moet gebeuren.</p>\n</main>\n"
-        for phase, why in (("build", "why: forge-build, Step 7"), ("brand", "why: forge-brand, Step 6"),
+        for phase, why in (("build", "why: forge-build build, Step 7"), ("brand", "why: forge-design brand, Step 6"),
                            ("launch", "why: forge-launch, Also for this skill")):
             with self.subTest(phase=phase):
                 shutil.rmtree(self.root, ignore_errors=True)
@@ -745,7 +874,7 @@ class FindingTests(Checks):
         shutil.rmtree(os.path.join(self.root, "e2e"))
         for mode in ("clone", "idea"):
             self.assert_fails("test", "no end-to-end spec: no file like e2e/**/*.spec.* or e2e/**/*.test.*",
-                              "why: forge-test, Step 3 and Output: one spec per flow in e2e/", args=("--mode", mode))
+                              "why: forge-check test, Step 3: from level 2, one spec per flow in e2e/", args=("--mode", mode))
         write(self.root, "e2e/node_modules/pkg/x.spec.ts", SPEC)
         self.assert_fails("test", "no end-to-end spec", args=("--mode", "clone"))
         write(self.root, "e2e/flows/f01.test.js", SPEC)
@@ -779,7 +908,7 @@ class FindingTests(Checks):
 
     def test_improve_mode_finds_the_apps_playwright_setup_in_any_folder(self):
         """A monorepo keeps its Playwright setup next to the app it tests (apps/web/playwright.config.ts, the
-        specs beside it), and forge-test adds the specs there. One inside node_modules is not the app's."""
+        specs beside it), and forge-check test adds the specs there. One inside node_modules is not the app's."""
         self.finish("test")
         shutil.rmtree(os.path.join(self.root, "e2e"))
         write(self.root, "node_modules/some-kit/playwright.config.ts", "export default {};\n")
@@ -851,7 +980,7 @@ class FindingTests(Checks):
         self.finish("secure")
         write(self.root, "src/bad.ts", "const q = location.search;\n\neval(q);\n")
         out = self.assert_fails("secure", "codecheck.py . exits 1: it found problems", "src/bad.ts:3")
-        self.assertIn("why: forge-secure, Step 3 and The gate", out)
+        self.assertIn("why: forge-check secure, Step 3 and The gate", out)
         write(self.root, "forge-work/security.md", SECURITY.replace(
             "## Accepted risks\nNone.\n", "## Accepted risks\n- X002 [high] eval in src/bad.ts:3. The user said: "
                                           "\"ik accepteer dit\" (2026-10-27)\n"))
@@ -872,14 +1001,320 @@ class FindingTests(Checks):
     def test_n43_run_md_and_nginx_conf(self):
         self.finish("plan", "pack")
         shutil.copy(os.path.join(STATIC, "RUN.md"), os.path.join(self.root, "RUN.md"))
-        self.assert_fails("pack", "RUN.md still has 1 placeholder(s) of ../forge-pack/templates/*/RUN.md",
+        self.assert_fails("pack", "RUN.md still has 1 placeholder(s) of ../forge-build/templates/*/RUN.md",
                           "line 1: {{App name}}")
         self.remove("RUN.md", "nginx.conf")
-        self.assert_fails("pack", "RUN.md is missing", "nginx.conf is missing", "why: forge-pack, Output: nginx.conf "
+        self.assert_fails("pack", "RUN.md is missing", "nginx.conf is missing", "why: forge-build pack, Output: nginx.conf "
                                                                                "for laravel and static")
         write(self.root, "forge-work/plan.md", PLAN.replace("Profile: static", "Profile: next"))
-        write(self.root, "RUN.md", filled("forge-pack/templates/next/RUN.md"))
+        write(self.root, "RUN.md", filled("forge-build/templates/next/RUN.md"))
         self.assertNotIn("nginx.conf is missing", self.run_main("pack")[1])  # next serves its pages itself
+
+
+class ShownTests(Checks):
+    """rules.md section 9: a change the user cannot see has not happened. Each phase that changes the app runs
+    changed.py on its before and after shots (R28): no visible change, or no after shots (exit 2), fails."""
+
+    def test_a_change_that_does_not_show_fails(self):
+        for phase, folder in (("build", "forge-work/design/shots"), ("dashboard", "forge-work/dashboard"),
+                              ("motion", "forge-work/motion-shots"), ("brand", "forge-work/brand/shots"),
+                              ("launch", "forge-work/launch/shots")):
+            with self.subTest(phase=phase):
+                shutil.rmtree(self.root, ignore_errors=True)
+                os.makedirs(self.root)
+                self.finish(phase)
+                self.assertIn("changed.py %s/before %s/after exits 0" % (folder, folder), self.assert_passes(phase))
+                shown(self.root, folder, after=(255, 255, 255))
+                self.assert_fails(phase, "NO VISIBLE CHANGE", "why: %s, " % gate_skill(phase))
+                shutil.rmtree(os.path.join(self.root, folder, "after"))
+                self.assert_fails(phase, "changed.py %s/before %s/after exits 2: it could not check" % (folder, folder))
+
+
+class MovedTests(Checks):
+    """W-forge-2: stills never proved that anything moves, or that a scene went live: a plain landing page passed the
+    motion, dashboard and launch gates. From level 2 a screen's entrance frames must move (lookcheck.py moved); from
+    look level 4, and at dashboard level 5, a scene's frames too."""
+
+    def test_entrance_frames_that_are_missing_or_still_fail(self):
+        for phase, folder in (("dashboard", "forge-work/dashboard/motion"), ("motion", "forge-work/motion-shots/after"),
+                              ("launch", "forge-work/launch/shots/motion")):
+            with self.subTest(phase=phase):
+                shutil.rmtree(self.root, ignore_errors=True)
+                os.makedirs(self.root)
+                self.finish(phase)
+                self.assertIn("level 2 asks for the entrance frames f1 to f4 at 390, from level 2: 1 of 1 screen(s) "
+                              "move in %s" % folder, self.assert_passes(phase))
+                frames(self.root, folder, moving=False)
+                self.assert_fails(phase, "from level 2: nothing moves in them", "home-390: nothing moves",
+                                  "why: %s, Step" % gate_skill(phase))
+                for path in glob.glob(os.path.join(self.root, folder, "*-f*.png")):
+                    os.remove(path)
+                self.assert_fails(phase, "from level 2: none in %s" % folder, "--frames <paths>")
+
+    def test_a_scene_must_go_live_and_move_from_look_level_4(self):
+        self.finish("motion")
+        write(self.root, "forge-work/levels.json", levels(look=4))
+        write(self.root, "forge-work/motion.md", MOTION.replace("Level: 2 (Polished)", "Level: 4 (Showpiece)"))
+        self.assert_fails("motion", "look level 4 asks for the scene frames s1 to s6 at 1440, from level 4: none in "
+                                    "forge-work/motion-shots/after", "--scene-frames <paths>")
+        frames(self.root, "forge-work/motion-shots/after", kind="s", moving=False)  # a scene stuck on its poster
+        self.assert_fails("motion", "from level 4: nothing moves in them", "home-1440: nothing moves")
+        frames(self.root, "forge-work/motion-shots/after", kind="s")
+        self.assertIn("ok    look level 4 asks for the scene frames s1 to s6 at 1440, from level 4: 1 of 1 screen(s) "
+                      "move", self.run_main("motion")[1])  # motioncount still fails: this app has no WebGL scene
+
+    def test_the_dashboard_asks_for_a_scene_at_level_5_only(self):
+        self.finish("dashboard")
+        write(self.root, "forge-work/levels.json", levels(dashboard=4))
+        self.assertNotIn("scene frames", self.run_main("dashboard")[1])
+        write(self.root, "forge-work/levels.json", levels(dashboard=5))
+        self.assertIn("FAIL  dashboard level 5 asks for the scene frames s1 to s6 at 1440, from level 5: none in "
+                      "forge-work/dashboard/motion", self.run_main("dashboard")[1])
+        frames(self.root, "forge-work/dashboard/motion", kind="s")
+        self.assertIn("ok    dashboard level 5 asks for the scene frames", self.run_main("dashboard")[1])
+
+
+class DesignWorkTests(Checks):
+    """W-forge-10: the design gate passed with only the brief, the tokens and components.md, so auto mode could skip the
+    world, the board and the three concepts. T33: a components.md whose ## Components held one line passed. W-forge-12:
+    the build gate never asked for the look review, the pack's guard against a generic look."""
+
+    def test_the_world_the_board_and_the_three_concepts(self):
+        for name in ("world.md", "concepts/index.html", "concepts/a/index.html", "concepts/b/index.html",
+                     "concepts/c/index.html"):
+            with self.subTest(name=name):
+                self.finish("design")
+                self.remove("forge-work/design/" + name)
+                self.assert_fails("design", "forge-work/design/%s is missing" % name, "why: forge-design design, ")
+
+    def test_a_block_per_component(self):
+        self.finish("design")
+        self.assertIn("## Components holds 1 component block(s), each with its states", self.assert_passes("design"))
+        write(self.root, "forge-work/design/components.md", filled("forge-design/components.md").replace(
+            "## Components\n\nSlotwise: written for this app.", "## Components\n\nButton: see the app."))
+        self.assert_fails("design", "## Components holds no component block with a states line",
+                          "why: forge-design design, Step 5: for every component one block")
+
+    def test_the_build_holds_the_look_review_in_rounds(self):
+        self.finish("build")
+        self.remove("forge-work/design/review.md")
+        self.assert_fails("build", "forge-work/design/review.md is missing", "why: forge-build build, Step 7.4",
+                          args=("--mode", "idea"))
+        write(self.root, "forge-work/design/review.md", "# Look review: Slotwise\nServed: docker compose\n")
+        self.assert_fails("build", "forge-work/design/review.md has no ## Round", args=("--mode", "clone"))
+        self.assert_passes("build")  # no mode known: a build outside /forge, where the gate does not ask for it
+        write(self.root, "forge-work/design/review.md", REVIEW)  # Step 3.2's round of the slice, then no Step 7.4
+        os.utime(os.path.join(self.root, "forge-work", "design", "review.md"), (OLD, OLD))
+        self.assert_fails("build", "forge-work/design/review.md is older than the after shots in "
+                                   "forge-work/design/shots/after: its last round (Round 1", "why: forge-build build, "
+                                   "Step 7.3: after shots", args=("--mode", "idea"))
+        write(self.root, "forge-work/design/review.md", REVIEW + "\n## Round 2 (2026-10-28, commit 9c0d1e2, judge: "
+                                                        "fresh eyes)\n| home | 20 | | none | none |\n")
+        self.assertIn("its last round (Round 2 (2026-10-28", self.assert_passes("build", "--mode", "idea"))
+
+
+class LookLevelTests(Checks):
+    """The look level is a promise in both directions (rules.md section 10), and the gate checks it in each report of
+    the look (R09): the brief in every mode, build-log.md, motion.md and launch.md. Launch also counts the motion of
+    that level in the app, so motion skipped at level 4 cannot end in an app without its 3D (R64)."""
+
+    def test_design_needs_the_brief_in_every_mode_at_the_level_on_record(self):
+        self.finish("design")
+        for mode in ("clone", "idea"):
+            self.assert_passes("design", "--mode", mode)
+        write(self.root, "forge-work/design/brief.md", filled("forge-design/brief.md", Level="4 (Showpiece)"))
+        self.assert_fails("design", "forge-work/design/brief.md needs exactly one line `Level: 2 (Polished)`",
+                          "why: forge-design design, Output: level.py check look", args=("--mode", "clone"))
+        self.remove("forge-work/design/brief.md")
+        out = self.assert_fails("design", "forge-work/design/brief.md is missing", args=("--mode", "clone"))
+        self.assertEqual(out.count("forge-work/design/brief.md is missing"), 1)
+
+    def test_each_report_of_the_look_says_the_level_on_record(self):
+        for phase, name in (("build", "forge-work/build-log.md"), ("motion", "forge-work/motion.md"),
+                            ("launch", "forge-work/launch.md")):
+            with self.subTest(phase=phase):
+                shutil.rmtree(self.root, ignore_errors=True)
+                os.makedirs(self.root)
+                self.finish(phase)
+                write(self.root, name, read(os.path.join(self.root, name)).replace("Level: 2 (Polished)", "Level: 3"))
+                self.assert_fails(phase, "%s needs exactly one line `Level: 2 (Polished)`" % name, args=("--mode", "idea"))
+
+    def test_a_build_on_the_users_own_app_in_its_own_look_has_no_look_level(self):
+        """forge-build build, The level: a feature added to the user's own app in its own look logs `Level: none`.
+        That build runs outside the gate's modes, so with no mode known the gate does not ask for the level."""
+        self.finish("build")
+        write(self.root, "forge-work/build-log.md", BUILD_LOG.replace("Level: 2 (Polished)", "Level: none, the app's "
+                                                                       "own look"))
+        self.assert_passes("build")
+        self.assert_fails("build", "needs exactly one line `Level: 2 (Polished)`", args=("--mode", "clone"))
+
+    def test_launch_counts_the_motion_and_3d_of_the_look_level(self):
+        self.finish("launch")
+        write(self.root, "forge-work/levels.json", levels(look=4))
+        write(self.root, "forge-work/launch.md", filled("forge-launch/launch.md", Level="4 (Showpiece)"))
+        self.assert_fails("launch", "motioncount.py . --level auto exits 1: it found problems",
+                          "why: forge-launch, Step 2: build exactly what that level asks")  # no WebGL scene
+
+
+@unittest.skipUnless(HAS_GIT, "the improve phase runs gitguard.py, which needs git")
+class ImproveLookTests(Checks):
+    """Improve mode has no design, motion or dashboard phase: forge-improve builds the look the user picked, and the
+    gate checks what each look item under ## Fixed names (R37, R63). R63: a redesign at level 4 listed there, with no
+    report, no shots and the app unchanged, passed."""
+    DESIGN = ("### design [look] A redesign at level 4 (Showpiece)\nreport: forge-work/design/redesign.md   commits: "
+              "4c1d2e0..a7f3b19\nproof:  changed.py: VISIBLE CHANGE on 1 of 1 pairs\n")
+    MOTION_ITEM = "### motion [look] Motion and 3D at level 4 (Showpiece)\nreport: forge-work/motion.md\n"
+
+    def setUp(self):
+        super().setUp()
+        self.finish("improve")
+        write(self.root, "forge-work/levels.json", levels(look=4))
+
+    def pick(self, *items):
+        write(self.root, "forge-work/improve.md", IMPROVE.replace("## Skipped\n", "".join(items) + "## Skipped\n"))
+
+    def test_a_look_item_that_was_not_built_and_shown_fails(self):
+        self.pick(self.DESIGN)
+        self.assert_fails("improve", "forge-work/improve.md: 1 look item(s) under ## Fixed, not built and shown",
+                          "its report forge-work/design/redesign.md is not a file in the project that holds something",
+                          "changed.py forge-work/improve/shots/before forge-work/improve/shots/after exits 2",
+                          "why: forge-improve, Step 6")
+
+    def test_a_design_pick_with_its_report_shots_and_frames_passes(self):
+        """Design at level 2 to 5 builds motion too (forge-improve Step 4: also --frames): its entrance frames move and
+        from level 4 its scene's frames too (W-forge-2). The motion count runs for a motion item only."""
+        self.pick(self.DESIGN)
+        write(self.root, "forge-work/design/redesign.md", "# Redesign: Slotwise\nLevel: 4 (Showpiece)\n")
+        shown(self.root, "forge-work/improve/shots")
+        self.assert_fails("improve", "look level 4 asks for the entrance frames f1 to f4 at 390, from level 2: none in "
+                                     "forge-work/improve/shots/after-frames", "why: forge-improve, Step 7: --moves")
+        frames(self.root, "forge-work/improve/shots/after-frames")
+        frames(self.root, "forge-work/improve/shots/after-frames", kind="s")
+        out = self.assert_passes("improve")
+        self.assertIn("forge-design/motioncount.py . --level auto skipped: no ### motion under ## Fixed of "
+                      "forge-work/improve.md", out)
+        write(self.root, "forge-work/design/redesign.md", "# Redesign: Slotwise\nLevel: 2 (Polished)\n")
+        self.assert_fails("improve", "forge-work/design/redesign.md needs exactly one line `Level: 4 (Showpiece)`")
+
+    def test_only_the_parts_this_run_picked_are_checked(self):
+        """VG5-N1: an older dashboard.md or motion.md, from a run before, is not this run's pick. Their checks wait for
+        a look item of that part under ## Fixed; one under ## Skipped does not count."""
+        write(self.root, "forge-work/dashboard.md", DASHBOARD.replace("src/dashboard.html:4", "Chart.tsx:4"))
+        write(self.root, "forge-work/motion.md", MOTION.replace("Level: 2 (Polished)", "Level: 5"))
+        write(self.root, "forge-work/improve.md", IMPROVE.replace("## For you\n", self.MOTION_ITEM + "why: the user "
+                                                                  "chose the findings only\n## For you\n"))
+        out = self.assert_passes("improve")
+        self.assertIn("forge-design/dashbuilt.py forge-work/dashboard.md --level auto skipped: no ### dashboard under "
+                      "## Fixed of forge-work/improve.md", out)
+        self.assertIn("forge-design/motioncheck.py . --fail-on high skipped: no ### motion under ## Fixed", out)
+        self.pick("### dashboard [look] The statistics screen at level 2\nreport: forge-work/dashboard.md\n")
+        self.assert_fails("improve", "dashbuilt.py forge-work/dashboard.md --level auto exits 1")
+
+    def test_a_look_item_names_its_own_report_of_this_round(self):
+        """VG1-N5: `report: package.json` passed, as any file that holds something did. R63: the shots, frames and report
+        of an earlier round passed with nothing of this round; the gate gives --since, the last go."""
+        write(self.root, "package.json", '{"name": "slotwise", "private": true}\n')
+        self.pick(self.DESIGN.replace("forge-work/design/redesign.md", "package.json"))
+        shown(self.root, "forge-work/improve/shots")
+        frames(self.root, "forge-work/improve/shots/after-frames")
+        frames(self.root, "forge-work/improve/shots/after-frames", kind="s")
+        self.assert_fails("improve", "its report package.json is not its look report, forge-work/design/redesign.md")
+        self.pick(self.DESIGN)
+        write(self.root, "forge-work/design/redesign.md", "# Redesign: Slotwise\nLevel: 4 (Showpiece)\n")
+        self.assert_passes("improve")
+        old = glob.glob(os.path.join(self.root, "forge-work", "improve", "shots", "*", "*.png"))
+        for path in old + [os.path.join(self.root, "forge-work", "design", "redesign.md")]:
+            os.utime(path, (OLD, OLD))  # an earlier round's, before the last go
+        since = ("--since", "2020-01-01T00:00:00+00:00")
+        self.assert_fails("improve", "its report forge-work/design/redesign.md is older than the last go",
+                          "forge-work/improve/shots/after: no pair of shots newer than the last go",
+                          "home-390: from before the last go", args=since)
+        write(self.root, "forge-work/design/redesign.md", "# Redesign: Slotwise\nLevel: 4 (Showpiece)\n")
+        shown(self.root, "forge-work/improve/shots")
+        frames(self.root, "forge-work/improve/shots/after-frames")
+        frames(self.root, "forge-work/improve/shots/after-frames", kind="s")
+        self.assert_passes("improve", *since)
+
+    def test_older_motion_findings_in_the_apps_own_code_may_stay(self):
+        """VG1-N1: forge-design motion Step 9.2 leaves a finding in the app's older code under ## Checks when it is
+        not small and safe to fix, so on the user's own app the gate stops at a high one only. /forge's motion
+        phase, on an app forge built, keeps --fail-on medium."""
+        self.pick(self.MOTION_ITEM.replace("level 4 (Showpiece)", "level 2 (Polished)"))
+        write(self.root, "forge-work/levels.json", LEVELS)
+        for name, text in (("forge-work/motion.md", MOTION), ("index.html", MOTION_HTML), ("src/style.css", MOTION_CSS),
+                           ("src/old/bar.css", ".bar { transition: width 200ms; }\n")):  # the last: from before
+            write(self.root, name, text)
+        shown(self.root, "forge-work/improve/shots", parts=("before-frames", "after-frames"), name="home-390-f2.png")
+        frames(self.root, "forge-work/improve/shots/after-frames")
+        self.assertIn("motioncheck.py . --fail-on high exits 0", self.assert_passes("improve"))
+        self.finish("motion")
+        self.assert_fails("motion", "motioncheck.py . --fail-on medium exits 1", "why: forge-design motion, Step 9.2")
+
+    def test_a_look_item_names_its_part_first(self):
+        """V3G1-N1: `### [look] The whole look` counted as a look item, but the part checks run only for a heading
+        that starts with design, motion or dashboard: a redesign.md at level 2, with look 4 on record and no frames,
+        passed. Two spaces after ### read as one, in lookcheck.py and in the part checks alike."""
+        write(self.root, "forge-work/design/redesign.md", "# Redesign: Slotwise\nLevel: 2 (Polished)\n")
+        shown(self.root, "forge-work/improve/shots")
+        self.pick(self.DESIGN.replace("### design [look] A redesign", "### [look] The whole look"))
+        self.assert_fails("improve", "[look] The whole look at level 4 (Showpiece): name its part first: ### design "
+                                     "[look], ### motion [look] or ### dashboard [look] (forge-improve Step 2)")
+        self.pick(self.DESIGN.replace("### design", "###  design"))
+        self.assert_fails("improve", "forge-work/design/redesign.md needs exactly one line `Level: 4 (Showpiece)`",
+                          "the entrance frames f1 to f4 at 390, from level 2: none in")
+
+    def test_a_high_motion_finding_stops_improve(self):
+        """V3G1-N5: at --fail-on high an older medium finding may stay (Step 9.2), but an animation with no
+        prefers-reduced-motion rule anywhere in the app still stops the run."""
+        self.pick(self.MOTION_ITEM.replace("level 4 (Showpiece)", "level 2 (Polished)"))
+        write(self.root, "forge-work/levels.json", LEVELS)
+        write(self.root, "forge-work/motion.md", MOTION)
+        write(self.root, "index.html", MOTION_HTML)
+        write(self.root, "src/style.css", ".hero { animation: rise 400ms both; }\n@keyframes rise { from { opacity: 0; } }\n")
+        self.assert_fails("improve", "forge-design/motioncheck.py . --fail-on high exits 1: it found problems",
+                          "why: forge-improve, Step 6: each look item moves to Fixed with its checks passing")
+
+    def test_a_look_item_in_a_comment_or_code_block_picks_no_part(self):
+        """V3G1-N5: a look item in a comment or a code block under ## Fixed is not a pick, so its part's checks are
+        skipped: no report, shots or frames are asked for."""
+        for hidden in ("<!--\n%s-->\n", "```\n%s```\n"):
+            with self.subTest(hidden=hidden[:4]):
+                self.pick(hidden % self.DESIGN)
+                out = self.assert_passes("improve")
+                for check in ("forge/level.py check look --report forge-work/design/redesign.md skipped: no ### design "
+                              "under ## Fixed of forge-work/improve.md", "forge/lookcheck.py moved forge-work/improve/"
+                              "shots/after-frames --level auto skipped: no ### design under ## Fixed"):
+                    self.assertIn(check, out)
+                self.assertIn("forge-work/improve.md: 0 look item(s) under ## Fixed", out)
+
+    def test_after_shots_that_are_missing_or_show_no_change_fail(self):
+        self.pick(self.DESIGN)
+        write(self.root, "forge-work/design/redesign.md", "# Redesign: Slotwise\nLevel: 4 (Showpiece)\n")
+        shown(self.root, "forge-work/improve/shots", after=(255, 255, 255))
+        self.assert_fails("improve", "forge-work/improve/shots/after exits 1: NO VISIBLE CHANGE in any pair",
+                          "the app was not rebuilt or restarted", "why: forge-improve, Step 6")
+        shutil.rmtree(os.path.join(self.root, "forge-work", "improve", "shots", "after"))
+        self.assert_fails("improve", "changed.py forge-work/improve/shots/before forge-work/improve/shots/after exits 2")
+
+    def test_findings_alone_run_no_changed_py_at_the_gate(self):
+        """A small fix can stay under changed.py's bar; its proof is its test or its own shots (forge-improve Step 5)."""
+        shown(self.root, "forge-work/improve/shots", after=(255, 255, 255))
+        self.assert_passes("improve")
+
+    def test_a_motion_pick_is_counted_at_the_look_level(self):
+        self.pick(self.MOTION_ITEM)
+        write(self.root, "forge-work/motion.md", MOTION.replace("Level: 2 (Polished)", "Level: 4 (Showpiece)"))
+        write(self.root, "index.html", MOTION_HTML)
+        write(self.root, "src/style.css", MOTION_CSS)
+        shown(self.root, "forge-work/improve/shots", after=(255, 255, 255))  # the stills: the page at rest
+        shown(self.root, "forge-work/improve/shots", parts=("before-frames", "after-frames"), name="home-390-f2.png")
+        frames(self.root, "forge-work/improve/shots/after-frames")  # the entrance moves; there is no scene
+        self.assert_fails("improve", "motioncount.py . --level auto exits 1: it found problems",
+                          "why: forge-improve, Step 6: each look item moves to Fixed with its checks passing",
+                          "the scene frames s1 to s6 at 1440, from level 4: none in forge-work/improve/shots/after-frames")
+        write(self.root, "forge-work/levels.json", LEVELS)  # the same app at look level 2 passes
+        write(self.root, "forge-work/motion.md", MOTION)
+        self.assertIn("motioncheck.py . --fail-on high exits 0", self.assert_passes("improve"))
 
 
 class ModeTests(Checks):
@@ -917,15 +1352,15 @@ class SinceTests(Checks):
         self.assert_fails("diff", "forge-work/parity.md is older than the last go (%s)" % go,
                           "Run the phase's skill again in full", args=("--since", go))
         self.assert_passes("diff")  # without --since, its age is not checked
-        for name in ("bugs.md", "features.csv"):  # written before parity.md, as in forge-diff
+        for name in ("bugs.md", "features.csv"):  # written before parity.md, as in forge-check diff
             os.utime(os.path.join(self.root, "forge-work", name), (at, at))
         os.utime(os.path.join(self.root, "forge-work", "parity.md"), (at + 1, at + 1))
         self.assertIn("forge-work/parity.md is newer than the last go (%s)" % go,
                       self.assert_passes("diff", "--since", go))
 
     def test_a_parity_report_older_than_the_bugs_or_the_features_does_not_count(self):
-        """gate-6: a bug from diff's behaviour walk goes through forge-test's fix loop, which changes bugs.md,
-        and a missing must-have through forge-build, which changes features.csv. diff then runs again from
+        """gate-6: a bug from diff's behaviour walk goes through forge-check test's fix loop, which changes bugs.md,
+        and a missing must-have through forge-build build, which changes features.csv. diff then runs again from
         Step 1 and its Step 4 rewrites parity.md: an older parity.md holds the verdict from before."""
         self.finish("diff")
         go = "2026-10-27T09:51:44+00:00"
@@ -970,6 +1405,17 @@ class SinceTests(Checks):
                 os.utime(os.path.join(self.root, name), (OLD, OLD))
                 self.assert_fails(phase, "%s is older than the last go (%s)" % (name, go), args=("--since", go))
 
+    def test_the_levels_evidence_from_before_the_last_go_does_not_count(self):
+        """R13: the build's own /forge-check secure leaves sbom.json behind (from level 4 also the probe). The secure
+        phase runs the check again in full (forge/SKILL.md): a new security.md next to the build's SBOM fails."""
+        self.finish("secure")
+        go = "2026-10-27T09:51:44+00:00"
+        self.assert_passes("secure", "--since", go)
+        os.utime(os.path.join(self.root, "forge-work", "sbom.json"), (OLD, OLD))
+        self.assert_fails("secure", "nor in forge-work/ one older than --since): forge-work/sbom.json",
+                          args=("--since", go))
+        self.assert_passes("secure")  # without --since, its age is not checked
+
     def test_since_applies_only_to_a_phase_with_a_report(self):
         self.finish("plan")
         os.utime(os.path.join(self.root, "forge-work", "plan.md"), (OLD, OLD))
@@ -983,11 +1429,11 @@ class SinceTests(Checks):
 
 
 class ScriptTests(Checks):
-    def fake_pack(self, source, script="forge-secure/secretscan.py"):
-        """A copy of the pack's forge and forge-secure folders with SCRIPT replaced by SOURCE."""
+    def fake_pack(self, source, script="forge-check/secretscan.py"):
+        """A copy of the pack's forge and forge-check secure folders with SCRIPT replaced by SOURCE."""
         pack = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, pack, ignore_errors=True)
-        for folder in ("forge", "forge-secure"):
+        for folder in ("forge", "forge-check"):
             shutil.copytree(os.path.join(ROOT, folder), os.path.join(pack, folder),
                             ignore=shutil.ignore_patterns("__pycache__"))
         with open(os.path.join(pack, script), "w", encoding="utf-8") as handle:

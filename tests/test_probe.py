@@ -1,4 +1,4 @@
-"""Tests for forge-secure/probe.py.
+"""Tests for forge-check/probe.py.
 
 No real network: a small web server on 127.0.0.1 (port 0, in a thread) plays an app. Each test switches on the
 holes it wants, so every check is shown to fire and to stay quiet. A public-looking target must be refused
@@ -23,7 +23,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `python3 -m unittest tests.test_probe` works
 from _load import ROOT, load, run_cp1252  # noqa: E402
 
-mod = load("forge-secure", "probe")
+mod = load("forge-check", "probe")
 mod.PAUSE = 0  # the pause between requests is for real apps, not for the tests
 
 ALL_CHECKS = ["exposed_file", "dir_listing", "debug_page", "reflected_input", "sql_error", "open_redirect", "cors",
@@ -139,11 +139,14 @@ class ProbeTests(unittest.TestCase):
         return path
 
     def probe(self, *holes, extra=()):
-        """(exit code, report, requests seen) of one --json run against the app with these holes."""
+        """(exit code, report, requests seen) of one --json run against the app with these holes. A run cut short
+        prints its report on stderr: a file that stdout is saved in stays empty, so it never counts as evidence."""
         with serve(*holes) as (url, seen):
             code, out, err = run(url, "--paths", self.paths, "--json", *extra)
-        self.assertEqual(err, "")
-        return code, json.loads(out), seen
+        report = json.loads(err if code == 2 else out)
+        self.assertEqual(out if code == 2 else err, "")
+        self.assertEqual(code == 2, report["summary"]["incomplete"])
+        return code, report, seen
 
     def checks(self, *holes):
         return sorted({finding["check"] for finding in self.probe(*holes)[1]["findings"]})
@@ -241,8 +244,9 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual((code, len(seen)), (2, 5))
         self.assertTrue(report["summary"]["incomplete"])
         self.assertIn("request cap of 5", " ".join(report["not_checked"]))
-        code, _, seen = self.probe("exposed_file", extra=["--max-requests", "5"])
-        self.assertEqual((code, len(seen)), (1, 5))  # a finding still counts
+        code, report, seen = self.probe("exposed_file", extra=["--max-requests", "5"])
+        self.assertEqual((code, len(seen)), (2, 5))  # cut short wins: the paths after the cap were never probed
+        self.assertEqual({finding["check"] for finding in report["findings"]}, {"exposed_file"})  # still reported
 
     def test_bodies_are_never_printed(self):
         with serve(*ALL_CHECKS) as (url, _):
@@ -300,7 +304,7 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("could not reach", err)
 
     def test_command_line(self):
-        script = os.path.join(ROOT, "forge-secure", "probe.py")
+        script = os.path.join(ROOT, "forge-check", "probe.py")
         code, out, _ = run_cp1252(script, "--help")
         self.assertEqual(code, 0)
         for words in ["Usage:", "Exit codes:", "--paths", "--max-requests", "--fail-on"]:

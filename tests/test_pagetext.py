@@ -257,12 +257,12 @@ class KeptTextPassesTheOtherScans(Project):
             handle.write("<!doctype html><title>Mijn eigen planner</title><p>Eigen woorden.</p>\n")
         for script in ("secretscan.py", "trackers.py", "codecheck.py"):
             with self.subTest(script=script):
-                done = subprocess.run([sys.executable, os.path.join(ROOT, "forge-secure", script), ".", "--json",
+                done = subprocess.run([sys.executable, os.path.join(ROOT, "forge-check", script), ".", "--json",
                                        "--fail-on", "low"], cwd=self.project, timeout=120, stdin=subprocess.DEVNULL,
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 self.assertEqual(json.loads(done.stdout)["findings"], [])
-        done = subprocess.run([sys.executable, os.path.join(ROOT, "forge-secure", "secretscan.py"),
+        done = subprocess.run([sys.executable, os.path.join(ROOT, "forge-check", "secretscan.py"),
                                self.save("same-page.html", page), "--fail-on", "low"], timeout=120,
                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertEqual(done.returncode, 1, "the saved page itself must trip the scan, or this test proves nothing")

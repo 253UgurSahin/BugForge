@@ -5,8 +5,8 @@ gate reads. phasecheck.py runs it for the exit checks of a phase. Run it from th
 reads files (UTF-8; UTF-16 and UTF-32 with a byte order mark too, like bugs.py) and changes nothing.
 
 Usage:
-    python3 doccheck.py forge-work/recon.md --template ../forge-recon/recon-map.md
-    python3 doccheck.py RUN.md --template '../forge-pack/templates/*/RUN.md' --no-sections
+    python3 doccheck.py forge-work/recon.md --template ../forge-research/recon-map.md
+    python3 doccheck.py RUN.md --template '../forge-build/templates/*/RUN.md' --no-sections
     python3 doccheck.py forge-work/brand.md --section 'Name checks' --section Palette --json
     python3 doccheck.py forge-work/test-plan.md --cases forge-work/bugs.md --specs 'e2e/**/*.spec.*'
 
@@ -79,7 +79,7 @@ def visible(text, fences=True, inline=True):
 
 
 def shown(path):
-    """A path the way the skills write it: ../forge-recon/recon-map.md for a file of the pack."""
+    """A path the way the skills write it: ../forge-research/recon-map.md for a file of the pack."""
     try:
         inside = os.path.relpath(os.path.abspath(path), PACK)
     except ValueError:  # Windows: on another drive than the pack
@@ -211,7 +211,7 @@ def check_specs(name, text, patterns):
         return True, "%s marks no case e2e, so it needs no end-to-end spec" % name, []
     return False, "%s marks %d case(s) e2e, but there is no file like %s" % (
         name, len(marked), " or ".join(patterns)), [
-        "Write the specs (forge-test Step 3), or mark a case unit or manual when that is how it was tested."]
+        "Write the specs (forge-check test Step 3), or mark a case unit or manual when that is how it was tested."]
 
 
 def check_rows(name, text, columns):

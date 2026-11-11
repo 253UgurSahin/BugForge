@@ -1,0 +1,369 @@
+# The walk, the edge cases, the budget and the screenshots
+
+Detail for the test part of `/forge-check` (`../forge-check/steps/test.md`). The walk and the edge
+cases are active tests: only the user's own app, after `../forge-check/scope.py` exits 0 for the
+base URL. Which of this runs depends on the test level (`python3 ../forge/level.py get test`); the
+table of what each level adds is in the steps file and in `../forge/levels.md`.
+
+## The edge list
+
+Go down this list for every flow in Step 1 and keep the cases that apply, up to the level on record:
+
+| from level | cases |
+| --- | --- |
+| 3 | empty input; very long input (a 60 character name, a 300 character text); emoji and accents; wrong input for the field (letters in a number, "abc" as an email) |
+| 3 | text that looks like HTML or SQL: it comes back as plain text and never runs |
+| 3 | double click on submit (one record); back button and refresh mid-flow; an expired session |
+| 3 | a second user's data (must be invisible: 403 or 404; no accounts: a second browser sees none); mobile width (390px) |
+| 4 | the same form cases on every form of the app, built from the helpers below; slow network; offline; keyboard only; screen reader labels |
+| 5 | two tabs at once; time zones and summer time; hostile and oversized input on every field; the slow-network matrix ("Level 5" below) |
+
+At level 3 the cases go into the flow specs. From level 4, `../forge-check/edge.example.spec.ts`
+gives a helper for each form case and one worked form: copy it to `e2e/edge.spec.ts`, or beside
+the specs of the app's own Playwright setup (the gate looks for `**/edge.spec.*`, never in
+node_modules or a folder whose name starts with a dot), change `FORM`, and add one `describe` per
+form. A case that fails leaves `forge-work/test/evidence/<case>.png`: name it on the bug's
+`evidence:` line.
+
+| helper | what it does |
+| --- | --- |
+| `withEvidence(page, caseId, steps)` | runs the case; on failure saves the screenshot, then fails |
+| `expectRejected(page, field)` | the field is marked invalid or an alert with text shows |
+| `expectShownAsText(page, text)` | the text shows letter for letter, made no element, ran nothing |
+| `doubleClick(page, button)` | a real double click on the same spot |
+| `slowNetwork(page, ms)` | every request waits first; returns a function that undoes it |
+| `expireSession(page)` | clears the cookies, as after a time-out |
+| `watchForCrashes(page)` | collects 5xx answers and uncaught script errors |
+| `LONG(300)`, `ACCENTS`, `HTML_TEXT`, `SQL_TEXT` | the values to type |
+
+## Severity for a bug
+
+| severity | for a bug (rules.md section 8) |
+| --- | --- |
+| critical | data loss, another user's data visible, a security hole, money wrong, a legal problem (a tracker that loads before consent) |
+| high | a core flow or feature broken, no workaround |
+| medium | broken with a workaround, or visibly wrong |
+| low | cosmetic |
+
+## PWA and offline (level 4)
+
+- `PWA: yes`: install, the offline page styled offline (its `/offline.css` comes from the worker's
+  cache), and no signed-in page from the cache after logging out.
+- When plan.md says a static app works offline (profiles.md, "Working offline"), its pages open
+  offline after one online visit.
+
+Both have a test in `../forge-check/e2e.example.spec.ts`. Below level 4 they go under "Not tested".
+
+## Keyboard only (level 4)
+
+Every flow once with the keyboard alone: Tab and Shift+Tab to move, Enter and Space to press,
+Escape to close a dialog, the arrow keys in menus and tabs. Each control can be reached, in an
+order that makes sense, with a focus ring you can see; a dialog keeps the focus inside it and gives
+it back when it closes; nothing needs a mouse. Write it as a spec with `page.keyboard` where you
+can (the case `F01-K1`), and do the rest in the manual pass with a browser tool. A control that
+cannot be reached is a high bug (WCAG 2.1.1), a focus ring you cannot see a medium one.
+
+## An app that already runs
+
+The usual case for a test on its own: "test mijn app" in the user's folder, with their dev server
+(`npm run dev` on `http://localhost:3000`) or their own containers running.
+
+- Use it at its address, as it is: that is the `Served:` address and the base URL of every run.
+  Never start a second server next to it, never restart it, never stop it.
+- In its folder, install only what is missing. Never `npm ci`, `rm -rf node_modules` or `next
+  build`: the first two pull the packages from under the running server, the last overwrites the
+  `.next` folder it serves from. `e2e/` has its own package.json, so its install touches nothing.
+- Demo accounts the app already has (a README line, a seed file, a login hint): two with the same
+  role are the first and second user. Their emails go in `e2e/helpers.ts` (as `ALICE` and `BOB`;
+  the `.auth/alice.json` and `bob.json` names stay), their passwords as `E2E_PASSWORD` and
+  `E2E_PASSWORD_2`, which the e2e config reads: never in a command, the chat or a file in git.
+  Passwords the app documents: write those two lines in `forge-work/test/e2e.env` (out of git);
+  never edit the user's `.env`. Not documented: ask the user to add them to their `.env` (first
+  `git check-ignore -q .env`: git must ignore it), never in the chat (rules.md section 5).
+- Their database is the one they work with. Specs add records with new names (`Date.now()`) and
+  never delete one they did not make. A record the level needs that the demo accounts lack: make
+  it through the app's own screens in the spec. A seed command that empties a database runs only
+  after the user's go, and the app's own tests only as Step 2.6 of the steps file says (first
+  `python3 ../forge-check/testdb.py .`: tests can empty the database they reach).
+
+## Seed data
+
+A forge-built app has a seeder (build-log.md or the README): laravel `php artisan db:seed`, django
+`python manage.py seed`, next `npm run seed`; its users share `SEED_PASSWORD`, which is
+`E2E_PASSWORD`. Improve mode without a seeder or demo accounts: a seed script that only adds fake
+`@example.test` users sharing `SEED_PASSWORD` (hashed as the app's own sign-up hashes them) and a
+record per edge case (a draft, a past item, a nearly full one). It writes to the database the user
+works with, so it runs only after their go, and it never empties one. Keep it in `forge-work/` (out
+of git) and run it through the app, as plain code with the app's models (a seeder class there is
+never autoloaded):
+- laravel: `php artisan tinker --execute="require base_path('forge-work/seed.php');"`
+- django: `python manage.py shell < forge-work/seed.py`
+- node: `node --env-file=.env forge-work/seed.mjs`, with the app's own database client
+
+Or, with their go, commit one as `test: add a seed command`. No accounts, data in the browser: no
+seeder or `E2E_PASSWORD`, each test seeds its own data (see the last group of
+`../forge-check/e2e.example.spec.ts`).
+
+A forge-built app on its compose stack: the images have no dev packages, so seed and unit tests run
+on the host (`composer install`, a venv with the dev requirements, `npm ci` in a folder no dev
+server runs from) and reach the database on the override's port ("Where things run" in
+`../forge-build/steps/build.md`): `127.0.0.1:3307` (MariaDB) or `127.0.0.1:5433` (PostgreSQL).
+next: the unit tests use `TEST_DATABASE_URL=postgres://app:<DB_PASSWORD>@127.0.0.1:5433/app_test`,
+made once by `docker compose exec db createdb -U app app_test`; the tests migrate it and refuse a
+name without `_test`. Another app: its own test set-up, as its README or package.json says.
+
+Improve mode, after the fix loop: update improve.md: "Tests after", and per fixed bug a line under
+"Found on the way": `B001 fixed in d8a76ff, see bugs.md`.
+
+## The e2e config
+
+Two changes to the config at the top of `../forge-check/e2e.example.spec.ts`. The walk is a
+project of its own that exists only when `FORGE_ROUND` is set, so a run of the suite never opens
+the walk and never writes over walk.json or a round of shots:
+
+```ts
+projects: [
+  { name: 'setup', testMatch: /auth\.setup\.ts/ },
+  { name: 'chromium', testMatch: /\.spec\.ts$/, testIgnore: /walk\.spec\.ts$/, dependencies: ['setup'] },
+  ...(process.env.FORGE_ROUND
+    ? [{ name: 'walk', testMatch: /walk\.spec\.ts$/, dependencies: ['setup'] }] : []),
+],
+```
+
+The config's first lines read the `E2E_` passwords from the project's git-ignored `.env` and from
+`forge-work/test/e2e.env` (the top of the example), so no command carries one. And with demo
+accounts, helpers.ts gives each user
+their own password (`ADMIN` only for an app with another role), and the default password of
+`signIn` becomes `PASSWORDS[email]`:
+
+```ts
+const PASSWORDS = { [ALICE]: process.env.E2E_PASSWORD || '',
+  [BOB]: process.env.E2E_PASSWORD_2 || process.env.E2E_PASSWORD || '', [ADMIN]: process.env.E2E_PASSWORD_ADMIN || '' };
+```
+
+The suite is `npx playwright test --project=chromium`, the walk `FORGE_ROUND=r1 npx playwright test
+--project=walk`, each with `FORGE_BASE_URL` set to the `Served:` address, and the walk also with
+the theme choice of "Light and dark" below (Step 3 of the steps file).
+
+## Light and dark
+
+The walk opens each page with the system set to light and to dark, and writes in each result the
+`theme` the page says it shows (`data-theme`, `data-bs-theme`, a `dark` or `light` class on
+`<html>`, else its `color-scheme`). An app that keeps its own theme (a choice stored in
+localStorage, a dark default such as `theme.py --default dark`, next-themes' `defaultTheme`) shows
+that one twice, and walkcheck.py then calls the walk incomplete: the other theme was never walked.
+So before the first walk, find how the app keeps its theme: the key and values under `## Theme` in
+`forge-work/design/components.md`, or the app's theme script or switch. Give the walk a script
+that sets it for each setting, `FORGE_INIT_SCRIPT=<file>` on the walk command: the design part's
+`forge-work/design/theme.js` when there is one, else `forge-work/test/theme.js` with this one line,
+the app's own key and values in place of `theme`, `dark` and `light`:
+
+```js
+localStorage.setItem('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+```
+
+A class the app's switch sets (next-themes' `.dark`) follows its stored key the same way. An app
+with one theme only (its CSS has no dark colours, or no light ones): `FORGE_SCHEMES=light` (or
+`dark`) walks that one; write `one theme only: light` under "Not tested" in test-plan.md, and say
+so at the checkpoint. One page with one theme by design in an app that has both (a light landing
+page in front of a dark app): give its routes.json entry `"schemes": ["light"]`, so the walk opens
+it in that one and walkcheck.py judges it there; write `one theme only: S01-home` under "Not
+tested". Never use it to hide a page whose other theme is broken.
+
+## Rate limits
+
+The app's rate limits count every spec and every page of the walk, all from one address. Never
+loosen them for tests. Clear the counters between runs, on a stack you started: laravel `docker
+compose exec app php artisan cache:clear`, django its limiter's store (django-axes: `manage.py
+axes_reset`), next on the forge compose stack `docker compose restart app` (Better Auth counts in
+memory by default). A server you did not start (the user's own `npm run dev`) is never restarted:
+an in-memory counter clears after its window, so wait it out, or ask the user to restart it. The
+walk signs nobody in: it reuses the cookies the setup project saved.
+
+"Too many login attempts" runs on a throwaway account the spec signs up first (new email, new
+password), never on a seed or demo account: a locked demo account stops the other specs, and the
+user may use it themselves. No sign-up in the app: leave the case out and write it under "Not
+tested".
+
+## Level 5
+
+Each of these is a case in test-plan.md and, where a browser can do it, a spec:
+
+- **Every route in every state.** routes.json gets one entry per state a screen can be in: empty
+  (a seed user with no records), full (one with many), an error (a record that is gone), and once
+  per role that may open it. Name them `S03-dashboard-empty`, `S03-dashboard-full`.
+- **Hostile and oversized input on every field**, the user's own app only (scope.py exit 0): the
+  helpers' `HTML_TEXT` and `SQL_TEXT`, `LONG(10000)` and `LONG(100000)`, control characters,
+  right-to-left text, a file upload that is too big or of the wrong type. The app must refuse it
+  plainly or store it as plain text; a 500, a hang or text that runs is a bug.
+- **Two tabs at once**: two pages of one browser context change the same record; the second save
+  must not wipe out the first one without a word.
+- **Time zones and summer time**: `test.use({ timezoneId: 'Pacific/Auckland' })` and
+  `'America/New_York'` next to `'Europe/Amsterdam'`; dates on the last Sunday of March and of
+  October, and around midnight. Times show in the user's zone and are stored in UTC.
+- **The slow-network matrix**: each flow with `slowNetwork(page, ms)` at 0, 400 and 2000 ms, and
+  once offline halfway. Nothing is sent twice, a spinner or message shows, nothing is lost.
+- **Three runs**: `npx playwright test --repeat-each=3`. A case that fails in one run of three is a
+  flaky test or a race in the app: find out which. A race is a bug (medium, high when data is
+  lost); a flaky test is fixed in the test, never by a longer wait alone.
+
+## routes.json
+
+`forge-work/test/routes.json` is the list of pages the walk opens. Write it yourself, without
+asking: one entry per screen of recon.md or plan.md (the same names, `S03-dashboard`); improve
+mode: one per route in the app's router. Fill in the ids of seed records (`/items/1`).
+
+```json
+[
+  { "name": "S01-home", "path": "/", "as": null },
+  { "name": "S03-dashboard", "path": "/dashboard", "as": "alice" }
+]
+```
+
+- `name`: letters, digits, `-` and `_`; each name once. It is part of the screenshot's name.
+- `path`: starts with one `/`.
+- `as`: `null` for a visitor, or a seed or demo user whose cookies the setup project saved in
+  `e2e/.auth/<as>.json` (`alice` and `bob` are the first and second user, also for demo accounts).
+  Walk a page as the user who may see it. A page only an admin (or another role) may open gets
+  `"as": "admin"`: such an app has one test account per extra role, a seed or demo one, never the
+  user's own. Its email is `ADMIN` in `e2e/helpers.ts`, its password `E2E_PASSWORD_ADMIN` in the
+  git-ignored `.env`, and the setup loop of the example's auth.setup.ts saves it to
+  `.auth/admin.json`. Ask for it in Step 0 of the steps file, with the two users; never walk an
+  admin page as alice.
+- `schemes` (only when needed): `["light"]` or `["dark"]` for a page with one theme by design in
+  an app that has two ("Light and dark").
+- Not a route: a dialog, a tab or a step with no URL of its own (a flow spec covers it), and pages
+  on other hosts (Stripe Checkout).
+
+## What the walk records
+
+`e2e/walk.spec.ts` (from `../forge-check/walk.example.spec.ts`) opens each route at 390, 768 and
+1440 px wide, in the light and the dark colour scheme, each in a fresh browser context (an empty
+cache). It fails only when a page cannot be loaded or routes.json cannot be read. It writes
+`forge-work/test/walk.json` after every page:
+
+```json
+{ "version": 1, "base_url": "http://localhost:8080", "round": "r1", "written": "2026-01-01T10:00:00Z",
+  "widths": [390, 768, 1440], "schemes": ["light", "dark"],
+  "routes": [{ "name": "S01-home", "path": "/", "as": null }],
+  "results": [{ "route": "S01-home", "path": "/", "as": null, "width": 390, "scheme": "light" }] }
+```
+
+Each result also has:
+
+| field | what it holds |
+| --- | --- |
+| `loaded`, `error`, `skipped` | whether the page opened; why not; why it was skipped (no saved sign-in) |
+| `theme` | the theme the page says it shows, `light` or `dark`; `""` when it says none ("Light and dark") |
+| `incomplete` | the checks that could not run on this page (`axe: ...`, `layout: ...`) |
+| `status`, `redirected_to` | the page's HTTP status; the path it landed on when that is another one |
+| `screenshot` | `forge-work/test/shots/<round>/<name>-<width>-<scheme>.png`, the full page |
+| `console_errors`, `page_errors` | console lines of the type error; uncaught script errors |
+| `failed_requests` | requests with no answer: `url`, `method`, `type`, `same_origin`, `error` |
+| `bad_responses` | answers of 400 and up (not the page itself): the same fields, `status`, `own_asset` |
+| `broken_links`, `links_checked` | same-origin links that answer 404, 410 or 5xx: `url`, `status`, `text` |
+| `axe` | WCAG 2.0, 2.1 and 2.2 A and AA violations: `id`, `impact`, `help`, `help_url`, `nodes`, `targets` |
+| `overflow_px` | how many pixels the page is wider than the screen (0 is right) |
+| `clipped` | elements whose own text is cut off with no ellipsis: `element`, `direction` |
+| `overlaps` | a control whose centre lies under another control: `element`, `covered_by` |
+| `small_targets` | controls under 24 by 24 px (links in a sentence and labelled boxes do not count) |
+| `perf` | `lcp_ms`, `cls`, `ttfb_ms`, `load_ms`, `requests`, `transfer_bytes` |
+
+Every link is asked for once per run with a GET, as the route's user. Links that could change
+something are never followed: their path or query (not the host name) holds log out, delete,
+cancel, export, download, approve, ban, impersonate, publish, send, verify or a word like them, in
+English or Dutch (uitloggen, verwijderen, accepteren: `UNSAFE_LINK` in the example), or a script sends them as
+another method (`data-method="delete"`) or as a download. The top of walk.json also names the
+`init_script` the walk used. Query strings are cut from every address written down, because they
+can hold a token.
+At most 25 entries of one kind per page. CLS is the sum of all layout shifts while loading.
+
+## What walkcheck.py makes of it
+
+`python3 ../forge-check/walkcheck.py forge-work/test/walk.json` groups one problem seen at several
+widths or schemes into one finding (a broken link: one for all routes) and gives it a severity:
+
+| severity | findings |
+| --- | --- |
+| high | the page answers 4xx or 5xx; an uncaught script error; a 5xx answer or link; an axe violation with the impact critical; a speed or size value over twice its budget |
+| medium | a console error; a failed request or a 4xx from the app itself; a 404 link; an axe violation with the impact serious; sideways scrolling; cut-off text; a covered control; a redirect; a value over its budget |
+| low | a failed request or 4xx from another host; other axe violations; tap targets under 24 px; too many requests |
+
+It never says critical: whether a finding leaks data or loses it is for you to judge. Raise the
+severity in bugs.md when it does, and say why. Never lower one to get through.
+
+Exit 2 means the walk is incomplete: a page has no result, was skipped, did not load, one of its
+checks could not run, or it showed one theme with the system set to light and to dark ("Light and
+dark"). Fix the cause and walk again. A route that cannot be walked (no seed password) comes out
+of routes.json and goes under "Not tested" in test-plan.md, after asking.
+
+`--bugs` prints the findings at or above `--fail-on` as blocks for bugs.md. `--known
+forge-work/bugs.md` leaves out the ones whose title is in bugs.md already and numbers on from its
+last bug; `--build` fills in the commit. Paste the blocks above `## To check`, as UTF-8.
+
+## The budget
+
+The walk measures speed from level 3, and a page over budget is a bug like any other. From level
+4 the budget is enforced: at the end no speed or size finding is left open, whatever its severity
+(`walkcheck.py --json --fail-on low` lists none with the rule `lcp_ms`, `cls`, `ttfb_ms`,
+`load_ms`, `transfer_bytes` or `requests`), unless the user agreed a looser limit (below). The
+other rules are medium or high already, but a page over the request budget is low: to file it as
+a bug in Step 5, run Step 5's walkcheck.py command again with `--fail-on low` and paste only the
+blocks whose `evidence:` line ends in `(rule requests)`.
+
+Per page, on a first load (an empty cache), on a production build on this machine:
+
+| key | limit | what it is |
+| --- | --- | --- |
+| `lcp_ms` | 2500 | Largest Contentful Paint: when the biggest thing on the screen was drawn |
+| `cls` | 0.1 | Cumulative Layout Shift: how much the page jumped while loading |
+| `ttfb_ms` | 800 | time to first byte: how long the server took to start answering |
+| `load_ms` | 4000 | until the load event: everything the page asked for is in |
+| `transfer_bytes` | 1500000 | bytes sent over the network for the page (1.5 MB) |
+| `requests` | 60 | requests the page made |
+
+Over the limit is medium, over twice the limit high (`requests`: always low). A measurement the
+browser did not give (`null`) is not judged. A production build on this machine is faster than a
+real server, so a page over budget here is over budget everywhere.
+
+A dev server (`next dev`, `vite`, `php artisan serve`, `manage.py runserver`) is not that: it builds
+a route on its first load and sends code that is not minified, so its numbers are not the app's.
+On a dev server, open every route once before the walk (a GET of each path), and write `speed
+measured on a dev server` in test-plan.md. Speed and size findings from a dev server are not bugs
+and never block: list them under `## To check` in bugs.md with their numbers, and Step 6.6 is done
+when walkcheck.py finds nothing else. For real numbers, walk a production build on a free port in a
+copy of the folder: `git worktree add --detach ../<app>-walk HEAD`, then there install, build and
+start it (next: `npm ci`, `npx next build`, `npx next start -p 3100`), with a copy of their `.env`
+files (never printed), and walk `http://localhost:3100`. Never `next build` in the folder whose dev
+server is running. Level 4 enforces the budget, and inside a `/forge` project the gate runs
+walkcheck.py on walk.json: in both cases every walk is of such a production build, never of the
+dev server, and Step 7 takes its before and after shots with shots.mjs from the `Served:` address.
+The copy stays at the commit it was made from, and the fixes are new commits in the user's folder.
+After each round of fixes, move the copy to them: `git -C ../<app>-walk switch --detach <the work
+branch>` (the branch of Step 2.1: `forge/test` or `forge/test-2`, in improve mode `forge/improve-<yyyymmdd>`), stop
+the server you started there, then install, build and start it again, and walk the next round.
+Remove the copy at the end (`git worktree remove ../<app>-walk`). To change a limit, write
+`forge-work/test/budget.json` with only the keys that differ, such as `{"lcp_ms": 3000}`, and run
+walkcheck.py with `--budget forge-work/test/budget.json`. A looser budget is the user's call: ask,
+and write their words in test-plan.md under "Not tested".
+
+## Rounds of screenshots
+
+Comparing rounds is level 4 and up. `FORGE_ROUND` names the folder of a walk's screenshots: `r1` for the first walk (the baseline),
+`r2` after the first round of fixes, and so on. walk.json is always the last walk. At level 4 and
+up there is always a round r2, also when nothing was fixed: the gate asks for both folders.
+
+`python3 ../forge-check/shotcheck.py forge-work/test/shots/r1 forge-work/test/shots/r2` compares
+the shots with the same name through `../forge-check/imgdiff.py`. A pair under `--min` (default 90)
+is CHANGED, with where on the screen; a shot only one round has is MISSING or NEW. Exit 0: nothing
+changed; 1: something did; 2: could not compare (a folder is missing: the first round has nothing
+to compare with). imgdiff looks at layout, not colour: a colour-only change is not seen here, but
+axe's contrast check in the walk sees the ones that matter.
+
+After the first walk, open the phone (390) and the dark shots yourself: no script sees a page that
+is merely ugly, or dark text on a dark background that axe could not measure.
+
+A change is not always a bug. Open both PNGs of each changed shot: the fix itself (the button that
+was cut off now fits) gets a line in test-plan.md; anything the fix was not meant to touch is a
+new bug, with both files on its `evidence:` line. `forge-work/` stays out of git and out of the
+image, so the shots do too.

@@ -1,4 +1,4 @@
-"""Tests for forge-secure/trackers.py.
+"""Tests for forge-check/trackers.py.
 
 The one fake key below is glued together at runtime, so this file never contains
 a secret-looking literal: the repo itself is scanned with secretscan.py in CI.
@@ -20,7 +20,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _load import load, run_cp1252, symlink  # noqa: E402
 
-mod = load("forge-secure", "trackers")
+mod = load("forge-check", "trackers")
 
 FAKE_KEY = "sk_" + "test_" + "Q7w8E9r0T1y2U3i4O5p6"
 GA = "Google Analytics / Tag Manager"
@@ -235,7 +235,7 @@ class ConsentTests(unittest.TestCase):
                 self.assertIn("needs consent", finding["title"])
 
     def test_fonts_and_files_from_a_cdn_are_medium_without_consent(self):
-        # Dogfood: fonts were low here, high in the audit table and banned in forge-design. Every
+        # Dogfood: fonts were low here, high in the audit table and banned in forge-design design. Every
         # page view sends the visitor's IP before any yes: medium, fixed by self-hosting.
         for name, finding in self.findings_for("Google Fonts", "Adobe Fonts", "jsDelivr", "unpkg").items():
             with self.subTest(service=name):
@@ -400,7 +400,7 @@ class WalkTests(TempFolder):
                     self.assertEqual(services_in(handle.read()), set())
 
     def test_a_copy_of_forge_in_the_project_lists_nothing(self):
-        tools = os.path.join(self.dir, "tools")  # copied under another name than forge-secure
+        tools = os.path.join(self.dir, "tools")  # copied under another name than forge-check secure
         os.makedirs(tools)
         for path in glob.glob(os.path.join(os.path.dirname(mod.__file__), "*.py")):
             shutil.copy(path, tools)

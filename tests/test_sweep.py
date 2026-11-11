@@ -1,4 +1,4 @@
-"""Tests for forge-brand/sweep.py: finding the original's name, domains and colours, what is
+"""Tests for forge-design/sweep.py: finding the original's name, domains and colours, what is
 skipped, the brand file, the exit codes and the JSON shape. The first tests are ported from
 replica-skill's tests/test_sweep.py; forge-work/ takes the place of the replica/ folder. The
 Review* classes hold one regression test per defect found in review."""
@@ -16,8 +16,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, symlink  # noqa: E402
 
-sweep = load("forge-brand", "sweep")
-SCRIPT = os.path.join(ROOT, "forge-brand", "sweep.py")
+sweep = load("forge-design", "sweep")
+SCRIPT = os.path.join(ROOT, "forge-design", "sweep.py")
 
 
 def put(root, rel, text, binary=False):
@@ -225,7 +225,7 @@ class BrandFile(Project):
         self.assertEqual(code, 1)
 
     def test_old_palette_values_are_found_without_a_brand_file(self):
-        """forge-brand Step 3 looks for copies of the old token values before brand.json exists."""
+        """forge-design brand Step 3 looks for copies of the old token values before brand.json exists."""
         clean = tempfile.mkdtemp(dir=self.root)
         put(clean, "public/offline.css", ":root { --color-accent: #3F4856; }\n")
         put(clean, "public/icons/favicon.svg", '<svg><rect fill="#3f4856"/></svg>\n')
@@ -344,6 +344,19 @@ class Output(Project):
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=60)
         self.assertEqual(done.returncode, 1, done.stderr)
         self.assertTrue(json.loads(done.stdout)["findings"])
+
+    def test_a_reader_that_stops_early_is_no_crash(self):
+        """`sweep.py . | head`: a report bigger than the pipe holds meets a closed pipe. No traceback, same exit."""
+        for number in range(400):
+            put(self.root, "src/pages/page%d.ts" % number, "// calendly\n" * 5)
+        done = subprocess.Popen([sys.executable, SCRIPT, ".", "--avoid", "Calendly"], cwd=self.root,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        done.stdout.read(200)
+        done.stdout.close()  # what head does once it has its lines
+        err = done.stderr.read().decode("utf-8", "replace")
+        done.stderr.close()
+        self.assertEqual(done.wait(timeout=120), 1, err)
+        self.assertNotIn("Traceback", err)
 
 
 class ReviewMatching(unittest.TestCase):

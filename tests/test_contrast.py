@@ -7,6 +7,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -387,6 +388,25 @@ class ConsoleTests(unittest.TestCase):
             code, out, err = run_cp1252(contrast.__file__, path)
         self.assertEqual(code, 0, err)
         self.assertIn("text-caf\u00e9-\\u2192 on bg", out)
+
+    def test_a_reader_that_stops_early_is_no_crash(self):
+        """`contrast.py tokens.json | head`: head reads a few lines and closes the pipe. A report bigger
+        than the pipe holds then meets a closed pipe: no BrokenPipeError and no traceback, the same exit."""
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "tokens.json")
+            colours = {"bg": "#ffffff"}
+            colours.update(("text-%d" % number, "#999999") for number in range(3000))
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"color": colours, "pairs": [["text-%d" % number, "bg"] for number in range(3000)]}, handle)
+            done = subprocess.Popen([sys.executable, contrast.__file__, path], stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+            done.stdout.read(200)
+            done.stdout.close()  # what head does once it has its lines
+            err = done.stderr.read().decode("utf-8", "replace")
+            done.stderr.close()
+            self.assertEqual(done.wait(timeout=120), 1, err)  # every pair fails: still exit 1
+        self.assertNotIn("Traceback", err)
+        self.assertNotIn("BrokenPipe", err)
 
 
 if __name__ == "__main__":

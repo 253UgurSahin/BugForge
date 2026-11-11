@@ -1,9 +1,9 @@
 # Payments with Stripe, including iDEAL
 
-Read this before you write payment code in forge-build. Checked on 2026-10-27 against Stripe's docs, the Laravel
+Read this before you write payment code in forge-build build. Checked on 2026-10-27 against Stripe's docs, the Laravel
 Cashier docs and the three official SDKs (sources at the bottom). When a call fails or this page disagrees with
 the docs for the API version your SDK pins, the docs win. The general rules (test mode only, keys in `.env`, no
-card data, the price from your own database) are in SKILL.md and `../forge/rules.md`.
+card data, the price from your own database) are in `../forge/rules.md` and Step 5 of `../forge-build/steps/build.md`.
 
 ## 1. First: whose money is it?
 
@@ -170,7 +170,7 @@ $key])`; django `client.v1.refunds.create(params={...}, options={"idempotency_ke
   `async_payment_succeeded` fulfils; the same event twice sends one email; `expired` frees the slot; a late payment
   for a taken slot is refunded; cancelling twice refunds once; a token link shows only its own booking; coming
   back to the status page before the webhook shows "paid".
-- **Without keys** (forge-test's end-to-end tests on the compose stack, CI, or before the user has a Stripe
+- **Without keys** (forge-check test's end-to-end tests on the compose stack, CI, or before the user has a Stripe
   account): put the four calls (create a session, retrieve, expire, refund) behind one small interface with a
   Stripe and a fake implementation, and bind the fake in unit tests. `STRIPE_FAKE=true` in the development `.env`
   binds it in the running app too: its sessions point to a page `/dev/checkout/<session>` with **Authorize** and

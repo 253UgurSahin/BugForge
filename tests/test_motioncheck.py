@@ -1,10 +1,11 @@
-"""Tests for forge-motion/motioncheck.py: each rule fires and stays quiet, in stylesheets, templates
+"""Tests for forge-design/motioncheck.py: each rule fires and stays quiet, in stylesheets, templates
 and scripts, plus the walking rules, the exit codes and the output."""
 
 import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -13,8 +14,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252, symlink  # noqa: E402
 
-mod = load("forge-motion", "motioncheck")
-SCRIPT = os.path.join(ROOT, "forge-motion", "motioncheck.py")
+mod = load("forge-design", "motioncheck")
+SCRIPT = os.path.join(ROOT, "forge-design", "motioncheck.py")
 CALM = "@media (prefers-reduced-motion: reduce) { .other { transition: none; } }\n"  # the project asks
 ASKS = 'const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;\n'
 CDN = "https://cdn.jsdelivr.net/npm/"
@@ -168,6 +169,22 @@ class CssRuleTests(Case):
                                   for f in report["findings"]], [("transition-all", 5, True)])
                 os.remove(os.path.join(self.root, *name.split("/")))
 
+    def test_style_blocks_in_other_template_languages(self):
+        """Express, Fastify, Nest and Adonis apps: EJS, Handlebars, Nunjucks, Liquid, Edge and Razor views; every
+        template motioncount.py counts is checked here too (a style block it counts is never left unchecked)."""
+        page = "<main>\n<style>\n.a { transition: all .2s; }\n</style>\n</main>\n"
+        for name in ["views/index.ejs", "views/a.hbs", "views/b.handlebars", "views/c.njk", "views/d.liquid",
+                     "resources/views/e.edge", "Pages/F.cshtml", "views/g.nunjucks", "views/h.jade"]:
+            with self.subTest(template=name):
+                report = self.scan({"calm.css": CALM, name: page})
+                self.assertEqual([(f["rule"], f["line"]) for f in report["findings"]], [("transition-all", 3)])
+                os.remove(os.path.join(self.root, *name.split("/")))
+        counted = load("forge-design", "motioncount")
+        self.assertEqual(counted.MARKUP - mod.MARKUP - mod.SCRIPTS, set(), "counted by motioncount, never checked here")
+        self.assertEqual(counted.STYLES - mod.STYLES, set(), "a stylesheet motioncount counts, never checked here")
+        report = self.scan({"calm.css": CALM, "src/app.pcss": ".a { transition: all .2s; }\n"})  # PostCSS
+        self.assertEqual([(f["rule"], f["line"]) for f in report["findings"]], [("transition-all", 1)])
+
     def test_css_in_a_script_is_not_read(self):
         self.assertEqual(self.rules({"a.js": "const css = `.a { transition: all 5s; }`;\n"}), [])
 
@@ -219,6 +236,32 @@ class ScriptRuleTests(Case):
                 self.assertEqual(self.rules({"hero.ts": loop + pause + "\n"}), [])
         self.assertEqual(self.rules({"a.js": "requestAnimationFrame(() => el.classList.add('in'));\n"}), [])
         self.assertEqual(self.rules({"a.js": "requestAnimationFrame(callbackFromElsewhere);\n"}), [])
+
+    def test_a_tween_that_ends_or_a_single_frame_is_no_loop(self):
+        """The trial: a 550 ms count and a one-frame reposition were read as loops with no pause."""
+        tween = ("const step = (now) => {\n  const p = Math.min((now - start) / 550, 1);\n  draw(p);\n"
+                 "  if (p < 1) raf = requestAnimationFrame(step);\n};\nraf = requestAnimationFrame(step);\n")
+        frame = ("const place = () => {\n  setPlace(measure());\n};\nconst again = () => {\n"
+                 "  cancelAnimationFrame(raf);\n  raf = requestAnimationFrame(place);\n};\naddEventListener('scroll', again);\n")
+        early = "const step = (now) => {\n  draw(now);\n  if (now > end) return;\n  requestAnimationFrame(step);\n};\n"
+        block = "function tick(now) {\n  draw(now);\n  if (running) {\n    requestAnimationFrame(tick);\n  }\n}\n"
+        ternary = "const tick = (now) => (++frames, now - start < 3000 ? requestAnimationFrame(tick)\n  : done());\n"
+        quoted = 'const doc = "function tick() { requestAnimationFrame(tick) }";\nconst tick = () => go();\n' \
+                 "requestAnimationFrame(tick);\n"
+        for name, code in [("tween", tween), ("frame", frame), ("early", early), ("block", block),
+                           ("ternary", ternary), ("quoted", quoted)]:
+            with self.subTest(case=name):
+                self.assertEqual(self.rules({"a.tsx": code}), [])
+                self.fresh()
+
+    def test_a_loop_that_never_ends_is_found_on_its_own_call(self):
+        endless = ("function tick(now) {\n  if (!started) started = now;\n  draw(now);\n  requestAnimationFrame(tick);\n}\n"
+                   "requestAnimationFrame(tick);\n")  # the if before it is no condition on the call
+        report = self.scan({"hero.js": endless})
+        self.assertEqual([(f["rule"], f["line"]) for f in report["findings"]], [("raf", 4)])
+        self.fresh()
+        unpacked = "function loop({ canvas, gl }) {\n  gl.draw(canvas);\n  frame = requestAnimationFrame(loop);\n}\n"
+        self.assertEqual(self.rules({"hero.js": unpacked}), ["raf"])
 
     def test_library_and_no_script_asks_for_reduced_motion(self):
         uses = {"gsap": 'import { gsap } from "gsap";', "three": "import * as THREE from 'three';",
@@ -334,8 +377,40 @@ class OutputTests(Case):
         self.assertEqual((code, err), (1, ""))
         self.assertIn("\\u2192", out)
 
+    def test_several_paths_are_one_project(self):
+        """A monorepo: the app and its packages. A reduce rule in one counts for all, as in one folder."""
+        app = self.write("apps/web/app.css", ".spin { animation: spin 1s infinite; }\n.a { transition: all .2s; }\n")
+        self.write("packages/ui/calm.css", "@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }\n")
+        self.write("apps/other/x.css", ".b { transition: width .2s; }\n")  # another app: not named, not read
+        apps, ui = os.path.dirname(app), os.path.join(self.root, "packages", "ui")
+        report = mod.scan_path([apps, ui], "low")
+        self.assertEqual([f["rule"] for f in report["findings"]], ["transition-all"])
+        self.assertEqual(report["summary"]["files_checked"], 2)
+        code, out, _ = self.run_main(apps, ui, "--fail-on", "low")
+        self.assertEqual(code, 1)
+        self.assertIn("Files checked: 2.", out)
+        self.assertEqual(self.run_main(apps, os.path.join(self.root, "nope"))[0], 2)
+
+    def test_a_missing_or_broken_rules_file_is_exit_2(self):
+        self.write("app.css", ".a { transition: opacity .2s; }\n")
+        saved = mod.RULES
+        self.addCleanup(setattr, mod, "RULES", saved)
+        mod.RULES = ValueError("Expecting value: line 1 column 1")  # what a broken motioncheck.json leaves
+        code, out, err = self.run_main(self.root)
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("motioncheck.json is missing or broken", err)
+
+    def test_the_rules_file_names_every_rule_the_code_fires(self):
+        with open(os.path.join(ROOT, "forge-design", "motioncheck.json"), encoding="utf-8") as handle:
+            rules = json.load(handle)["rules"]
+        with open(SCRIPT, encoding="utf-8") as handle:
+            fired = set(re.findall(r'finding\("([\w-]+)"', handle.read()))
+        self.assertEqual(set(rules), fired)
+        for name, item in rules.items():
+            self.assertEqual((len(item), item[0] in mod.SEVERITIES), (4, True), name)
+
     def test_the_pack_own_motion_files_are_clean(self):
-        report = mod.scan_path(os.path.join(ROOT, "forge-motion"), "low")
+        report = mod.scan_path(os.path.join(ROOT, "forge-design"), "low")
         self.assertEqual(report["findings"], [])
         self.assertGreaterEqual(report["summary"]["files_checked"], 2)
 

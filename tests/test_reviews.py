@@ -1,4 +1,4 @@
-"""Tests for forge-compare/reviews.py: ranks real reviews into what users hate and ask for."""
+"""Tests for forge-research/reviews.py: ranks real reviews into what users hate and ask for."""
 
 import csv
 import datetime
@@ -14,7 +14,7 @@ from contextlib import redirect_stderr, redirect_stdout
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import load  # noqa: E402
 
-reviews = load("forge-compare", "reviews")
+reviews = load("forge-research", "reviews")
 
 TODAY = datetime.date(2026, 10, 1)
 RSQUO = chr(0x2019)  # the curly apostrophe phones type

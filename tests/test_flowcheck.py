@@ -1,4 +1,4 @@
-"""Tests for forge-secure/flowcheck.py (the deeper pass: input that reaches a dangerous call, missing
+"""Tests for forge-check/flowcheck.py (the deeper pass: input that reaches a dangerous call, missing
 access checks, uploads, weak crypto, mass assignment, secrets in logs)."""
 
 import ast
@@ -16,10 +16,10 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # also lets "-m unittest tests.test_flowcheck" work
 from _load import ROOT, load, run_cp1252, symlink  # noqa: E402
 
-flowcheck = load("forge-secure", "flowcheck")
-codecheck = load("forge-secure", "codecheck")
-SCRIPT = os.path.join(ROOT, "forge-secure", "flowcheck.py")
-DATA = os.path.join(ROOT, "forge-secure", "flows.json")
+flowcheck = load("forge-check", "flowcheck")
+codecheck = load("forge-check", "codecheck")
+SCRIPT = os.path.join(ROOT, "forge-check", "flowcheck.py")
+DATA = os.path.join(ROOT, "forge-check", "flows.json")
 ACCESS = "flow-no-access-check"
 PHP = "<?php\n"
 
@@ -380,7 +380,7 @@ class FlowTests(unittest.TestCase):
 
     def test_the_pack_does_not_flag_its_own_scripts(self):
         # A copy of the skill in a project's .claude/skills/ must not fail that project's security gate.
-        code, out, _ = run_main(os.path.join(ROOT, "forge-secure"), "--json")
+        code, out, _ = run_main(os.path.join(ROOT, "forge-check"), "--json")
         self.assertEqual((code, json.loads(out)["findings"]), (0, []))
 
 

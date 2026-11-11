@@ -186,7 +186,7 @@ class CheckTests(Project):
         self.write(os.path.join("forge-work", "original-text", "source-1.txt"), "# kept by pagetext.py\n\n")
         code, out, err = run()  # pagetext kept no word: save the pages again
         self.assertEqual((code, out), (2, ""))
-        self.assertIn("holds no text of the original: save its pages again as forge-recon Step 2 says", err)
+        self.assertIn("holds no text of the original: save its pages again as forge-research recon Step 2 says", err)
         self.assertIn("run pagetext.py on them, or ask the user", err)
         self.assertLessEqual(len(err.rstrip()), 200, "the gate shows 200 characters of a line")
         shutil.rmtree(os.path.join("forge-work", "original-text"))

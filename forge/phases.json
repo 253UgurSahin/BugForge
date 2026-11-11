@@ -1,0 +1,27 @@
+{
+  "_about": "The phases of forge, read by gate.py. modes: the phases of each mode, in order. optional: may be skipped with the user's reason (motion only while the look level is 1: from level 2 it builds the level, rules.md section 10, and launch's checks count it); secure never. added: newer than some projects, so a state from before them records neither and is not damaged. asks: auto mode never records these, the go is the user's own each time. parts: the skill that holds each phase as a part (its steps are in ../forge-<skill>/steps/<phase>.md); a phase that is not listed is a skill of its own, forge-<phase>. skip_only: an optional phase that skip refuses while look level 2 or higher is on record (forge-work/levels.json), or while level.py cannot read the record (a damaged or linked levels.json), with the words status and the next step add to it. steps: what gate.py prints: the next step ({0} the phase, {1} the gate's own command, {2} its skill, {3} its skip_only words), the line init adds, and the refusals of a held skip (held: {0} the look level; unread: {0} what level.py said).",
+  "modes": {
+    "clone": ["recon", "compare", "plan", "design", "build", "dashboard", "motion", "test", "diff", "brand", "launch", "secure", "pack"],
+    "idea": ["compare", "plan", "design", "build", "dashboard", "motion", "test", "brand", "launch", "secure", "pack"],
+    "improve": ["audit", "inspect", "improve", "test", "secure"]
+  },
+  "optional": ["compare", "inspect", "dashboard", "motion"],
+  "skip_only": {"motion": ", at look level 1 only"},
+  "added": ["dashboard", "motion"],
+  "asks": ["secure"],
+  "steps": {
+    "plain": "Next: {0}. Run /{2}, then {1} check {0}. Show the user the skill's checkpoint plus one line with the gate result, and wait for their go. Then: {1} done {0} --approved '<their exact words>'",
+    "auto": "Next: {0}. Auto mode, if the user turned it on in this chat (a new chat asks again): run /{2}, fix what fails, stop where rules.md 7 says (the concept pick, the app's name, a Verdict: FAIL), give the checkpoint as a report, then {1} done {0} --auto '<their words>'",
+    "skip": ". Or, when the user says so{3}: {1} skip {0} --reason '<their reason>'",
+    "done": "All phases are done. Tell the user what they have now, what is left, and that shipping is their step.",
+    "init": "Auto mode, when the user asked for it in this chat: once check passes, done --auto '<their words>', the checkpoint as a report, and go on (rules.md 7).",
+    "held": "look level {0} is on record, and from level 2 motion builds the level: it is not skipped, in auto mode too (rules.md section 10). Wanted out: tell the user the app then stays near level 1; with their yes, first level.py set look 1 --said '<their words>'.",
+    "unread": "level.py get look cannot read the look level, so motion is not skipped (rules.md section 10). Show the user what it says, and change nothing yourself: {0}"
+  },
+  "parts": {
+    "research": ["recon", "compare"],
+    "design": ["design", "brand", "dashboard", "motion"],
+    "build": ["build", "pack"],
+    "check": ["test", "diff", "secure", "audit", "inspect"]
+  }
+}

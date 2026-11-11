@@ -1,4 +1,4 @@
-"""Tests for forge-audit/detect.py.
+"""Tests for forge-check/detect.py.
 
 Each test builds a small fake project in a temporary folder. The fake password in the
 .env files is glued together at runtime, so this file holds no secret-looking literal.
@@ -17,7 +17,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import load, run_cp1252, symlink  # noqa: E402
 
-mod = load("forge-audit", "detect")
+mod = load("forge-check", "detect")
 
 FAKE_PASSWORD = "Hunter" + "2" + "-not-real-77"
 DJANGO_MANAGE = ('import os, sys\nos.environ.setdefault("DJANGO_SETTINGS_MODULE", "shop.settings")\n'
@@ -245,6 +245,28 @@ class NodeTests(Project):
                                '    "next": ["next@15.1.3", "", {}, "sha512-abc"],\n  }\n}\n')
         self.assertEqual(by_name(self.describe()["frameworks"], "Next.js")["version"], "15.1.3")
 
+    def test_theming_and_the_package_manager(self):
+        """forge-design picks theme.py's --tailwind and --format from the theming; the install follows the lockfile."""
+        self.write("package.json", {"dependencies": {"next": "^15", "@mui/material": "^6"},
+                                    "devDependencies": {"tailwindcss": "^4", "@tailwindcss/postcss": "^4"}})
+        self.write("pnpm-lock.yaml", "lockfileVersion: '9.0'\n\npackages:\n\n  next@15.1.3:\n    resolution: {}\n\n"
+                                     "  tailwindcss@4.1.3:\n    resolution: {}\n")
+        result = self.describe()
+        self.assertEqual([(item["name"], item["version"]) for item in result["theming"]],
+                         [("Tailwind CSS", "4.1.3"), ("MUI", "^6")])
+        self.assertNotIn("Tailwind CSS", names(result["frameworks"]), "theming is not a framework: the profile stays")
+        self.assertEqual(result["profile"], "next")
+        self.assertEqual(result["package_managers"], [{"name": "pnpm", "version": "", "source": "pnpm-lock.yaml"}])
+        self.write("bun.lockb", b"\0binary lockfile")
+        self.write("api/composer.lock", '{"packages": []}')
+        self.write("e2e/package-lock.json", '{"lockfileVersion": 3, "packages": {}}')  # forge's own tests, on npm
+        code, out = run(self.dir)
+        self.assertIn("Theming:     Tailwind CSS 4.1.3 (pnpm-lock.yaml), MUI ^6 (package.json)", out)
+        self.assertIn("Package manager: bun (bun.lockb), pnpm (pnpm-lock.yaml), Composer (api/composer.lock)", out)
+        self.write("index.html", "<!doctype html>")
+        os.remove(os.path.join(self.dir, "package.json"))
+        self.assertIn("Theming:     none found", run(self.dir)[1])
+
     def test_lockfile_belongs_to_its_own_folder(self):
         self.write("package.json", {"dependencies": {"next": "15.1.0"}})
         self.write("bun.lockb", b"\0binary lockfile")
@@ -449,7 +471,7 @@ class ContainerAndCITests(Project):
         self.assertEqual(by_name(self.describe()["ci"], "Jenkins")["source"], "Jenkinsfile")
 
     def test_ci_table_matches_inventory(self):
-        self.assertEqual(mod.STACKS["ci_files"], load("forge-audit", "inventory").CI_FILES)
+        self.assertEqual(mod.STACKS["ci_files"], load("forge-check", "inventory").CI_FILES)
 
 
 class WalkTests(Project):
@@ -518,7 +540,7 @@ class HelperTests(unittest.TestCase):
         for row in mod.STACKS["frameworks"]:
             with self.subTest(framework=row["name"]):
                 self.assertIn(row["ecosystem"], mod.STACKS["ecosystems"])
-                self.assertIn(row["role"], list(mod.TIERS) + ["test"])
+                self.assertIn(row["role"], list(mod.TIERS) + ["test", "theming"])
                 self.assertTrue(row["packages"] or row["telltale"])
                 if "unless" in row:  # a row found earlier in the list
                     self.assertIn(row["unless"], names(mod.STACKS["frameworks"][:mod.STACKS["frameworks"].index(row)]))
@@ -535,7 +557,7 @@ class CommandLineTests(Project):
         self.assertEqual(code, 0)
         data = json.loads(out)
         for key in ["path", "profile", "reason", "languages", "frameworks", "databases", "containerised",
-                    "container_files", "images", "tests", "ci", "notes"]:
+                    "container_files", "images", "tests", "ci", "notes", "theming", "package_managers"]:
             self.assertIn(key, data)
         self.assertEqual(data["profile"], "next")
         self.assertFalse(data["containerised"])

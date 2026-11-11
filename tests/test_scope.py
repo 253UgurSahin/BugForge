@@ -1,4 +1,4 @@
-"""Tests for forge-secure/scope.py.
+"""Tests for forge-check/scope.py.
 
 Most tests call decide() directly with a list of own domains. The scope file
 tests write small JSON files in a temporary folder. Nothing here uses DNS or
@@ -19,8 +19,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _load import load, run_cp1252  # noqa: E402
 
-mod = load("forge-secure", "scope")
-SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forge-secure", "scope.py")
+mod = load("forge-check", "scope")
+SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forge-check", "scope.py")
 OWN = ["example.com", "app.example.org", "xn--bcher-kva.de"]  # as load_scope returns them
 PW = "hun" + "ter" + "42"  # a fake password, built at runtime so secretscan.py finds no literal
 

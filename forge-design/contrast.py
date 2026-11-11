@@ -280,8 +280,11 @@ def main(argv=None):
     findings += [unpaired_finding(name, source, cols) for name in missing]
     summary = {"pairs": len(rows), "failing": len(findings) - len(missing), "unchecked": len(missing),
                "high": len(findings), "verdict": "FAIL" if findings else "PASS"}
-    print(json.dumps({"pairs": rows, "findings": findings, "summary": summary}, indent=2) if args.json
-          else format_human(rows, findings, missing))
+    try:
+        print(json.dumps({"pairs": rows, "findings": findings, "summary": summary}, indent=2) if args.json
+              else format_human(rows, findings, missing), flush=True)
+    except OSError:  # the reader stopped early (| head): fine. Quiet now, and at exit, when Python flushes again
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
     return 1 if findings else 0
 
 

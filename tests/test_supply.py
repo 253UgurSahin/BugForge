@@ -1,10 +1,11 @@
-"""Tests for forge-secure/supply.py: each supply-chain rule fires and stays quiet, the exit codes,
+"""Tests for forge-check/supply.py: each supply-chain rule fires and stays quiet, the exit codes,
 the JSON shape, the CycloneDX list, and that nothing is written through a symlink."""
 
 import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -14,8 +15,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252, symlink  # noqa: E402
 
-supply = load("forge-secure", "supply")
-SCRIPT = os.path.join(ROOT, "forge-secure", "supply.py")
+supply = load("forge-check", "supply")
+SCRIPT = os.path.join(ROOT, "forge-check", "supply.py")
 NPM = "https://registry.npmjs.org/%s/-/%s-%s.tgz"
 
 
@@ -129,13 +130,108 @@ class NpmTests(Project):
             self.write(folder + "/package.json", json.dumps({"name": "dep", "dependencies": {"x": "*"}}))
         self.assertEqual(self.report()[1]["findings"], [])
 
-    def test_a_lockfile_it_cannot_read_counts_but_is_named(self):
+    def test_test_fixtures_are_not_the_apps_packages(self):
+        """A broken package.json in a test's fixtures is there on purpose: it never makes the check incomplete."""
+        self.npm({"react": "^18.3.1"}, react=entry("react", "18.3.1"))
+        for folder in ("tests/fixtures/broken", "src/__fixtures__/app", "pkg/testdata"):
+            self.write(folder + "/package.json", '{"name": "broken", ')
+        code, data = self.report("--sbom", os.path.join(self.root, "sbom.json"))
+        self.assertEqual((code, data["unreadable"], data["sbom"]["written"]), (0, [], True))
+
+    def test_a_lockfile_read_as_text_counts_and_says_what_it_lacks(self):
         self.write("package.json", json.dumps({"name": "app", "dependencies": {"react": "^18.3.1"}}))
         self.write("yarn.lock", "# yarn lockfile v1\n")
         code, data = self.report()
         self.assertNotIn("supply-no-lockfile", [finding["rule"] for finding in data["findings"]])
         self.assertEqual([item["file"] for item in data["not_read"]], ["yarn.lock"])
-        self.assertIn("Not read: yarn.lock", self.run_main()[1])
+        self.assertIn("Not read in full: yarn.lock (names, versions and download addresses only: it holds no "
+                      "licences or install scripts)", self.run_main()[1])
+
+
+class TextLockTests(Project):
+    """yarn, pnpm, bun and Pipenv: their packages go into the checks and the SBOM, as names and versions."""
+    YARN_1 = ('# yarn lockfile v1\n\n\n"@babel/code-frame@^7.0.0", "@babel/code-frame@^7.10.4":\n  version "7.12.13"\n'
+              '  resolved "https://registry.yarnpkg.com/@babel/code-frame/-/code-frame-7.12.13.tgz#dcfc826b"\n'
+              '  integrity sha512-abc\n\nlodahs@^4.0.0:\n  version "4.0.1"\n'
+              '  resolved "https://evil.example/lodahs-4.0.1.tgz"\n')
+    YARN_BERRY = ('__metadata:\n  version: 8\n  cacheKey: 10\n\n"app@workspace:.":\n  version: 0.0.0-use.local\n'
+                  '  resolution: "app@workspace:."\n\n"react@npm:^18.3.1":\n  version: 18.3.1\n'
+                  '  resolution: "react@npm:18.3.1"\n  checksum: 10c0/abc\n')
+    PNPM_9 = ("lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      next:\n        specifier: ^15.1.3\n"
+              "        version: 15.1.3(react@19.0.0)\n\npackages:\n\n  '@next/env@15.1.3':\n"
+              "    resolution: {integrity: sha512-abc}\n\n  next@15.1.3:\n    resolution: {integrity: sha512-def}\n"
+              "    engines: {node: '>=18'}\n\n  tool@1.0.0:\n    resolution: {tarball: https://evil.example/tool.tgz}\n\n"
+              "snapshots:\n\n  next@15.1.3(react@19.0.0):\n    dependencies:\n      react: 19.0.0\n")
+    PNPM_6 = "lockfileVersion: '6.0'\n\npackages:\n\n  /react@18.2.0:\n    resolution: {integrity: sha512-abc}\n"
+    BUN = ('{\n  "lockfileVersion": 1,\n  "workspaces": { "": { "name": "web", "dependencies": { "next": "15.1.3" } } },\n'
+           '  "packages": {\n    "next": ["next@15.1.3", "", { "dependencies": {} }, "sha512-abc"],\n'
+           '    "next/@swc/helpers": ["@swc/helpers@0.5.15", "", {}, "sha512-def"],\n'
+           '    "ui": ["ui@workspace:packages/ui"],\n  }\n}\n')
+    PIPFILE = json.dumps({"_meta": {"hash": {"sha256": "abc"}, "sources": [{"name": "pypi",
+                                                                            "url": "https://pypi.org/simple"}]},
+                          "default": {"django": {"hashes": ["sha256:abc"], "index": "pypi", "version": "==5.0.1"}},
+                          "develop": {"pytest": {"version": "==8.3.4"}, "local": {"path": ".", "editable": True}}})
+
+    def sbom(self, *args):
+        target = os.path.join(self.root, "forge-work", "sbom.json")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        code, data = self.report("--sbom", target, *args)
+        with open(target, encoding="utf-8") as handle:
+            text = handle.read()
+        return code, data, {part["purl"] for part in json.loads(text)["components"]} if text else None
+
+    def test_yarn_1_and_berry(self):
+        self.write("package.json", json.dumps({"name": "app", "dependencies": {"lodahs": "^4.0.0"}}))
+        self.write("yarn.lock", self.YARN_1)
+        code, data, parts = self.sbom()
+        self.assertEqual(parts, {"pkg:npm/%40babel/code-frame@7.12.13", "pkg:npm/lodahs@4.0.1"})
+        found = {finding["rule"]: finding["packages"] for finding in data["findings"]}
+        self.assertEqual((code, found["supply-typosquat"], found["supply-registry"]),
+                         (1, ["lodahs (like lodash)"], ["lodahs (evil.example)"]))
+        self.write("yarn.lock", self.YARN_BERRY)
+        self.assertEqual(self.sbom()[2], {"pkg:npm/react@18.3.1"}, "the workspace itself is no package")
+
+    def test_pnpm_9_and_6(self):
+        self.write("package.json", json.dumps({"name": "app", "dependencies": {"next": "^15.1.3"}}))
+        self.write("pnpm-lock.yaml", self.PNPM_9)
+        code, data, parts = self.sbom()
+        self.assertEqual(parts, {"pkg:npm/%40next/env@15.1.3", "pkg:npm/next@15.1.3", "pkg:npm/tool@1.0.0"})
+        self.assertIn("tool (evil.example)", [package for finding in data["findings"] for package in finding["packages"]])
+        self.write("pnpm-lock.yaml", self.PNPM_6)
+        self.assertEqual(self.sbom()[2], {"pkg:npm/react@18.2.0"})
+
+    def test_bun_lock_and_a_binary_one(self):
+        self.write("package.json", json.dumps({"name": "web", "dependencies": {"next": "15.1.3"}}))
+        self.write("bun.lockb", "\x00\x01binary")
+        code, data, parts = self.sbom()
+        self.assertEqual((code, parts, data["summary"]["incomplete"]), (2, None, True), "an empty SBOM, exit 2")
+        self.assertIn("bun.lockb", [item["path"] for item in data["unreadable"]])
+        self.write("bun.lock", self.BUN)
+        code, data, parts = self.sbom()
+        self.assertEqual((code, parts), (0, {"pkg:npm/next@15.1.3", "pkg:npm/%40swc/helpers@0.5.15"}))
+        self.assertEqual(data["unreadable"], [], "the text bun.lock is read, the old binary one left alone")
+
+    def test_pipfile_lock_and_pdm_lock(self):
+        self.write("Pipfile.lock", self.PIPFILE)
+        self.write("pdm.lock", '[metadata]\ngroups = ["default"]\n\n[[package]]\nname = "Flask"\nversion = "3.1.0"\n')
+        code, data, parts = self.sbom()
+        self.assertEqual((code, parts), (0, {"pkg:pypi/django@5.0.1", "pkg:pypi/pytest@8.3.4", "pkg:pypi/flask@3.1.0"}))
+        self.assertEqual([item["file"] for item in data["not_read"]], ["Pipfile.lock"])
+
+    def test_package_lock_version_1_makes_the_check_incomplete(self):
+        self.write("package.json", json.dumps({"name": "app", "dependencies": {"react": "^16.0.0"}}))
+        self.write("package-lock.json", json.dumps({"name": "app", "lockfileVersion": 1, "dependencies": {}}))
+        code, data, parts = self.sbom()
+        self.assertEqual((code, parts), (2, None))
+        self.assertEqual([item["path"] for item in data["unreadable"]], ["package-lock.json"])
+
+    def test_the_data_file_names_each_lockfile_its_registry_and_what_it_lacks(self):
+        self.assertEqual(sorted(supply.LOCKS), ["Pipfile.lock", "bun.lock", "bun.lockb", "pnpm-lock.yaml", "yarn.lock"])
+        for name, (kind, pattern, note) in supply.LOCKS.items():
+            with self.subTest(lock=name):
+                self.assertIn(kind, ("npm", "pypi"))
+                self.assertTrue(note.strip())
+                self.assertEqual(re.compile(pattern).groups, 3) if pattern else self.assertEqual(name, "bun.lockb")
 
 
 class OtherRegistryTests(Project):
@@ -227,7 +323,7 @@ class ExitCodeTests(Project):
             self.assertIn(key, data["summary"])
 
     def test_every_rule_in_the_data_file_has_its_words(self):
-        with open(os.path.join(ROOT, "forge-secure", "supply.json"), encoding="utf-8") as handle:
+        with open(os.path.join(ROOT, "forge-check", "supply.json"), encoding="utf-8") as handle:
             data = json.load(handle)
         for rule, words in data["rules"].items():
             with self.subTest(rule=rule):

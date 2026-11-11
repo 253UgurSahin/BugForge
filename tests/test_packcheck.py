@@ -1,4 +1,4 @@
-"""Tests for forge-pack/packcheck.py (the compose rules are in test_composecheck.py).
+"""Tests for forge-build/packcheck.py (the compose rules are in test_composecheck.py).
 
 Fake secrets are glued together at runtime, so this file never contains a
 secret-looking literal: the repo itself is scanned with secretscan.py in CI.
@@ -18,10 +18,10 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load, run_cp1252, symlink  # noqa: E402
 
-mod = load("forge-pack", "packcheck")
-compose = load("forge-pack", "composecheck")
+mod = load("forge-build", "packcheck")
+compose = load("forge-build", "composecheck")
 
-TEMPLATES = os.path.join(ROOT, "forge-pack", "templates")
+TEMPLATES = os.path.join(ROOT, "forge-build", "templates")
 PROFILES = ("laravel", "django", "next", "static")
 FAKE = "hunter" + "22-" + "Xy9"  # a password-looking value
 GOOD_IGNORE = ".env\n.git\nforge-work/\n"
@@ -65,7 +65,7 @@ def in_final_stage(line):
 
 
 def install(profile, folder):
-    """PROFILE's templates in FOLDER as forge-pack installs them: the dotfiles get their dot."""
+    """PROFILE's templates in FOLDER as forge-build pack installs them: the dotfiles get their dot."""
     source = os.path.join(TEMPLATES, profile)
     names = {"dockerignore": ".dockerignore", "env.example": ".env.example"}
     for name in os.listdir(source):
@@ -92,7 +92,7 @@ class TemplateTests(unittest.TestCase):
 
     def test_each_profile_is_clean_once_installed(self):
         """Without the app, as the CI templates job checks them: each file the Dockerfile copies is
-        there, but for the app's package files (forge-pack Step 3 checks those are committed)."""
+        there, but for the app's package files (forge-build pack Step 3 checks those are committed)."""
         for profile in PROFILES:
             with self.subTest(profile=profile), tempfile.TemporaryDirectory() as folder:
                 install(profile, folder)
@@ -174,15 +174,15 @@ class TemplateTests(unittest.TestCase):
                     self.assertEqual(mod.is_ignored(lines, name), profile in ("laravel", "django"), name)
 
     def test_the_in_image_check_looks_for_each_login(self):
-        """forge-pack Step 5 looks in the running app image for the .env, npm's and Composer's logins
+        """forge-build pack Step 5 looks in the running app image for the .env, npm's and Composer's logins
         and forge's notes, which the laravel and django images would take from the folder."""
-        text = read(os.path.join(ROOT, "forge-pack", "SKILL.md"))
+        text = read(os.path.join(ROOT, "forge-build", "steps", "pack.md"))
         check = re.search(r"docker compose exec app sh -c '([^']*)'", text).group(1)
         self.assertEqual(re.findall(r"test ! -e (\S+) &&", check), [".env", ".npmrc", "auth.json", "forge-work"])
         self.assertTrue(check.endswith("&& echo clean"), check)
 
     def test_e2e_and_backups_stay_out_of_the_image(self):
-        """forge-test keeps the whole e2e/ folder out; a database dump or an uploads backup too."""
+        """forge-check test keeps the whole e2e/ folder out; a database dump or an uploads backup too."""
         for profile in PROFILES:
             with self.subTest(profile=profile):
                 lines = read(os.path.join(TEMPLATES, profile, "dockerignore")).splitlines()
@@ -192,7 +192,7 @@ class TemplateTests(unittest.TestCase):
                         self.assertTrue(mod.is_ignored(lines, name), name)
 
     def test_env_example_promises(self):
-        """The port, the seed password forge-build and forge-test use, and Stripe lines that say
+        """The port, the seed password forge-build build and forge-check test use, and Stripe lines that say
         they can go. No build values (VITE_, NEXT_PUBLIC_): .dockerignore keeps .env out of the image
         build, so they go in .env.production (dogfood: the static one had VITE_APP_NAME)."""
         for profile in PROFILES:
@@ -266,7 +266,7 @@ class ProjectTests(Project):
         self.assertEqual(checked, ["docker-compose.yml", "Dockerfile", ".dockerignore", ".env.example"])
 
     def test_the_dev_override_file_is_no_finding(self):
-        """The git-ignored docker-compose.override.yml forge-build and forge-test ask for."""
+        """The git-ignored docker-compose.override.yml forge-build build and forge-check test ask for."""
         override = "services:\n  app:\n    ports:\n      - \"127.0.0.1:3000:3000\"\n"
         write(self.dir, "docker-compose.override.yml", override)
         findings, checked = self.check()
@@ -447,7 +447,7 @@ class CopySourceTests(Project):
         self.assertEqual(rules(self.check()[0]), ["missing"])
 
     def test_the_app_package_files_are_left_to_forge_pack(self):
-        """A template on its own has none; forge-pack Step 3 checks they are committed. Any other file
+        """A template on its own has none; forge-build pack Step 3 checks they are committed. Any other file
         is the app's or the container setup's, and is looked up."""
         write(self.dir, "Dockerfile", in_final_stage("COPY package.json package-lock.json composer.json "
                                                      "composer.lock requirements.txt ./"))
@@ -646,7 +646,7 @@ class CommandLineTests(Project):
             symlink(self, write(outside, "Dockerfile", GOOD_DOCKERFILE), os.path.join(self.dir, "Dockerfile"))
             self.assertEqual(run(self.dir)[0], 2)
         os.remove(os.path.join(self.dir, "Dockerfile"))  # the pack's own template: on the Windows runners on D:,
-        template = os.path.join(ROOT, "forge-pack", "templates", "static", "Dockerfile")  # the temp folder on C:
+        template = os.path.join(ROOT, "forge-build", "templates", "static", "Dockerfile")  # the temp folder on C:
         symlink(self, template, os.path.join(self.dir, "Dockerfile"))
         with self.assertRaisesRegex(ValueError, "^Dockerfile is a link to a file outside "):
             mod.check_project(self.dir)

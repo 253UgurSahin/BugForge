@@ -1,4 +1,4 @@
-"""Tests for forge-inspect/pagecheck.py.
+"""Tests for forge-check/pagecheck.py.
 
 No real network: pages are checked from strings and saved files, and the URL mode (which runs
 getpage.py) is tested against a small web server on 127.0.0.1 that runs in a thread.
@@ -23,7 +23,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `python3 -m unittest tests.test_pagecheck` works
 from _load import load, run_cp1252  # noqa: E402
 
-mod = load("forge-inspect", "pagecheck")
+mod = load("forge-check", "pagecheck")
 
 HTTPS_URL = "https://example.com/"
 HEAD = """<!doctype html>

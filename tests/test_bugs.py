@@ -1,4 +1,4 @@
-"""Tests for forge-test/bugs.py: reading forge-work/bugs.md, the exit codes, the JSON shape,
+"""Tests for forge-check/bugs.py: reading forge-work/bugs.md, the exit codes, the JSON shape,
 and that anything that looks like a bug heading but is not in the right form is an error,
 never skipped."""
 
@@ -18,8 +18,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
 from _load import ROOT, load  # noqa: E402
 
-bugs = load("forge-test", "bugs")
-SCRIPT = os.path.join(ROOT, "forge-test", "bugs.py")
+bugs = load("forge-check", "bugs")
+SCRIPT = os.path.join(ROOT, "forge-check", "bugs.py")
 BOM, ZERO_WIDTH_SPACE, WORD_JOINER = chr(0xFEFF), chr(0x200B), chr(0x2060)
 
 SAMPLE = """# Bugs
@@ -401,7 +401,7 @@ class Output(unittest.TestCase):
 
     def test_example_in_skill_md_is_valid(self):
         """The bug format shown in SKILL.md must be one bugs.py reads without problems."""
-        with open(os.path.join(ROOT, "forge-test", "SKILL.md"), encoding="utf-8") as handle:
+        with open(os.path.join(ROOT, "forge-check", "steps", "test.md"), encoding="utf-8") as handle:
             text = handle.read()
         block = re.search(r"```markdown\n(# Bugs\n.*?)```", text, re.DOTALL)
         self.assertIsNotNone(block, "SKILL.md shows an example bugs.md in a ```markdown block")
