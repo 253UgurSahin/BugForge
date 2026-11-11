@@ -526,6 +526,7 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
   position: relative;
   margin-top: calc(var(--size-header) * -1);
   clip-path: inset(0);                          /* the fixed stage and strip show inside the trip only */
+  overflow-x: clip;                             /* a slip landing at a tilt never widens the page */
 }
 .trip__stage {
   position: fixed; left: 0; right: 0; top: 0; z-index: 0;
@@ -729,8 +730,11 @@ html[data-reveal] .notes > .note.arrive { opacity: 1; animation: none; }
   /* a chapter is one screen high; its slip lies at the top of it, clear of the strip of tools */
   .trip__step:not(.trip__step--hero) { min-height: 100vh; min-height: 100svh; align-items: start; padding-top: var(--space-7); }
   .trip[data-journey="still"] .trip__step:not(.trip__step--hero) { grid-template-columns: 1fr; gap: var(--space-5); }
+  .trip[data-journey="still"] .trip__step:not(.trip__step--hero) .trip__still { position: static; width: auto; margin: 0; }
+  /* the hero's still lies where the 3D sheet would, between the buttons and the foot of the screen */
   .trip[data-journey="still"] .trip__step--hero .trip__still,
-  .trip[data-plain][data-journey="still"] .trip__plain { position: static; width: auto; margin: var(--space-6) var(--size-gutter) 0; }
+  .trip[data-plain][data-journey="still"] .trip__plain { position: absolute; top: auto; left: var(--size-gutter); right: var(--size-gutter); bottom: var(--space-5); width: auto; margin: 0; }
+  .trip[data-journey="still"] .trip__step--hero .hero__slip { bottom: var(--space-4); z-index: 1; }
   .trip__marks span, .trip__marks a { font-size: 0; gap: 0; }
   .trip__marks b { font-size: var(--text-2xs); }
   /* the hero is one screen: the words, then the whole sheet as an object between the buttons and the

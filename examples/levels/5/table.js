@@ -252,7 +252,7 @@ void main() {
     // by night the red lamp is all the light there is: the sheet glows where it falls and goes dark
     // toward its edges, the tints darken it, the ink is dark on the red (the paper halos of the figures
     // go, the magenta of the lights and the rose turns to the lamp's dim red)
-    vec3 glow = nightGlow(P.xz) * mix(1.0, mix(0.72, 1.12, clamp(face, 0.0, 1.2)) * mix(0.62, 1.0, sh), uRise);
+    vec3 glow = nightGlow(P.xz) * mix(1.0, mix(0.84, 1.14, clamp(face, 0.0, 1.2)) * mix(0.74, 1.0, sh), uRise);
     vec3 night = glow * texture(uBaseNight, uv).rgb;
     night = night * mix(1.0, 0.9, wet * smoothstep(0.0, 2.0, depth)) + glow * glint * 0.5;
     if (ink.a > 0.003) {
@@ -731,7 +731,10 @@ export function mount(container, options = {}) {
     }
     shared.uLampPos.value.set(lampAt[0], now.lampY, lampAt[1]);
     shared.uDayReach.value.set(reach[0], reach[1]);
-    shared.uNightReach.value.set(reach[0] * 1.05, reach[1] * 1.05);
+    // the red lamp is all the light there is, so its pool reaches further: the print stays readable in
+    // it and falls to dark only toward the edges of the sheet (at the start, the page's own lamp exactly)
+    const wider = 1 + 0.3 * handOver;
+    shared.uNightReach.value.set(reach[0] * wider, reach[1] * wider);
     shared.uNight.value = now.night;
     const level = Math.min(now.level, 5.4);
     paper.uniforms.uLevel.value = level;

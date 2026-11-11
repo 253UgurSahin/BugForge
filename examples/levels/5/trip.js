@@ -343,7 +343,7 @@ function landSlips() {
       if (!entry.isIntersecting || reduce.matches || section.getAttribute("data-journey") === "still") continue;
       seen.unobserve(entry.target);
       const rest = getComputedStyle(entry.target).rotate;
-      entry.target.animate([{ translate: "10px -34px", rotate: "-4.5deg", scale: "1.04" }, { translate: "0 0", rotate: rest === "none" ? "0deg" : rest, scale: "1" }],
+      entry.target.animate([{ translate: "6px -34px", rotate: "-3.5deg", scale: "1.03" }, { translate: "0 0", rotate: rest === "none" ? "0deg" : rest, scale: "1" }],
         { duration: fall.duration, easing: fall.easing });
     }
   }, { threshold: 0.12 });
