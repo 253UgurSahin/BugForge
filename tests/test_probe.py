@@ -284,7 +284,10 @@ class ProbeTests(unittest.TestCase):
         with serve() as (url, seen):
             bad_paths = [self.write("bad%d.txt" % number, text) for number, text in
                          enumerate(["http://example.com/x\n", "//example.com/x\n", "search?q=1\n"])]
-            cases = [["ftp://127.0.0.1/"], ["http://user:" + "pw@127.0.0.1/"], ["127.0.0.1"], ["http://127.0.0.1:99999/"],
+            # The password has capitals and a hyphen: a temporary folder's random name has neither, so
+            # it can never contain it (with plain "pw", a folder named tmpw... failed the test).
+            password = "Probe-Pw-Kept"
+            cases = [["ftp://127.0.0.1/"], ["http://user:" + password + "@127.0.0.1/"], ["127.0.0.1"], ["http://127.0.0.1:99999/"],
                      [url, "--paths", os.path.join(self.folder, "missing.txt")], [url, "--max-requests", "0"],
                      [url, "--max-requests", "501"]] + [[url, "--paths", path] for path in bad_paths]
             for args in cases:
@@ -292,7 +295,7 @@ class ProbeTests(unittest.TestCase):
                     code, out, err = run(*args)
                     self.assertEqual((code, out), (2, ""))
                     self.assertTrue(err.startswith("error: "))
-                    self.assertNotIn("pw", err)
+                    self.assertNotIn(password, err)
             self.assertEqual(seen, [])
 
     def test_app_that_is_not_running_is_exit_2(self):
