@@ -51,6 +51,8 @@ The skills only reach these outside services, and only for the step named:
 
 Active security tests (probes, the access check) run only against your own app, on hosts you list.
 
+Privacy: https://github.com/253UgurSahin/BugForge/blob/main/PRIVACY.md
+
 ## More
 
 The full documentation, the gallery with every look level as a moving preview, and the tests are in
