@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # also lets "-m 
 from _load import load, run_cp1252, symlink  # noqa: E402
 
 codecheck = load("forge-check", "codecheck")
-SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forge-check", "codecheck.py")
+SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugin", "forge-check", "codecheck.py")
 SPEC_SKIP_DIRS = {".git", "node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".next",
                   ".nuxt", "out", "coverage", "storage/framework", ".cache", ".idea", ".vscode"}
 

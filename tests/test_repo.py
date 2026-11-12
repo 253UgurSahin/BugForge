@@ -3,9 +3,12 @@
 These tests check every skill and every script, so a new one cannot quietly
 break the rules in the spec:
 
-- A skill folder is a top-level folder with a SKILL.md: frontmatter with the
+- The plugin is plugin/: the skill folders, its manifest, README and LICENSE,
+  nothing else. The gallery, the tests and CI stay outside it, so an install
+  (and the plugin directory's review) holds only what the skills run.
+- A skill folder is a folder in plugin/ with a SKILL.md: frontmatter with the
   folder's name and a description, a short body, and the shared Ground rules.
-- A script is a .py file directly inside a top-level forge* folder: standard
+- A script is a .py file directly inside a forge* folder in plugin/: standard
   library only, Python 3.9 syntax, a docstring with usage, a main(), a test file,
   and nothing risky (no shell=True, eval, exec or pickle).
 - Docs only point at forge files that exist.
@@ -18,12 +21,14 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TESTS = os.path.join(ROOT, "tests")
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.join(REPO, "plugin")  # the plugin
+TESTS = os.path.join(REPO, "tests")
 MAX_SCRIPT_LINES = 300  # the hard limit; aim for under 200
 MAX_BODY_LINES = 150  # SKILL.md lines after the frontmatter
 DESCRIPTION_LENGTH = (150, 1024)  # characters, after folding
@@ -45,14 +50,31 @@ Read `../forge/rules.md` once per session. In short:
 - Stop at every checkpoint and wait for the user's go; in auto mode, stop where `../forge/rules.md` section 7 says.
 """
 
-# Paths to forge files in docs: `../forge-check/scope.py` (any file) or `forge-check/scope.py`.
-SIBLING_PATH = re.compile(r"(?<![\w.-])\.\./(forge[\w-]*)/([\w.-]+(?:/[\w.-]+)*)")
+# Paths to forge files in docs: `../forge-check/scope.py` (any file), `../../plugin/forge/levels.md` (from
+# outside the plugin) or `forge-check/scope.py`.
+SIBLING_PATH = re.compile(r"(?<![\w.-])(?:\.\./)+(?:plugin/)?(forge[\w-]*)/([\w.-]+(?:/[\w.-]+)*)")
 SCRIPT_PATH = re.compile(r"(?<![\w.-])(forge[\w-]*)/([\w-]+\.py)\b")
 
 
 def read(path):
     with open(path, encoding="utf-8") as handle:
         return handle.read()
+
+
+UNSHIPPED = (".pyc", ".DS_Store", ".tmp")  # what .gitignore keeps out, so never in an install
+
+
+def tracked_files(*paths):
+    """The files git tracks under paths, relative to the repo with / separators; None without git."""
+    if not shutil.which("git"):
+        return None
+    try:
+        done = subprocess.run(["git", "ls-files", "-z", "--"] + list(paths), cwd=REPO, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, universal_newlines=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    files = [path for path in done.stdout.split("\0") if path]
+    return files if done.returncode == 0 and files else None
 
 
 def skill_folders():
@@ -68,7 +90,7 @@ def scripts():
 def markdown_files():
     """Every .md file in the repo, outside .git and other tool folders."""
     found = []
-    for folder, subfolders, files in os.walk(ROOT):
+    for folder, subfolders, files in os.walk(REPO):
         subfolders[:] = [name for name in subfolders if name not in SKIP_FOLDERS]
         found += [os.path.join(folder, name) for name in files if name.endswith(".md")]
     return sorted(found)
@@ -156,7 +178,7 @@ class DocsTests(unittest.TestCase):
                     folder, name = match.group(1), match.group(2).rstrip(".")
                     if folder in NOT_IN_REPO:
                         continue
-                    with self.subTest(doc=os.path.relpath(path, ROOT), reference=match.group(0)):
+                    with self.subTest(doc=os.path.relpath(path, REPO), reference=match.group(0)):
                         self.assertTrue(os.path.isfile(os.path.join(ROOT, folder, name)),
                                         "%s/%s does not exist" % (folder, name))
 
@@ -234,13 +256,14 @@ class ScriptTests(unittest.TestCase):
 class PackTests(unittest.TestCase):
     def test_plugin_manifests(self):
         plugin = json.loads(read(os.path.join(ROOT, ".claude-plugin", "plugin.json")))
-        market = json.loads(read(os.path.join(ROOT, ".claude-plugin", "marketplace.json")))
+        market = json.loads(read(os.path.join(REPO, ".claude-plugin", "marketplace.json")))
         self.assertEqual(plugin["name"], "bugforge")
         self.assertEqual(plugin["skills"], "./")
         self.assertEqual(market["name"], "bugforge")
         entries = [entry for entry in market.get("plugins", []) if entry.get("name") == "bugforge"]
         self.assertEqual(len(entries), 1)
-        self.assertEqual(entries[0].get("source"), "./")
+        self.assertEqual(entries[0].get("source"), "./plugin")
+        self.assertFalse(os.path.exists(os.path.join(REPO, ".claude-plugin", "plugin.json")))
         # No version, here or in the marketplace entry: Claude Code then uses the commit, so every
         # push reaches users on their next update. A fixed version blocks updates until it is raised.
         self.assertNotIn("version", plugin)
@@ -248,7 +271,34 @@ class PackTests(unittest.TestCase):
         for url in (plugin["homepage"], plugin["repository"], entries[0]["homepage"]):
             self.assertEqual(url, "https://github.com/253UgurSahin/BugForge")
 
+    def test_the_plugin_holds_only_the_skills(self):
+        """What plugin/ holds is what users install and what the plugin directory scans."""
+        allowed = {".claude-plugin", "README.md", "LICENSE"} | set(skill_folders())
+        tracked = tracked_files("plugin", ".claude-plugin")
+        if tracked is None:  # no git, or not a checkout: what is on disk, less what git never ships
+            tracked = [os.path.relpath(os.path.join(folder, name), REPO).replace(os.sep, "/")
+                       for top in ("plugin", ".claude-plugin")
+                       for folder, subfolders, files in os.walk(os.path.join(REPO, top))
+                       for name in files if not name.endswith(UNSHIPPED)]
+        self.assertLessEqual({path.split("/")[1] for path in tracked if path.startswith("plugin/")}, allowed)
+        self.assertEqual(len(skill_folders()), 8)
+        manifests = sorted(path for path in tracked if "/.claude-plugin/" in "/" + path)
+        self.assertEqual(manifests, [".claude-plugin/marketplace.json", "plugin/.claude-plugin/icon.png",
+                                     "plugin/.claude-plugin/plugin.json"])
+
+    def test_the_plugin_icon(self):
+        """The directory's listing icon: a square PNG of 512 to 2048 pixels, under 2 MB."""
+        path = os.path.join(ROOT, ".claude-plugin", "icon.png")
+        with open(path, "rb") as handle:
+            data = handle.read()
+        self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+        width, height = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+        self.assertEqual(width, height)
+        self.assertTrue(512 <= width <= 2048, width)
+        self.assertLess(len(data), 2 * 1024 * 1024)
+
     def test_license_keeps_the_original_notice(self):
+        self.assertEqual(read(os.path.join(ROOT, "LICENSE")), read(os.path.join(REPO, "LICENSE")))
         text = " ".join(read(os.path.join(ROOT, "LICENSE")).split())  # one space between all words
         self.assertTrue(text.startswith("MIT License"))
         self.assertRegex(text, r"Copyright \(c\) \d{4} Jake Schincariol")
@@ -274,8 +324,8 @@ class PackTests(unittest.TestCase):
 
     def test_repo_has_no_secrets(self):
         """Dogfood: the pack's own secret scan passes on the pack."""
-        done = subprocess.run([sys.executable, os.path.join(ROOT, "forge-check", "secretscan.py"), ROOT],
-                              cwd=ROOT, timeout=120, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        done = subprocess.run([sys.executable, os.path.join(ROOT, "forge-check", "secretscan.py"), REPO],
+                              cwd=REPO, timeout=120, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               universal_newlines=True)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 

@@ -6,11 +6,12 @@ import os
 import subprocess
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the repo: tests/, examples/, the marketplace
+ROOT = os.path.join(REPO, "plugin")  # the plugin: the skill folders
 
 
-def load(folder, name):
-    path = os.path.join(ROOT, folder, name + ".py")
+def load(folder, name, base=None):
+    path = os.path.join(base or ROOT, folder, name + ".py")
     spec = importlib.util.spec_from_file_location("forge_" + name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

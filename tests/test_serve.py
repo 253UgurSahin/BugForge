@@ -10,9 +10,9 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import ROOT, load  # noqa: E402
+from _load import REPO, load  # noqa: E402
 
-serve = load("examples", "serve")
+serve = load("examples", "serve", REPO)
 
 
 def run(argv):
@@ -54,11 +54,11 @@ class ServeTests(unittest.TestCase):
         self.assertIn("--port %d" % (port + 1), err)
 
     def test_it_listens_on_this_machine_only_and_serves_its_own_folder(self):
-        with open(os.path.join(ROOT, "examples", "serve.py"), encoding="utf-8") as handle:
+        with open(os.path.join(REPO, "examples", "serve.py"), encoding="utf-8") as handle:
             text = handle.read()
         self.assertIn('("127.0.0.1", args.port)', text)
         self.assertNotIn("0.0.0.0", text)
-        self.assertEqual(serve.HERE, os.path.join(ROOT, "examples"))
+        self.assertEqual(serve.HERE, os.path.join(REPO, "examples"))
 
     def test_the_gallery_has_a_start_page(self):
         self.assertTrue(os.path.isfile(os.path.join(serve.HERE, "index.html")),
