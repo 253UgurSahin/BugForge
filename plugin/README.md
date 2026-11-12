@@ -31,6 +31,26 @@ In Claude Code:
 /plugin install bugforge@bugforge
 ```
 
+## Data and network
+
+BugForge has no server of its own: nothing is sent to or kept by BugForge. Everything it writes, such
+as plans, reports, screenshots and your business details for a privacy policy, stays in your project's
+`forge-work/` folder and in your own app. It reads your code, your app's database and pages, and, for
+recon, an account of your own that you sign in to. Passwords and keys are never printed or stored by it.
+
+The skills only reach these outside services, and only for the step named:
+
+| service | when |
+| --- | --- |
+| the sites and apps you name | recon, compare and inspect read their public pages at human speed; recon may also read pages behind your own login |
+| review sites (app stores and Apple's reviews feed, Trustpilot, Kiyoh, G2, Capterra, Reddit, Tweakers, Hacker News via hn.algolia.com) | compare, to collect what users say about competitors |
+| registry.npmjs.org, PyPI, Packagist, osv.dev | dependency and vulnerability checks (`npm audit`, `pip-audit`) |
+| endoflife.date | audit, to check whether a framework or database version still gets updates |
+| npm and the official installers (create-next-app, Vite, Laravel, Playwright, Lighthouse) | downloads the tools a step needs, after you agree |
+| Stripe (test mode) | payments you build into your own app, with your own test keys |
+
+Active security tests (probes, the access check) run only against your own app, on hosts you list.
+
 ## More
 
 The full documentation, the gallery with every look level as a moving preview, and the tests are in
