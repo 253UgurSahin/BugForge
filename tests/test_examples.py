@@ -9,9 +9,9 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # so `-m unittest tests.x` works too
-from _load import ROOT  # noqa: E402
+from _load import REPO, ROOT  # noqa: E402
 
-EXAMPLES = os.path.join(ROOT, "examples")
+EXAMPLES = os.path.join(REPO, "examples")
 KIT = os.path.join(ROOT, "forge-design", "scenes")
 COPY = os.path.join(EXAMPLES, "vendor", "scenes")
 TEXT = (".html", ".css", ".js", ".mjs", ".json", ".md")
@@ -43,7 +43,7 @@ class GalleryTests(unittest.TestCase):
 
     def test_nothing_is_loaded_from_another_host(self):
         for path in pages():
-            with self.subTest(file=os.path.relpath(path, ROOT)):
+            with self.subTest(file=os.path.relpath(path, REPO)):
                 self.assertIsNone(URL.search(read(path)))
 
     def test_three_is_the_local_copy_with_its_licence(self):
@@ -54,7 +54,7 @@ class GalleryTests(unittest.TestCase):
         for path in pages():
             text = read(path)
             for target in re.findall(r'"three"\s*:\s*"([^"]+)"', text):
-                with self.subTest(file=os.path.relpath(path, ROOT)):
+                with self.subTest(file=os.path.relpath(path, REPO)):
                     self.assertTrue(os.path.isfile(os.path.normpath(os.path.join(os.path.dirname(path), target))), target)
 
     def test_every_relative_file_a_page_names_is_there(self):
@@ -62,7 +62,7 @@ class GalleryTests(unittest.TestCase):
             if not path.endswith(".html"):
                 continue
             for target in re.findall(r"""(?:src|href)\s*=\s*["']([^"'#?:]+)["']""", read(path)):
-                with self.subTest(file=os.path.relpath(path, ROOT), target=target):
+                with self.subTest(file=os.path.relpath(path, REPO), target=target):
                     self.assertTrue(os.path.exists(os.path.normpath(os.path.join(os.path.dirname(path), target))))
 
     def test_the_levels_are_there(self):

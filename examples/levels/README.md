@@ -1,7 +1,7 @@
 # Tidewatch: one app at five levels
 
 Tidewatch is a made-up coastal passage planner for small boats. Every folder here is the same page
-at another look level of forge-design (`../../forge/levels.md`): `1/` to `5/`. The page, its words and
+at another look level of forge-design (`../../plugin/forge/levels.md`): `1/` to `5/`. The page, its words and
 its tokens stay the same; what changes is how much it moves and how deep it goes. `shared/` holds what
 every level uses: `tokens.css`, `base.css`, `app.js` and the fonts with their licences.
 
@@ -57,7 +57,7 @@ text on it). Under red light blue and green ink go dark, so the chart tints beco
 sheet that glows red where the lamp falls; the neat line and the compass rose stay as a dim red print in
 the gloom outside the pool.
 
-All 40 text and control pairs of both themes pass WCAG AA with `forge-design/contrast.py`
+All 40 text and control pairs of both themes pass WCAG AA with `plugin/forge-design/contrast.py`
 (lowest text pair 5.17:1, lowest control edge 3.62:1).
 
 ## Shape and space

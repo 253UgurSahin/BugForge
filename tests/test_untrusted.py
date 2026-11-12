@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # also run as te
 from _load import load  # noqa: E402
 
 mod = load("forge-check", "untrusted")
-SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "forge-check", "untrusted.py")
+SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugin", "forge-check", "untrusted.py")
 
 ORDERS = "Text that tries to give an AI orders"
 ROLE = "Fake chat role marker"

@@ -100,7 +100,7 @@ The other three scales:
   page is idle. Weak devices, no WebGL and reduced motion get a still picture of the scene. Levels
   1 to 3 add no library.
 
-[`forge/levels.md`](forge/levels.md) has every level in full, and what each one must show.
+[`forge/levels.md`](plugin/forge/levels.md) has every level in full, and what each one must show.
 
 ## See it: the gallery
 
@@ -203,8 +203,8 @@ on your own repo too.
    check fails, the words are missing, or an earlier phase is still open.
 
 Claude runs these for you, from your project root. To look yourself, set `FORGE` to the folder that
-holds `forge/` and the `forge-*` folders: `~/.claude/skills` if you copied them there, or, with the
-plugin, the `installPath` of `bugforge@bugforge` that `claude plugin list --json` prints (a new one
+holds `forge/` and the `forge-*` folders: `~/.claude/skills` if you copied them there, `plugin/` in a
+clone of this repo, or, with the plugin, the `installPath` of `bugforge@bugforge` that `claude plugin list --json` prints (a new one
 after each update).
 
 ```bash
@@ -287,6 +287,9 @@ it out of git and out of every image. The reports you will read most:
 
 ## The skills
 
+The eight skills are the folders in [`plugin/`](plugin), which is all the plugin holds. The
+gallery (`examples/`), the tests and CI stay outside it, so an install holds only what the skills run.
+
 | skill | parts | what it does |
 | --- | --- | --- |
 | `/forge` | | Runs a whole project, phase by phase, with the gate and your go after each phase, or straight through in auto mode. |
@@ -306,7 +309,7 @@ concept's thing, your app gets a scene of its own on `stage.js`. A scene draws o
 knows, puts life into what the screen already shows instead of covering it, and gets its own
 composition on a phone. It is mounted on its own stage, with a poster per theme and shape (wide and
 phone), taken from the page itself, for weak devices, no WebGL and reduced motion.
-[`forge-design/scenes.md`](forge-design/scenes.md) says which scene fits which app, which files to
+[`forge-design/scenes.md`](plugin/forge-design/scenes.md) says which scene fits which app, which files to
 copy and how to mount one in each stack.
 
 | file | what it is |
@@ -413,12 +416,12 @@ rules of the two motion checks.
 Try a few from the root of this repo:
 
 ```bash
-python3 forge-check/secretscan.py .
-python3 forge-check/scope.py http://localhost:8080
-python3 forge-check/detect.py .
-python3 forge-design/contrast.py '#1a1a1a' '#ffffff'
-python3 forge-design/contrast.py forge-design/tokens.json
-python3 forge/level.py show
+python3 plugin/forge-check/secretscan.py .
+python3 plugin/forge-check/scope.py http://localhost:8080
+python3 plugin/forge-check/detect.py .
+python3 plugin/forge-design/contrast.py '#1a1a1a' '#ffffff'
+python3 plugin/forge-design/contrast.py plugin/forge-design/tokens.json
+python3 plugin/forge/level.py show
 ```
 
 ## What BugForge never does
@@ -443,7 +446,7 @@ python3 forge/level.py show
   and never the secure phase), loosen a test or a scan to get through, invent reviews, testimonials,
   prices or quotes, or give legal advice: the legal and trademark parts are checklists to verify.
 
-The full rules: [`forge/rules.md`](forge/rules.md).
+The full rules: [`forge/rules.md`](plugin/forge/rules.md).
 
 ## Install
 
@@ -459,7 +462,7 @@ Works on Linux, macOS and Windows: CI runs the tests of the skills' scripts on a
   Homebrew Python works too.
 - **Windows:** Claude Code runs the scripts in Git Bash (part of Git for Windows). A python.org
   install has no `python3` there, so Claude runs `py -3` or `python` instead, as
-  [`forge/rules.md`](forge/rules.md) tells it.
+  [`forge/rules.md`](plugin/forge/rules.md) tells it.
 - **Docker:** CI checks the container templates on Linux. On macOS and Windows, Docker Desktop
   runs the same Linux containers, but CI does not test it there.
 
@@ -507,7 +510,7 @@ Or copy the folders into your personal skills folder:
 ```bash
 git clone https://github.com/253UgurSahin/BugForge.git
 mkdir -p ~/.claude/skills
-cp -r BugForge/forge BugForge/forge-* ~/.claude/skills/
+cp -r BugForge/plugin/forge BugForge/plugin/forge-* ~/.claude/skills/
 ```
 
 Copy them all: the skills call each other's scripts with paths like `../forge-check/scope.py`.
@@ -538,7 +541,7 @@ CI (`.github/workflows/test.yml`) runs on every push and pull request:
 
 ## Releasing
 
-Every push to `main`, the default branch, is a release. `.claude-plugin/plugin.json` has no
+Every push to `main`, the default branch, is a release. `plugin/.claude-plugin/plugin.json` has no
 `version` on purpose: Claude Code then uses the commit as the version, so users get each push with
 the two update commands above. With a fixed version they would get nothing until it was raised.
 `tests/test_repo.py` keeps it that way.
