@@ -38,7 +38,7 @@ import { chartPrint } from "./print.js";
 
 const X0 = 140, CW = 860, CH = 900;                // the sheet, in chart units
 const SW = CW / 100, SD = CH / 100;                // and in world units: 8.6 by 9
-const VS = 0.072;                                  // world units per metre shown
+const VS = 0.1;                                    // world units per metre shown: banks that stand up, seen from the side
 const WATER_MAX = 6;                               // metres: setData's 1
 const LAMP_HEIGHT = 1.9;                           // world units above the paper: low enough that the light rakes
 const CURL = 100;                                  // chart units along each edge: the corner turned up
@@ -94,6 +94,7 @@ uniform float uPoolEdge;
 uniform vec3 uRoom;
 uniform float uHill;
 uniform vec3 uShoal;
+uniform vec3 uDeep;           // the water's colour where it stands deep: a darker teal by day, a deep red by night
 uniform vec3 uLine;
 uniform vec3 uGlint;
 uniform vec3 uInkNight;
@@ -148,8 +149,11 @@ void main() {
   vec3 L = normalize(toLamp);
   float r = length(P.xz - uLampPos.xz) / uPoolR;
   float pool = 1.0 - smoothstep(uPoolEdge, 1.0, r);
-  float face = min(max(dot(n, L), 0.0) / max(L.y, 0.2), 1.4);
-  float sh = pool > 0.01 ? shadowAt(P + n * 0.003, L) : 1.0;
+    /* how much a slope faces the lamp, kept soft: paper scatters light, so a slope turned away is in
+       shade, never black (a hard 0 drew the fold as a dark bar through the pool at night) */
+    float face = 0.4 + 0.6 * min(max(dot(n, L), 0.0) / max(L.y, 0.2), 1.4);
+    /* a shadow on paper under a lamp is soft and never black either: the room still lights it */
+    float sh = pool > 0.01 ? mix(0.66, 1.0, shadowAt(P + n * 0.003, L)) : 1.0;
   /* the corner that turned up lies over the chart near its hinge: its shade */
   float inSide = -dot(P.xz - uHinge.xy, uHinge.zw);
   vec2 along = vec2(-uHinge.w, uHinge.z);
@@ -162,7 +166,8 @@ void main() {
   vec3 col = albedo * light * (1.0 - 0.11 * crease * (1.0 - uNight * 0.5));
   /* paper has a little sheen where the lamp is seen in it, caught on every slope that faces it */
   vec3 V = normalize(cameraPosition - P);
-  col += uLampColor * uLampPower * pow(max(dot(n, normalize(L + V)), 0.0), 30.0) * pool * lit * 0.035 * (1.0 - 0.8 * uNight);
+    /* (kept faint: stronger, it smeared the name on the top of Spijkerplaat at low water) */
+    col += uLampColor * uLampPower * pow(max(dot(n, normalize(L + V)), 0.0), 40.0) * pool * lit * 0.015 * (1.0 - 0.8 * uNight);
 
   /* the water of the tide, between the paper and the ink */
   float lap = 0.03 * sin(uTime * 1.15) + 0.014 * sin(uTime * 2.7 + 1.3);
@@ -175,15 +180,25 @@ void main() {
     if (uRipples > 1.5) g += snoiseGrad(P.xz * vec2(6.2, 8.8) + vec2(-uTime * 0.09, uTime * 0.07)) * 0.3;
     vec3 wn = normalize(vec3(-g.y * 0.018, 1.0, -g.z * 0.018));
     float onBank = smoothstep(-0.6, 0.4, bed.g);      // the bed is a bank or a beach that dries, not a channel
-    float a = mix(0.05, mix(0.26, 0.62, smoothstep(0.0, 1.3, depth)), onBank);
+      /* how much of the water's own colour shows: a trace over the channels (their tint is printed), and over
+         a bank that floods a clear sea-glass that deepens with the depth, so a bank under water and the same
+         bank dry look plainly different in one still frame (at 0.26 to 0.62 the tide hardly showed) */
+      float a = mix(0.05, mix(0.42, 0.78, smoothstep(0.0, 1.1, depth)), onBank);
     /* a slow sheen runs down the river with the stream */
     float sheen = 0.5 + 0.5 * sin(dot(P.xz, vec2(0.55, -0.9)) * 1.6 - uTime * 0.45 + g.x * 0.6);
     vec3 waterLight = uRoom + uLampColor * uLampPower * pool * 0.65;
-    vec3 water = mix(col, uShoal * waterLight, a);
-    water += uLampColor * uLampPower * pool * 0.14 * sheen * sheen * sheen * (1.0 - onBank * 0.7) * (1.0 - 0.6 * uNight);
+      /* the water has a depth colour: sea-glass over the banks, a darker teal as the channel deepens, so the
+         river reads as water and not as a tint (a trace of it over the channels, more over a flooded bank) */
+      float deep = smoothstep(1.5, 9.0, depth);
+      a = max(a, 0.3 * deep);
+      vec3 water = mix(col, mix(uShoal, uDeep, deep) * waterLight, a);
+      /* the sheen is a faint moving light, never a white film: at 0.14 it laid a milky haze over the river */
+      water += uLampColor * uLampPower * pool * 0.045 * sheen * sheen * sheen * (1.0 - onBank * 0.7) * (1.0 - 0.6 * uNight);
     vec3 H = normalize(normalize(uLampPos - P) + V);
     float hv = clamp(dot(wn, H), 0.0, 1.0);
-    float glint = (pow(hv, 420.0) * 3.2 + pow(hv, 70.0) * 0.35) * pool * sh * (1.0 - 0.8 * uNight);
+    /* the lamp's glints on the ripples: small and few. Stronger, they burned a white glare into the middle
+       of the chart over Spijkerplaat */
+    float glint = (pow(hv, 600.0) * 1.1 + pow(hv, 90.0) * 0.12) * pool * sh * (1.0 - 0.8 * uNight);
     water += uGlint * uLampPower * glint;
     col = mix(col, water, wet);
   }
@@ -193,13 +208,21 @@ void main() {
   col *= 1.0 - 0.08 * damp;
   col = mix(col, uLine * (uRoom + uLampColor * uLampPower * pool), edge * 0.6);
 
-  /* the ink, on top of everything: by day as printed, by night dark on the red inside the pool and a dim
-     red print in the gloom outside it */
-  vec4 ink = texture2D(uInk, uv, -0.65);
-  vec3 dayInk = ink.rgb * mix(1.0, clamp(light.r, 0.6, 1.0), 0.5);
-  float poolN = 1.0 - smoothstep(uPoolEdge * 0.9, 1.0, r);
-  vec3 nightInk = mix(uInkGlow, uInkNight, poolN) * ink.a;
-  col = col * (1.0 - ink.a) + mix(dayInk, nightInk, uNight);
+    /* the ink, on top of everything. By day as printed: the lamp only shades it a little (more made the
+       magenta rose brown). By night pale rose: bright where the lamp lights the sheet, softer in the gloom. */
+    vec4 ink = texture2D(uInk, uv, -0.65);
+    vec3 dayInk = ink.rgb * mix(1.0, clamp(light.r, 0.75, 1.0), 0.3);
+    /* the print carries pale halos of paper colour round the figures that sit on a line (as charts do). By
+       day they are paper; by night they must not glow: the night print takes only the dark part of the ink
+       (its colour, unpremultiplied, darker than paper), so halos drop out and only lines and letters glow */
+    vec3 inkColour = ink.rgb / max(ink.a, 0.001);
+    float inkDark = 1.0 - smoothstep(0.42, 0.72, dot(inkColour, vec3(0.299, 0.587, 0.114)));
+    float nightA = ink.a * inkDark;
+    float paperLit = smoothstep(0.025, 0.12, col.r);
+    vec3 nightInk = mix(uInkGlow, uInkNight, paperLit);
+    vec3 dayCol = col * (1.0 - ink.a) + dayInk;
+    vec3 nightCol = col * (1.0 - nightA) + nightInk * nightA;
+    col = mix(dayCol, nightCol, uNight);
 
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
@@ -366,7 +389,9 @@ export async function mount(container, options = {}) {
     return set ? set === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
   };
   const onScreen = sheetEl ? sheetEl.getBoundingClientRect().width : container.clientWidth;
-  const inkWidth = Math.max(1024, Math.min(2048, Math.round((onScreen * Math.min(window.devicePixelRatio || 1, 2) * 1.35) / 256) * 256));
+    /* the ink is printed at 2.6 texels per screen pixel of the sheet (at most 3072): seen at a slant, a texture
+     loses detail across the slope, and at 1.35 the chart's lettering came out softer than level 3's */
+  const inkWidth = Math.max(1536, Math.min(3072, Math.round((onScreen * Math.min(window.devicePixelRatio || 1, 2) * 2.6) / 256) * 256));
   const print = chartPrint(hero, { width: inkWidth });
   const firstTheme = nightNow() ? "night" : "day";
   const baseFirst = await print.base(firstTheme);
@@ -443,7 +468,7 @@ export async function mount(container, options = {}) {
     uMaxH: { value: maxH * VS + 0.03 }, uSteps: { value: 12 }, uRipples: { value: 2 },
     uLampPos: { value: new THREE.Vector3(0.6, LAMP_HEIGHT, 0.3) }, uLampColor: { value: new THREE.Color() },
     uLampPower: { value: 0.35 }, uPoolR: { value: 2.6 }, uPoolEdge: { value: 0.3 }, uRoom: { value: new THREE.Color() },
-    uHill: { value: 0.6 }, uShoal: { value: new THREE.Color() }, uLine: { value: new THREE.Color() }, uGlint: { value: new THREE.Color() },
+    uHill: { value: 0.6 }, uShoal: { value: new THREE.Color() }, uDeep: { value: new THREE.Color() }, uLine: { value: new THREE.Color() }, uGlint: { value: new THREE.Color() },
     uInkNight: { value: new THREE.Color() }, uInkGlow: { value: new THREE.Color() },
     uHinge: { value: new THREE.Vector4(hingeMid.x, hingeMid.z, out.x, out.y) }, uFlap: { value: 0 },
   };
@@ -551,15 +576,21 @@ export async function mount(container, options = {}) {
     nightTarget = tokens.dark ? 1 : 0;
     wantBase(tokens.dark ? "night" : "day");
     if (tokens.dark) {
-      uniforms.uRoom.value.copy(tokens.lamp).multiplyScalar(0.035);
+        /* the room at night: the red lamp's light thrown back by the cabin, enough to see the chart outside
+           the pool as a dim red sheet (at 0.035 it was black, and the pool a hard disc in it) */
+        uniforms.uRoom.value.copy(tokens.lamp).multiplyScalar(0.14);
       uniforms.uLampColor.value.copy(tokens.lamp);                 // the red lamp
       uniforms.uShoal.value.setRGB(0.3, 0.07, 0.04);
+        uniforms.uDeep.value.setRGB(0.12, 0.02, 0.01);
       uniforms.uLine.value.copy(tokens.lamp).multiplyScalar(0.9);
       uniforms.uGlint.value.copy(tokens.lamp);
-      uniforms.uInkNight.value.setRGB(0.006, 0.002, 0.0015);       // dark ink on the red
-      uniforms.uInkGlow.value.copy(tokens.glowInk);                // and a dim red print in the gloom
+        /* the print at night is pale rose, as level 3's sheet has it: bright where the lamp lights the
+           paper, a softer rose in the gloom, so every word reads anywhere on the sheet (dark ink on the red
+           only read in the middle of the pool). Linear values: #ffd6c8 and #c98c7a */
+        uniforms.uInkNight.value.setRGB(1.0, 0.67, 0.58);
+        uniforms.uInkGlow.value.setRGB(0.58, 0.26, 0.19);
       uniforms.uHill.value = 0.15;
-      uniforms.uPoolEdge.value = 0.62;
+        uniforms.uPoolEdge.value = 0.2;               // the pool fades from near its middle: a lamp, not a disc
       flapUniforms.uBack.value.copy(tokens.back);
       edgeUniforms.uCut.value.copy(tokens.cut);
       tableUniforms.uGlow.value.copy(tokens.lamp);
@@ -567,9 +598,15 @@ export async function mount(container, options = {}) {
       tableUniforms.uShade.value.setRGB(0, 0, 0);
       tableUniforms.uShadeA.value = 0.6;
     } else {
-      uniforms.uRoom.value.setRGB(0.78, 0.74, 0.66);   // the room beyond the lamp: a warm shade
-      uniforms.uLampColor.value.copy(tokens.lamp).lerp(new THREE.Color(1, 0.84, 0.56), 0.7);   // a warm bulb
-      uniforms.uShoal.value.copy(tokens.shoal);
+        /* the room beyond the lamp: a warm shade, a step darker than the pool, so by day the lamp is a pool of
+           light you can see and its rake shades the relief (at 0.78 with a weak lamp it was a flat grey film) */
+        uniforms.uRoom.value.setRGB(0.76, 0.7, 0.6);
+        /* a warm bulb, yellower than paper, so its pool reads as lamplight and not as a pale haze */
+        uniforms.uLampColor.value.copy(tokens.lamp).lerp(new THREE.Color(1, 0.74, 0.4), 0.85);
+        /* the water by day: a sea-glass deeper than the printed shoal tint (#7fb5bf, linear below), so water lying
+           over a bank reads as water, not as the pale tint it covers */
+        uniforms.uShoal.value.setRGB(0.21, 0.46, 0.52);
+        uniforms.uDeep.value.setRGB(0.05, 0.2, 0.26);   // #3e7a8a
       uniforms.uLine.value.setRGB(1, 0.99, 0.95);
       uniforms.uGlint.value.setRGB(1, 0.96, 0.86);
       uniforms.uInkNight.value.setRGB(0, 0, 0);
@@ -634,6 +671,7 @@ export async function mount(container, options = {}) {
   /* 6. the frame. The opening and the easing run on the clock of the wall, not on the stage's clock
      (which stands still while paused and takes at most a tenth of a second a frame), so a slow device
      sees the same moments, only fewer of them. */
+  let settledAt = -99;   // when the opening ended (the wall clock), for the lean-in after it
   let level = 1.0, levelShown = level, progress = 0, opened = null, built = false, last = 0, flapTurn = 0, banks = 0;
   const view = { x: 0, y: 0 };
   const ease = (dt, seconds) => (dt ? 1 - Math.exp(-dt / seconds) : 1);
@@ -681,15 +719,22 @@ export async function mount(container, options = {}) {
     const kCurl = inOut(phase(t, 0.35, 1.5));
     if (!built && t >= 2.3) {
       built = true;
+        settledAt = live ? now : -99;
       container.dispatchEvent(new CustomEvent("tablebuilt"));
     }
     progress += (stage.progress - progress) * ease(dt, 0.22);
     const leave = progress;
+      /* once the relief stands, the reader leans in: the camera comes down lower over the table and swings a
+         little to the east, so the banks are seen from the side and show their height (straight from the
+         drawn sheet's view the relief read as an emboss). The first frame still lies on the drawn sheet;
+         this follows over 1.8 s, small enough that the sheet stays inside its canvas. A still frame (reduced motion) shows the leaned-in view at once. */
+      const kLean = built ? (settledAt < 0 || !live ? 1 : inOut(phase(now - settledAt, 0, 1.8))) : 0;
     /* the pointer turns the view a little: the relief is seen from another side */
     const p = stage.pointer, follow = built && fine.matches && p.active;
     view.x += ((follow ? p.raw.x : 0) - view.x) * ease(dt, 0.6);
     view.y += ((follow ? p.raw.y : 0) - view.y) * ease(dt, 0.6);
-    applyPose(-view.x * 0.085, view.y * 0.05 - leave * 0.12, leave * 0.18);
+      /* the pointer's turn is larger than before (0.085 and 0.05 rad read as hardly anything) */
+      applyPose(-view.x * 0.1 - kLean * 0.035, view.y * 0.06 + kLean * 0.09 - leave * 0.12, leave * 0.18);
 
     uniforms.uRelief.value = kRelief * (1 - leave * 0.8);
     const turn = Math.PI - (Math.PI - CURL_TURN) * kCurl;   // from folded flat, as the drawn sheet has it, to lifted
@@ -721,8 +766,9 @@ export async function mount(container, options = {}) {
       }
     }
     uniforms.uLampPos.value.set(lamp.x, LAMP_HEIGHT, lamp.z);
-    uniforms.uLampPower.value = night > 0.5 ? 2.3 : 0.24;
-    uniforms.uPoolR.value = night > 0.5 ? 2.45 : 2.15;
+      /* by night a wider, softer pool at less power: at 2.3 the red saturated into one flat colour */
+      uniforms.uLampPower.value = night > 0.5 ? 1.7 : 0.36;
+      uniforms.uPoolR.value = night > 0.5 ? 3.3 : 2.15;
     if (live) uniforms.uTime.value = now % 1000;
     if (built && !idle && stage.running && now > activeUntil && !hand && Math.abs(level - levelShown) < 0.004
       && Math.abs(stage.progress - progress) < 0.002 && Math.hypot(tx - lamp.x, tz - lamp.z) < 0.12) goIdle();

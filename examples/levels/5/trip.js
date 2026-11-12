@@ -80,10 +80,13 @@ const orbit = (v) => {
 };
 // the hero: the sheet big and close in the right half, its lower corner under the slip (the lens shift
 // puts it there without turning the view); on a phone the whole sheet below the words, as an object
-const HERO = { target: [1.15, 0, 0.3], dist: 15.2, el: 45, az: 6, fov: 30, shift: [0.33, 0.12] };
-const HERO_PHONE = { target: [0, 0, 0.15], dist: 50, el: 42, az: 0, fov: 30, shift: [0, -0.55], flight: [0, -0.34] };
-// a phone (or a narrow tablet) has the words over the top of the screen: the sheet lies, whole, in the
-// band between the buttons and the strip of tools, as large as that band allows
+  /* (the lens shift lifts the sheet so Breskens and the cartouche stand clear above the slip, and the camera
+     stands a little further back so the sheet's far corner is not cut by the top of the window) */
+const HERO = { target: [1.15, 0, 0.3], dist: 17.4, el: 45, az: 6, fov: 30, shift: [0.43, 0.3] };
+const HERO_PHONE = { target: [0, 0, 0.15], dist: 50, el: 50, az: 0, fov: 30, shift: [0, -0.55], flight: [0, -0.34] };
+// a phone (or a narrow tablet) has the words over the top of the screen: the sheet lies under the buttons as
+// wide as the screen, as level 4's does, and runs on under the strip of tools and past the fold (fitted into
+// the band between the buttons and the strip it was a strip 200 px high, smaller than level 4's)
 function fitPhoneHero() {
   const hero = section && section.querySelector(".trip__step--hero");
   const actions = hero && hero.querySelector(".hero__actions"), bar = section && section.querySelector(".trip__bar-in");
@@ -93,11 +96,14 @@ function fitPhoneHero() {
   if (inner) hero.style.setProperty("--hero-room", Math.max(320, vh - (inner.getBoundingClientRect().top + window.scrollY)) + "px");
   const top = actions.getBoundingClientRect().bottom + window.scrollY + 16;
   const bottom = vh - bar.offsetHeight - 4;
-  const band = Math.max(150, bottom - top), middle = Math.min(bottom - band / 2, vh - 80);
   const half = Math.tan((HERO_PHONE.fov * Math.PI) / 360);
   const deep = 9 * Math.sin((HERO_PHONE.el * Math.PI) / 180) + 0.5;          // the sheet and its shadow, seen tipped
-  const byHeight = (deep * vh) / (2 * half * band), byWidth = 11.2 / (2 * half * (vw / vh) * 0.94);
-  HERO_PHONE.dist = Math.max(byHeight, byWidth);
+  /* fitted by the width alone; its top lies just under the buttons, its foot where the screen allows */
+  const byWidth = 11.2 / (2 * half * (vw / vh) * 0.94);
+  HERO_PHONE.dist = byWidth;
+  const tall = (deep * vh) / (2 * half * byWidth);                            // its height on the screen, in px
+  const middle = top + tall / 2;
+  void bottom;                                                                // (the strip lies over its foot)
   HERO_PHONE.shift[1] = 1 - (2 * middle) / vh;
 }
 fitPhoneHero();
@@ -129,7 +135,9 @@ const CHAPTERS = [
   { camera: { position: [0.45, 2.75, 3.95], target: [-2.85, -0.25, 2.6], fov: 40 },     // down the Wielingen
     phone: { position: [0.9, 5.2, 4.9], target: [-2.0, -0.25, 2.8], fov: 54 },
     still: { position: [0.3, 2.6, 4.0], target: [-2.6, -0.25, 2.55], fov: 42 }, progress: 0.65, hour: HOURS[3] },
-  { camera: orbit({ target: [-5.25, 0, 3.35], dist: 6.6, el: 50, az: 52, fov: 38 }),   // the landfall, under the red lamp
+    /* the landfall looks along the last of the pencil line onto the sheet, the boat at its end on the edge of
+       the frame: the chart fills the view (aimed past the sheet's edge, half the frame was bare table) */
+  { camera: orbit({ target: [-3.7, 0, 2.9], dist: 5.6, el: 48, az: 60, fov: 40 }),   // the landfall, under the red lamp
     phone: orbit({ target: [-4.55, 0, 3.4], dist: 8.6, el: 56, az: 32, fov: 50 }),
     still: orbit({ target: [-4.1, 0, 3.15], dist: 6.6, el: 42, az: 66, fov: 40 }), progress: 0.85, hour: HOURS[4] },
   { at: 1, camera: { position: [0.0, 12.6, 11.2], target: [0.1, 0, 0.5], fov: 34 },       // the whole sheet, in the room light again
@@ -182,6 +190,12 @@ function callouts(scene, layer) {
   const sounder = document.createElement("span");
   sounder.className = "callout callout--sounder";
   layer.appendChild(sounder);
+    /* the flag at the tide gauge in Vlissingen harbour, as on level 4: the hour and the water the slip says,
+       standing where the water is measured, while the hero is read (never on the journey's own chapters) */
+    const flag = document.createElement("span");
+    flag.className = "callout callout--gauge";
+    layer.appendChild(flag);
+    let flagText = "";
   let last = 0, lastText = "";
   const off = scene.onCamera((camera) => {
     const now = performance.now(), dt = Math.min(0.25, (now - last) / 1000 || 0.016);
@@ -211,6 +225,16 @@ function callouts(scene, layer) {
       c.el.style.opacity = c.shown.toFixed(3);
       c.el.style.transform = `translate3d(${s.x.toFixed(1)}px, ${(s.y - 7).toFixed(1)}px, 0)`;
     }
+      {
+          const [gx, gz] = [(GAUGE[0] - 500) / 100, (GAUGE[1] - 450) / 100];
+          const s = project(gx, scene.surfaceAt(GAUGE[0], GAUGE[1]) + 0.02, gz);
+          const visible = current <= 0 && !opening && !s.behind && s.x > 0 && s.x < w - 160 && s.y > 60 && s.y < barTop - 30 && !under(s.x - 4, s.y - 30, s.x + 150);
+          flag.style.opacity = visible ? "1" : "0";
+          if (visible) {
+              if (gaugeText !== flagText) { flag.innerHTML = gaugeText; flagText = gaugeText; }
+              flag.style.transform = `translate3d(${s.x.toFixed(1)}px, ${(s.y - 30).toFixed(1)}px, 0)`;
+          }
+      }
     // the sounder rides with the boat: the water under the keel, from the tide and the sea bed
     if (boat) {
       const s = project(boat.world[0], boat.world[1] + 0.03, boat.world[2]);
@@ -240,6 +264,9 @@ function wayOf(hour) {
   return rate > 0 ? "rising" : "falling";
 }
 let toldHour = -1;
+  /* what the flag at the gauge says: the same words as the slip ("09:40 1.0 m now", "12:15 3.9 m rising") */
+  let gaugeText = "<b>09:40</b> 1.0 m now";
+  const GAUGE = [706, 366];                                          // the tide gauge, Vlissingen harbour
 function say(hour) {
   const minute = Math.round(hour * 60);
   if (minute === toldHour) return;
@@ -249,6 +276,7 @@ function say(hour) {
     if (r.h) r.h.textContent = metres.toFixed(1) + " m";
     if (r.way) r.way.textContent = wayOf(hour);
     if (r.time) r.time.textContent = clock(hour) + (isNow ? " now" : "");
+      gaugeText = `<b>${clock(hour)}</b> ${metres.toFixed(1)} m ${isNow ? "now" : wayOf(hour)}`;
     if (r.gauge) r.gauge.style.setProperty("--level", clamp(metres / 6).toFixed(3));
     r.el.classList.toggle("is-lapse", !isNow);
   }
@@ -283,19 +311,33 @@ function showChapter(index) {
 function heroClock(journeyHandle) {
   const scene = journeyHandle.scene;
   let hour = NOW, ready = !scene.opening || !scene.opening(), last = 0;
-  journeyHandle.stage.container.addEventListener("tableopen", () => { ready = true; });
+    /* the scale on the slip (level 4's, here from now to casting off): dragging it sets the hour, and the
+       clock no longer runs by itself, so what the reader picked stays */
+    const scrub = document.getElementById("hero-scrub"), input = document.getElementById("hero-hour");
+    let held = false;
+    function setHour(h) {
+        hour = clamp(h, NOW, OFF);
+        scene.setStory({ idleBoat: hour >= OFF ? 1 : 0, idleHatch: smooth(WINDOW[0] - 0.05, WINDOW[0] + 0.45, hour) });
+        const data = dataAt(hour);
+        CHAPTERS[0].params.data.splice(0, 3, ...data);      // the journey blends on from where the clock is
+        CHAPTERS[0].params.hour = hour;
+        scene.setData(data);
+        say(hour);
+        if (input) {
+            const minutes = Math.round((hour - NOW) * 60);
+            if (Number(input.value) !== minutes && !held) input.value = String(minutes);
+            input.setAttribute("aria-valuetext", `${clock(hour)}${Math.abs(hour - NOW) < 1 / 120 ? " now" : ""}, water ${tide.height(hour).toFixed(1)} m, ${wayOf(hour)}`);
+        }
+    }
+    if (input) input.addEventListener("input", () => { held = true; setHour(NOW + Number(input.value) / 60); });
+    const offer = () => { ready = true; if (scrub && !journeyHandle.stage.still) scrub.hidden = false; };
+    journeyHandle.stage.container.addEventListener("tableopen", offer);
+    if (ready) offer();
   return journeyHandle.stage.onFrame(() => {
     const now = performance.now(), delta = last ? Math.min((now - last) / 1000, 1) : 0;
     last = now;
-    if (current > 0 || journeyHandle.stage.still || !ready || hour >= OFF) return;
-    hour = Math.min(OFF, hour + delta / 2.5);
-    if (hour >= OFF) scene.setStory({ idleBoat: 1 });
-    const data = dataAt(hour);
-    CHAPTERS[0].params.data.splice(0, 3, ...data);      // the journey blends on from where the clock is
-    CHAPTERS[0].params.hour = hour;
-    scene.setStory({ idleHatch: smooth(WINDOW[0] - 0.05, WINDOW[0] + 0.45, hour) });
-    scene.setData(data);
-    say(hour);
+    if (current > 0 || journeyHandle.stage.still || !ready || held || hour >= OFF) return;
+      setHour(Math.min(OFF, hour + delta / 2.5));
   });
 }
 

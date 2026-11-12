@@ -181,7 +181,8 @@ void main() {
     vec3 wn = normalize(vec3(-g.y * (0.008 + 0.022 * strength), 1.0, -g.z * (0.008 + 0.022 * strength)));
     vec3 Vq = normalize(cameraPosition - Q), Lq = normalize(uLampPos - Q);
     float hv = clamp(dot(wn, normalize(Lq + Vq)), 0.0, 1.0);
-    glint = (pow(hv, 280.0) * 2.6 + pow(hv, 48.0) * 0.4) * (0.25 + 0.75 * sh) * wet;
+      /* small, few glints: at 2.6 and 0.4 they burned a white glare into the middle of the chart */
+      glint = (pow(hv, 420.0) * 1.1 + pow(hv, 70.0) * 0.12) * (0.25 + 0.75 * sh) * wet;
     // the shoal tint deepens where the water stands shallow over a bank, a clearer wash over the deeps:
     // the banks surface and flood with the tide, with no line drawn of their own
     shallow = 1.0 - smoothstep(0.6, 3.2, depth);
@@ -198,7 +199,8 @@ void main() {
       vec2 crossWind = vec2(-w.y, w.x);
       vec2 lanePos = vec2(dot(chart, crossWind) * 0.034, dot(chart, w) * 0.0045 - uRipple * 0.05);
       float lane = smoothstep(-0.1, 0.6, snoise(lanePos) * 0.75 + snoise(lanePos * 2.3 + 4.1) * 0.35);
-      foam = clamp(pts * 2.0 / wsum, 0.0, 0.45) * uWindOn * smoothstep(0.8, 2.5, depth) * mix(0.15, 1.0, lane) * wet;
+        /* (up to 0.7: at 0.45, mixed in at half strength, no judge could find a single streak) */
+        foam = clamp(pts * 2.4 / wsum, 0.0, 0.7) * uWindOn * smoothstep(0.8, 2.5, depth) * mix(0.25, 1.0, lane) * wet;
     }
   }
 
@@ -230,15 +232,19 @@ void main() {
     vec3 base = texture(uBase, uv).rgb;
     float paper = 1.0 - smoothstep(0.004, 0.03, distance(base, uPaper));
     float pool = dayPool(P.xz) * uLampOn * mix(1.0, paper, uPosterLamp);
-    float lampLit = mix(1.0, clamp(face, 0.0, 1.25) * mix(0.3, 1.0, sh), uRise);
+      /* the lamp lights a slope at most fully, never past it (1.25 bleached the paper in the pool) */
+      float lampLit = mix(1.0, clamp(face, 0.0, 1.0) * mix(0.3, 1.0, sh), uRise);
     // the room keeps the paper as the page shows it; the lamp warms and brightens its pool, and its
     // light is what the relief's shadows take away
-    vec3 dayLight = vec3(mix(1.0, 0.95, uRise) * hill);
-    dayLight *= mix(vec3(1.0), uLampRatio * mix(1.0, 1.05, uRise), pool * lampLit);
+      /* the room beyond the lamp a step darker once the relief stands, and the pool a warm step brighter: by day
+         the lamp is a pool you can see and follow with the hand (at 0.95 it had faded from the first screen) */
+      vec3 dayLight = vec3(mix(1.0, 0.86, uRise) * hill);
+      dayLight *= mix(vec3(1.0), uLampRatio * mix(1.0, 1.16, uRise), pool * lampLit);
     vec3 day = base * dayLight;
     day = mix(day, mix(uWaterTint, uShoal, shallow * 0.55) * dayLight, wa);
     day += uLampRatio * 0.9 * glint * (0.35 + 0.65 * pool);
-    day = mix(day, dayLight, foam * 0.5);
+      /* the wind's streaks: pale lines of foam drawn out down the wind, plain to see on the open water */
+      day = mix(day, dayLight * 1.04, foam * 0.85);
     // the ink over the water, lit as the paper is; then the window's hatch, then the boat
     day = mix(day, toLinear(c) * mix(vec3(1.0), dayLight, 0.4), ink.a);
     day = mix(day, uWindow0 * dayLight, band * 0.07);
@@ -252,14 +258,22 @@ void main() {
     // by night the red lamp is all the light there is: the sheet glows where it falls and goes dark
     // toward its edges, the tints darken it, the ink is dark on the red (the paper halos of the figures
     // go, the magenta of the lights and the rose turns to the lamp's dim red)
-    vec3 glow = nightGlow(P.xz) * mix(1.0, mix(0.84, 1.14, clamp(face, 0.0, 1.2)) * mix(0.74, 1.0, sh), uRise);
+      /* the red lamp, and the cabin it lights: outside the pool the sheet stays a dim red, never black (black
+         sank Breskens, Hooge Platen and the cartouche into mud) */
+      vec3 glow = max(nightGlow(P.xz), uNightLamp * 0.16) * mix(1.0, mix(0.84, 1.14, clamp(face, 0.0, 1.2)) * mix(0.74, 1.0, sh), uRise);
     vec3 night = glow * texture(uBaseNight, uv).rgb;
     night = night * mix(1.0, 0.9, wet * smoothstep(0.0, 2.0, depth)) + glow * glint * 0.5;
     if (ink.a > 0.003) {
       float light = dot(c, vec3(0.3, 0.59, 0.11));
       float magenta = clamp((c.r - c.g) * 3.0 - 0.4, 0.0, 1.0);
       float halo = smoothstep(0.62, 0.86, light);
-      night = mix(night, mix(uInk1, uMagenta1 * (0.6 + 0.6 * glow / max(uNightLamp, vec3(0.01))), magenta), ink.a * (1.0 - halo) * 0.94);
+        /* the print by night is pale rose, as on levels 3 and 4: bright where the lamp lights the sheet, softer in
+           the gloom, so every word reads anywhere; the chart's magenta (lights, the rose) a warmer rose.
+           Linear values: #c98c7a to #ffd6c8, and #ff9c7e */
+        float lit = smoothstep(0.03, 0.14, glow.r);
+        vec3 pale = mix(vec3(0.58, 0.26, 0.19), vec3(1.0, 0.67, 0.58), lit);
+        vec3 rose = mix(vec3(0.62, 0.2, 0.12), vec3(1.0, 0.33, 0.2), lit);
+        night = mix(night, mix(pale, rose, magenta), ink.a * (1.0 - halo) * 0.94);
     }
     night = mix(night, uWindow1, band * hatch * 0.3 + rim * 0.2);
     night = mix(night, uNightLampMid * 0.6, boatHalo);
