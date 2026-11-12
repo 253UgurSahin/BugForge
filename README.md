@@ -546,6 +546,9 @@ Every push to `main`, the default branch, is a release. `plugin/.claude-plugin/p
 the two update commands above. With a fixed version they would get nothing until it was raised.
 `tests/test_repo.py` keeps it that way.
 
+The listing in Claude's plugin directory tracks `main` with `plugin` as its plugin path, so it reads
+and scans only `plugin/`; its icon is `plugin/.claude-plugin/icon.png`.
+
 ## Credit and license
 
 MIT. Based on [replica-skill](https://github.com/Jakeschincariol/replica-skill) by Jake

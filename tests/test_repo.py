@@ -283,7 +283,19 @@ class PackTests(unittest.TestCase):
         self.assertLessEqual({path.split("/")[1] for path in tracked if path.startswith("plugin/")}, allowed)
         self.assertEqual(len(skill_folders()), 8)
         manifests = sorted(path for path in tracked if "/.claude-plugin/" in "/" + path)
-        self.assertEqual(manifests, [".claude-plugin/marketplace.json", "plugin/.claude-plugin/plugin.json"])
+        self.assertEqual(manifests, [".claude-plugin/marketplace.json", "plugin/.claude-plugin/icon.png",
+                                     "plugin/.claude-plugin/plugin.json"])
+
+    def test_the_plugin_icon(self):
+        """The directory's listing icon: a square PNG of 512 to 2048 pixels, under 2 MB."""
+        path = os.path.join(ROOT, ".claude-plugin", "icon.png")
+        with open(path, "rb") as handle:
+            data = handle.read()
+        self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+        width, height = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+        self.assertEqual(width, height)
+        self.assertTrue(512 <= width <= 2048, width)
+        self.assertLess(len(data), 2 * 1024 * 1024)
 
     def test_license_keeps_the_original_notice(self):
         self.assertEqual(read(os.path.join(ROOT, "LICENSE")), read(os.path.join(REPO, "LICENSE")))
