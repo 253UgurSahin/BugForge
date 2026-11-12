@@ -13,6 +13,7 @@ from _load import REPO, ROOT  # noqa: E402
 
 EXAMPLES = os.path.join(REPO, "examples")
 KIT = os.path.join(ROOT, "forge-design", "scenes")
+KIT_NAME = os.path.relpath(KIT, REPO).replace(os.sep, "/")  # plugin/forge-design/scenes, for messages
 COPY = os.path.join(EXAMPLES, "vendor", "scenes")
 TEXT = (".html", ".css", ".js", ".mjs", ".json", ".md")
 URL = re.compile(r"""(?:src|href)\s*=\s*["'](https?:)?//|url\(\s*["']?(https?:)?//|@import\s+["']?(https?:)?//|from\s+["']https?://""")
@@ -35,11 +36,11 @@ class GalleryTests(unittest.TestCase):
     def test_the_kit_copy_is_the_kit(self):
         kit = sorted(name for name in os.listdir(KIT) if name.endswith((".js", ".css")))
         copy = sorted(name for name in os.listdir(COPY) if name.endswith((".js", ".css")))
-        self.assertEqual(copy, kit, "copy forge-design/scenes/* to examples/vendor/scenes/")
+        self.assertEqual(copy, kit, "copy %s/* to examples/vendor/scenes/" % KIT_NAME)
         for name in kit:
             with self.subTest(file=name):
                 self.assertTrue(filecmp.cmp(os.path.join(KIT, name), os.path.join(COPY, name), shallow=False),
-                                "examples/vendor/scenes/%s differs from forge-design/scenes/%s: copy it again" % (name, name))
+                                "examples/vendor/scenes/%s differs from %s/%s: copy it again" % (name, KIT_NAME, name))
 
     def test_nothing_is_loaded_from_another_host(self):
         for path in pages():

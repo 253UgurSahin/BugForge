@@ -21,6 +21,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import unittest
@@ -49,14 +50,31 @@ Read `../forge/rules.md` once per session. In short:
 - Stop at every checkpoint and wait for the user's go; in auto mode, stop where `../forge/rules.md` section 7 says.
 """
 
-# Paths to forge files in docs: `../forge-check/scope.py` (any file) or `forge-check/scope.py`.
-SIBLING_PATH = re.compile(r"(?<![\w.-])\.\./(forge[\w-]*)/([\w.-]+(?:/[\w.-]+)*)")
+# Paths to forge files in docs: `../forge-check/scope.py` (any file), `../../plugin/forge/levels.md` (from
+# outside the plugin) or `forge-check/scope.py`.
+SIBLING_PATH = re.compile(r"(?<![\w.-])(?:\.\./)+(?:plugin/)?(forge[\w-]*)/([\w.-]+(?:/[\w.-]+)*)")
 SCRIPT_PATH = re.compile(r"(?<![\w.-])(forge[\w-]*)/([\w-]+\.py)\b")
 
 
 def read(path):
     with open(path, encoding="utf-8") as handle:
         return handle.read()
+
+
+UNSHIPPED = (".pyc", ".DS_Store", ".tmp")  # what .gitignore keeps out, so never in an install
+
+
+def tracked_files(*paths):
+    """The files git tracks under paths, relative to the repo with / separators; None without git."""
+    if not shutil.which("git"):
+        return None
+    try:
+        done = subprocess.run(["git", "ls-files", "-z", "--"] + list(paths), cwd=REPO, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, universal_newlines=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    files = [path for path in done.stdout.split("\0") if path]
+    return files if done.returncode == 0 and files else None
 
 
 def skill_folders():
@@ -256,14 +274,16 @@ class PackTests(unittest.TestCase):
     def test_the_plugin_holds_only_the_skills(self):
         """What plugin/ holds is what users install and what the plugin directory scans."""
         allowed = {".claude-plugin", "README.md", "LICENSE"} | set(skill_folders())
-        tracked = subprocess.run(["git", "ls-files", "plugin"], cwd=REPO, stdout=subprocess.PIPE,
-                                 universal_newlines=True).stdout.split()
-        names = {path.split("/")[1] for path in tracked} or set(os.listdir(ROOT)) - {"__pycache__"}
-        self.assertLessEqual(names, allowed)
+        tracked = tracked_files("plugin", ".claude-plugin")
+        if tracked is None:  # no git, or not a checkout: what is on disk, less what git never ships
+            tracked = [os.path.relpath(os.path.join(folder, name), REPO).replace(os.sep, "/")
+                       for top in ("plugin", ".claude-plugin")
+                       for folder, subfolders, files in os.walk(os.path.join(REPO, top))
+                       for name in files if not name.endswith(UNSHIPPED)]
+        self.assertLessEqual({path.split("/")[1] for path in tracked if path.startswith("plugin/")}, allowed)
         self.assertEqual(len(skill_folders()), 8)
-        self.assertEqual(os.listdir(os.path.join(ROOT, ".claude-plugin")), ["plugin.json"])
-        self.assertEqual(sorted(name for name in os.listdir(os.path.join(REPO, ".claude-plugin"))),
-                         ["marketplace.json"])
+        manifests = sorted(path for path in tracked if "/.claude-plugin/" in "/" + path)
+        self.assertEqual(manifests, [".claude-plugin/marketplace.json", "plugin/.claude-plugin/plugin.json"])
 
     def test_license_keeps_the_original_notice(self):
         self.assertEqual(read(os.path.join(ROOT, "LICENSE")), read(os.path.join(REPO, "LICENSE")))

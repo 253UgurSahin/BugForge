@@ -5,7 +5,7 @@ at another look level of forge-design (`../../plugin/forge/levels.md`): `1/` to 
 its tokens stay the same; what changes is how much it moves and how deep it goes. `shared/` holds what
 every level uses: `tokens.css`, `base.css`, `app.js` and the fonts with their licences.
 
-Open them with `python3 examples/serve.py` from the root of the pack.
+Open them with `python3 examples/serve.py` from the root of the BugForge repo.
 
 ## The idea in one sentence
 

@@ -33,7 +33,7 @@ In Claude Code:
 
 ## More
 
-The full documentation, the gallery with every look level as a moving preview, the tests and the
-changelog are in the repo: https://github.com/253UgurSahin/BugForge
+The full documentation, the gallery with every look level as a moving preview, and the tests are in
+the repo: https://github.com/253UgurSahin/BugForge
 
 MIT licensed, see `LICENSE`.

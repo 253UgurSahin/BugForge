@@ -223,7 +223,8 @@ tables are in `../forge/levels.md`; four things have a level: the look
   `python3 ../forge/level.py set look 4 --said '<their words>'`.
 - No level given: ask one question, with the one line per level that
   `python3 ../forge/level.py show look` prints and where the examples are
-  (the gallery in the README of the pack). Then record the answer. This
+  (in the BugForge repo, github.com/253UgurSahin/BugForge: the gallery in
+  its README and the examples/ folder). Then record the answer. This
   question is asked in auto mode too.
 - `/forge` asks once at the start, for the parts the request left open:
   one level for those, or one per part. A level the request gave one part
