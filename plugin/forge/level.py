@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The level of a forge skill: how far it goes, from 1 to 5, as the user chose it.
 
-levels.json, next to this script, holds the domains (look, dashboard, test, secure) and for each level
+levels.json, next to this script, holds the domains (look, header, dashboard, test, secure) and for each level
 its names in English and Dutch, aliases, a one-line summary, what it includes and the evidence the gate
 asks for; a level includes every level below it. This script shows that table, records the user's choice
 in forge-work/levels.json with their own words and the time (only this script writes it: a temporary

@@ -29,7 +29,7 @@ LOOK = [("Subtle", "Subtiel"), ("Polished", "Verzorgd"), ("Expressive", "Express
         ("Cinematic", "Cinematisch")]
 DEPTH = [("Quick", "Snel"), ("Basic", "Basis"), ("Standard", "Standaard"), ("Thorough", "Grondig"),
          ("Exhaustive", "Uitputtend")]
-NAMES = {"look": LOOK, "dashboard": LOOK, "test": DEPTH, "secure": DEPTH}  # the spec, section 2
+NAMES = {"look": LOOK, "header": LOOK, "dashboard": LOOK, "test": DEPTH, "secure": DEPTH}  # the spec, section 2
 MISSING = "level %d asks for a file that holds something (links and node_modules do not count): %s"
 
 
@@ -103,13 +103,13 @@ class Project(unittest.TestCase):
 
 class TableTests(Project):
     def test_the_domains_names_and_floor_of_the_spec(self):
-        self.assertEqual(list(TABLE), ["look", "dashboard", "test", "secure"])
+        self.assertEqual(list(TABLE), ["look", "header", "dashboard", "test", "secure"])
         for name, pairs in NAMES.items():
             rows = TABLE[name]["levels"]
             self.assertEqual([row["level"] for row in rows], [1, 2, 3, 4, 5])
             self.assertEqual([(row["name"], row["nl"]) for row in rows], pairs)
         self.assertEqual({name: domain.get("floor") for name, domain in TABLE.items()},
-                         {"look": None, "dashboard": None, "test": 2, "secure": 3})
+                         {"look": None, "header": None, "dashboard": None, "test": 2, "secure": 3})
 
     def test_every_level_says_what_it_is_in_one_plain_line(self):
         for name, domain in TABLE.items():
@@ -145,7 +145,7 @@ class TableTests(Project):
         evidence = {name: {row["level"]: row["evidence"] for row in domain["levels"] if row["evidence"]}
                     for name, domain in TABLE.items()}
         self.assertEqual(evidence, {
-            "look": {}, "dashboard": {},
+            "look": {}, "header": {}, "dashboard": {},
             "test": {3: ["forge-work/test/walk.json"],
                      4: ["**/edge.spec.*", "forge-work/test/shots/r1/*.png", "forge-work/test/shots/r2/*.png"]},
             "secure": {3: ["forge-work/sbom.json"],
@@ -340,7 +340,7 @@ class SetTests(Project):
         self.assertEqual({entry["level"] for entry in record.values()}, {4})
         self.assertEqual({entry["said"] for entry in record.values()}, {"alles grondig"})
         self.assertEqual(len({entry["at"] for entry in record.values()}), 1)
-        self.assertIn("look 4 Showpiece, dashboard 4 Showpiece, test 4 Thorough, secure 4 Thorough.", out)
+        self.assertIn("look 4 Showpiece, header 4 Showpiece, dashboard 4 Showpiece, test 4 Thorough, secure 4 Thorough.", out)
 
     def test_set_keeps_the_other_domains_and_replaces_its_own(self):
         self.level("set", "secure", "4", "--said", "veiligheid grondig")
@@ -405,7 +405,7 @@ class SetTests(Project):
         self.assertEqual(list(data["recorded"]), list(TABLE))
         self.assertEqual(sorted(data["recorded"]["test"]), ["at", "level", "name", "said"])
         self.assertEqual([entry["name"] for entry in data["recorded"].values()],
-                         ["Cinematic", "Cinematic", "Exhaustive", "Exhaustive"])
+                         ["Cinematic", "Cinematic", "Cinematic", "Exhaustive", "Exhaustive"])
         for name, entry in self.record().items():
             self.assertEqual(dict(entry, name=data["recorded"][name]["name"]), data["recorded"][name])
 
@@ -441,7 +441,7 @@ class FloorTests(Project):
         data = json.loads(out)
         self.assertEqual(code, 0)
         self.assertEqual({name: entry["level"] for name, entry in data["recorded"].items()},
-                         {"look": 1, "dashboard": 1, "test": 2, "secure": 3})
+                         {"look": 1, "header": 1, "dashboard": 1, "test": 2, "secure": 3})
         self.assertEqual(data["recorded"]["secure"]["name"], "Standard")
         self.assertEqual(len(data["notes"]), 2)
         self.assertIn("secure was asked at level 1 and is on record at 3", " ".join(data["notes"]))
@@ -642,7 +642,7 @@ class CheckTests(Project):
         self.choose("secure", 1)
         self.forge()
         outputs.append(self.level("check", "secure")[1])
-        self.assertEqual([text.splitlines()[-1][:5] for text in outputs], ["FAIL:"] * 6)
+        self.assertEqual([text.splitlines()[-1][:5] for text in outputs], ["FAIL:"] * (len(TABLE) + 2))
         for text in outputs:
             for line in text.splitlines():
                 self.assertLessEqual(len(line), 200, line)
@@ -1053,7 +1053,7 @@ class ConsoleTests(Project):
         done = self.run_script("set", "--help")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("--said TEXT", done.stdout)
-        self.assertIn("{look,dashboard,test,secure,all}", done.stdout)
+        self.assertIn("{look,header,dashboard,test,secure,all}", done.stdout)
 
     def test_the_exit_codes_on_the_command_line(self):
         self.assertEqual(self.run_script("get", "look").returncode, 1)

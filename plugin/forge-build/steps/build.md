@@ -173,6 +173,9 @@ or plan.md and build it from the basic components with real data through the dat
 
 - [ ] every state it lists works, plus empty, loading, error and no permission; a 60 character name fits
 - [ ] it works at 390px and 1440px wide and by keyboard only: semantic HTML, labels, visible focus, alt text
+- [ ] clear for everyone (`../forge-design/plain.md`): buttons that say what they do, an icon with a word, a label
+      above each field, one main button, an empty state and errors that say what to do;
+      `python3 ../forge-check/plaincheck.py <its URL>` reports nothing at medium or above
 - [ ] no console errors, no copy of the original (copycheck.py), tests for the main path and the access check
 - [ ] clone mode: the layout and hierarchy of its reference shots, not their pixels; each has one under its name in
       `clone-screens/`, in the state its row under `## Reference screenshots` in recon.md gives (data, item, action,

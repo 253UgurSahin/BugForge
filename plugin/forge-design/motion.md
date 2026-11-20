@@ -1308,3 +1308,26 @@ await page.evaluate((selector) => {                             // what one elem
 ```
 
 Write the numbers and the paths under `## Checks` of `forge-work/motion.md`.
+
+## 13. The header on its own
+
+For "a nice header effect, but calm and clear everywhere else". The user asks for it in their words
+("alleen de kop", "een mooie header maar verder rustig") or with two levels ("look 2, header 4", in
+Dutch "look 2, kop 4"). Record both, each with their words: `python3 ../forge/level.py set look 2
+--said '<their words>'` and `set header 4 --said '<their words>'`.
+
+- `python3 ../forge/level.py get header` exits 0 with a level above the look's: the header at the top
+  of the first screen (the landing page, or the app's main screen) gets what that header level adds
+  (the "header" table in `../forge/levels.md`): at 3 depth in the header only, at 4 a scene of the kit
+  behind it (sections 5 and 9, mounted on the header's own element, loaded lazily, with its poster),
+  at 5 that scene with the app's live data and a short camera move on the first scroll.
+- Every other part of every screen gets the look's level and nothing more: no scene, tilt or journey
+  outside the header, and no 3D charts unless the dashboard level asks for them.
+- The header's words and its main button stay plain (`../forge-design/plain.md`): the effect sits
+  behind them, with enough contrast under the words in every frame (`contrast.py` on the lightest and
+  darkest part of the scene behind the text), and it never moves, hides or delays the button. A
+  phone gets the same header, its scene full width and its button within the first screen.
+- Proof: the rest with `python3 ../forge-design/motioncount.py . --level <the look's number>`; the
+  header with its scene frames (`changed.py --scene-frames`, s1 to s6, at 1440 and 390). The report
+  `forge-work/motion.md` carries the look's `Level: N` line and one more line `Header: N (Name)`.
+- No header level, or one at or below the look's: the header follows the look, as before.

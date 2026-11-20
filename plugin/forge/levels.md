@@ -1,6 +1,6 @@
 # forge levels
 
-How far a forge skill goes. One scale, 1 to 5, in four domains: look, dashboard, test and secure.
+How far a forge skill goes. One scale, 1 to 5, in five domains: look, header, dashboard, test and secure.
 A level includes everything below it and adds to it: it never drops a section, a chapter or an
 effect of the level below, and never puts a plainer one in its place. The user picks the level, by
 number or by name, in English or Dutch. No skill picks one for them, and none works at a level that
@@ -71,6 +71,29 @@ taken once it is live. Reduced motion keeps its own rules: its still version kee
 screen, the scene's poster in place of the scene, cards and stacks drawn flat (as
 `../forge-design/scenes/depth.js` does), so nothing goes missing.
 
+## header: only the header
+
+The header at the top of the first screen (the landing page, or the app's main screen) on its own:
+the effect lives there, and the rest of the app stays at the look's level. For "a nice header effect,
+but calm and clear everywhere else": `level.py set look 2` and `level.py set header 4`. Not chosen:
+the header follows the look's level, as before. A header level below the look's is not asked for.
+
+| level | name | Dutch | the header |
+| --- | --- | --- | --- |
+| 1 | Subtle | Subtiel | The app's name, one plain sentence that says what it does, and one big button for the main task. Calm. |
+| 2 | Polished | Verzorgd | + the title, the sentence and the button arrive gently; a slow shift of colour or light that never pulls the eye from the button |
+| 3 | Expressive | Expressief | + real depth in the header only: layers that move at their own speed as you scroll (CSS 3D, `scenes/depth.js`), or one signature moment |
+| 4 | Showpiece | Showpiece | + a living 3D scene behind the header, made for this app, that turns toward the pointer; Three.js installed locally, a still picture for weak devices and less motion |
+| 5 | Cinematic | Cinematisch | + the header's scene shows the app's live data and moves its camera a little on the first scroll |
+
+Also understood, as for look: calm, rustig, minimal, minimaal, minimum (1); polish, gepolijst, netjes (2);
+lively, levendig (3); show piece, pronkstuk (4); cinema, film, filmisch, 4d, max, maximal, maximaal, maximum (5).
+
+- The text, the button and the way in stay as plain as `../forge-design/plain.md` asks, at every
+  level: the effect sits behind them and never makes them harder to read or to find.
+- The rest of the app is checked at the look's level (`motioncount.py --level` with the look's
+  number); the header's scene is proven by its own frames (`changed.py --scene-frames`).
+
 ## dashboard
 
 | level | name | Dutch | the dashboard |
@@ -88,8 +111,8 @@ lively, levendig (3); show piece, pronkstuk (4); cinema, film, filmisch, 4d, max
 
 | level | name | Dutch | what is tested | the gate asks for |
 | --- | --- | --- | --- | --- |
-| 1 | Quick | Snel | The app starts, the main flow works once, no error in the browser console. Minutes. Only on its own, never as a forge phase. | nothing more |
-| 2 | Basic | Basis | + one test per flow of the way it should go, unit tests for the logic that matters | nothing more |
+| 1 | Quick | Snel | The app starts, the main flow works once, no error in the browser console, every screen passes the plain check (clear words, labels, no jargon). Minutes. Only on its own, never as a forge phase. | nothing more |
+| 2 | Basic | Basis | + one test per flow of the way it should go, unit tests for the logic that matters, the plain walk: a newcomer of 75 does the main tasks from screenshots | nothing more |
 | 3 | Standard | Standaard | + edge cases and cases that must fail, the walk (every page at 3 widths, in light and dark: errors, links, accessibility, layout, speed), the check that a second user cannot reach the first one's data | `forge-work/test/walk.json` |
 | 4 | Thorough | Grondig | + the edge helpers on every form, the speed budget enforced, screenshots compared between rounds, offline and PWA, a pass with the keyboard only | an edge spec, `**/edge.spec.*` (`e2e/edge.spec.ts`, or beside the specs of the app's own Playwright setup; never in node_modules or in a folder whose name starts with a dot; another file whose name starts with edge, such as `edge-config.spec.ts`, is not it), and two rounds of screenshots, `forge-work/test/shots/r1/*.png` and `forge-work/test/shots/r2/*.png` |
 | 5 | Exhaustive | Uitputtend | + every route in every state, hostile and oversized input on every field (the user's own app only), two tabs at once, time zones and summer time, a matrix of slow networks, each spec run three times to catch a test that fails only now and then | nothing more |
@@ -176,7 +199,8 @@ depth are the user's. One question, with the table of `level.py show` and where 
 For one domain. The first line is "How far should I go with the look?", "... with the dashboard?",
 "... with testing?" or "... with the security check?". The table is what
 `python3 ../forge/level.py show look` prints. The last line is for look only: the dashboard has no
-examples yet, and test and secure have none.
+examples yet, and test and secure have none. For the look, one more line offers the header on its own
+(the header section above); record its answer with `set look` and `set header`.
 
 ```text
 How far should I go with the look? Pick a level from 1 to 5, by its number or its name.
@@ -189,6 +213,7 @@ look: design, motion and 3D. Each level includes the ones below it.
   5 Cinematic (Cinematisch)  + a 3D journey as you scroll, like a film; the forms react to you and to the app's live data.
 
 Examples of every look level are in the BugForge repo: the gallery in its README and the examples/ folder.
+Only a striking header and calm, clear screens? Say for example "look 2, header 4".
 ```
 
 In Dutch. The first line is "Hoe ver moet ik gaan met het uiterlijk?", "... met het dashboard?",
@@ -205,6 +230,7 @@ look: ontwerp, beweging en 3D. Elk niveau bevat de lagere niveaus.
   5 Cinematisch (Cinematic)  + een 3D-reis bij het scrollen, als een film; de vormen reageren op jou en op de live data van de app.
 
 Voorbeelden van elk niveau van het uiterlijk staan in de BugForge-repo: de galerij in de README en de map examples/.
+Alleen een opvallende kop en rustige, duidelijke schermen? Zeg bijvoorbeeld "look 2, kop 4".
 ```
 
 `/forge` asks once at the start, for the parts the request left open: the table of `show <domain>`
