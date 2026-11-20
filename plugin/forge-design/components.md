@@ -136,7 +136,9 @@ a second brand colour, and the tinted colours their text, lines or backgrounds h
 ## Components
 
 One block per component, or per kind (every button in one), as in forge-design design Step 5; on
-the user's own app each with its `files` line: where it lives, by every name it goes by. A size
+the user's own app each with its `files` line: where it lives, by every name it goes by. Every block
+keeps the rules of `../forge-design/plain.md`: words on buttons that say what they do, an icon with a
+word, a label above each field, targets of 44px. A size
 relative to its container has a floor, checked where the component is smallest (`max(16%, 96px)`).
 A row of the shell (header, rail, tab bar) gives its width and every control in it, so the specimen
 of Step 6 draws it at that width.

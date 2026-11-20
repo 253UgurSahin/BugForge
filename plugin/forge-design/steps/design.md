@@ -152,8 +152,10 @@ Button
 ```
 
 Every state the screens show, plus focus, disabled, loading, error and empty, with keyboard and
-screen reader behaviour. Targets at least 24 by 24px (WCAG 2.2 AA), 44px for main actions on
-mobile. A size relative to its container gets a floor, checked where it is smallest (`max(16%,
+screen reader behaviour, and every rule of `../forge-design/plain.md` (clear for everyone): a button
+names its action and its thing, an icon always comes with a word, every field has a label above it,
+one main button per screen, an empty state that says what to do, errors in words next to the field.
+Body text 18px, never under 16px. Targets at least 44 by 44px, never under 24px (WCAG 2.2 AA). A size relative to its container gets a floor, checked where it is smallest (`max(16%,
 96px)`, never a sixth alone). Build on the stack's accessible component base, else native elements.
 
 ## Step 6: look at the system before the build

@@ -78,6 +78,16 @@ The other three scales:
 | 4 | Showpiece: a control-room screen, linked panels, charts with depth | Thorough (Grondig): every form, speed limits, offline, keyboard only | Thorough (Grondig): your running app probed, two users tried on each other's data |
 | 5 | Cinematic (Cinematisch): your data as a 3D landscape | Exhaustive (Uitputtend): every state, hostile input, slow networks | Exhaustive (Uitputtend): a threat model, every route against every role |
 
+- **Only the header.** A striking header with calm, clear screens below: "look 2, header 4" (Dutch:
+  "look 2, kop 4"). The header at the top of the first screen gets that level's effect (up to a
+  living 3D scene behind it), every other part of the app stays at the look's level. Not chosen, the
+  header follows the look.
+- **Clear for everyone, at every level.** Every screen follows
+  [`forge-design/plain.md`](plugin/forge-design/plain.md): a button says what it does ("Afspraak
+  maken", not "Verzenden"), an icon always has a word, a label above each field, one main button,
+  plain words, text and buttons big enough, forms in steps, empty screens and errors that say what
+  to do. `plaincheck.py` checks the pages at every test level; from test level 2 a fresh tester
+  plays a newcomer of 75 and does the main tasks from screenshots alone.
 - Say it in any words, English or Dutch: "niveau 4", "showpiece", "level 2", "grondig", "snel".
   With no level, the skill asks one question with the table above, also in auto mode. `/forge`
   asks once at the start, only for the parts that have no level yet.
@@ -400,6 +410,7 @@ rules of the two motion checks.
 | `inventory.py PATH [--json]` | size and health in plain numbers: lines per language, biggest files, TODOs, tests; 0 or 2 |
 | `getpage.py URL OUT [--json]` | loads one page passively and saves its HTML in a new file; 0 or 2 |
 | `pagecheck.py URL [--json] [--fail-on L] [--no-pwa]` or `--file FILE [--url URL]` | SEO, accessibility, speed, PWA and mixed-content basics of one page |
+| `plaincheck.py PAGE... [--json] [--fail-on L]` | clear for everyone (`forge-design/plain.md`): vague button words, an icon alone, a field without a label, jargon, programming values on screen, long forms and menus; PAGE a saved page or a URL |
 | `testdb.py PATH [--json]` | which database the app's own tests reach, read from the test settings only (Laravel, Django, Node, each workspace); it runs nothing and never shows a password; 1 = the database the app uses here, or it cannot tell: ask first; 2 = PATH is not a folder |
 | `bugs.py BUGS.md [--json] [--fail-on L]` | open bugs in forge-work/bugs.md; 1 = one at or above `--fail-on` |
 | `walkcheck.py WALK.json [--budget FILE] [--fail-on L] [--json] [--bugs] [--next N] [--known BUGS.md] [--build BUILD]` | judges the browser walk: errors, broken links, accessibility, layout faults, speed against a budget; `--bugs` prints blocks for bugs.md; 2 = the walk is incomplete, also when a page shows one theme with the system set to light and to dark |

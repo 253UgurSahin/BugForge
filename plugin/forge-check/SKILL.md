@@ -87,8 +87,8 @@ test: what each level adds (each level includes the ones below it).
 
 | level | name | Dutch | what is tested | the gate asks for |
 | --- | --- | --- | --- | --- |
-| 1 | Quick | Snel | the app starts, the main flow works once, no error in the browser console; minutes; only on its own, never as a forge phase | nothing more |
-| 2 | Basic | Basis | + one test per flow of the way it should go, unit tests for the logic that matters | nothing more |
+| 1 | Quick | Snel | the app starts, the main flow works once, no error in the browser console, the plain check (`plaincheck.py`, clear words, labels, no jargon); minutes; only on its own, never as a forge phase | nothing more |
+| 2 | Basic | Basis | + one test per flow of the way it should go, unit tests for the logic that matters, the plain walk (a newcomer of 75 does the main tasks from screenshots) | nothing more |
 | 3 | Standard | Standaard | + edge cases and cases that must fail, the walk (every page, 3 widths, light and dark), a second user cannot reach the first one's data | `forge-work/test/walk.json` |
 | 4 | Thorough | Grondig | + the edge helpers on every form, the speed budget enforced, screenshots compared between rounds, offline and PWA, a keyboard-only pass | `**/edge.spec.*` (in `e2e/`, or beside the app's own Playwright specs), `forge-work/test/shots/r1/` and `r2/` |
 | 5 | Exhaustive | Uitputtend | + every route in every state, hostile and oversized input on every field (own app only), two tabs at once, time zones and summer time, slow networks, each spec run three times | nothing more |

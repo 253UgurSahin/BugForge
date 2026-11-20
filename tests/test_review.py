@@ -45,7 +45,7 @@ class ReviewTests(unittest.TestCase):
     def test_the_judge_gets_the_level_row_the_opening_theme_and_the_keep_rule(self):
         judge = flat(REVIEW, "## 2. Fresh eyes")
         for words in ('"What each look level shows"', "The theme it opens in:", "- Big enough:",
-                      "under ## Keep is the app's own taste, not a fault", "the five answers"):
+                      "under ## Keep is the app's own taste, not a fault", "the six answers", "- Plain: a newcomer of 75"):
             with self.subTest(words=words):
                 self.assertIn(words, judge)
 

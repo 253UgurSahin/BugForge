@@ -1,0 +1,65 @@
+{
+  "about": "What plaincheck.py looks for: the rules of ../forge-design/plain.md that a page's HTML shows by itself. A label is matched as a whole in lower case (after trimming punctuation and arrows), jargon as whole words in any case, leaks (programming values) as whole words in their exact case, all in the visible text. English and Dutch.",
+  "rules": {
+    "vague_label": {
+      "severity": "medium",
+      "title": "A button or link that does not say what it does",
+      "why": "\"Verzenden\", \"OK\" or \"Klik hier\" make a person guess what happens; plain.md rule 1",
+      "fix": "say the action and the thing: \"Afspraak maken\", \"Bestelling plaatsen\", \"Bekijk de prijzen\""
+    },
+    "icon_only": {
+      "severity": "medium",
+      "title": "A button or link with only an icon",
+      "why": "an icon alone (a bin, three dots, a hamburger) is a riddle for many people; an aria-label helps screen readers, not eyes; plain.md rule 3",
+      "fix": "show a word next to the icon: \"Verwijderen\", \"Menu\", \"Meer opties\""
+    },
+    "placeholder_label": {
+      "severity": "high",
+      "title": "A field without a visible label",
+      "why": "a placeholder disappears while typing and an aria-label is never seen, so the person forgets what the field was for; plain.md rule 4",
+      "fix": "a <label for=...> above the field that stays visible; keep a placeholder only for an example"
+    },
+    "jargon": {
+      "severity": "medium",
+      "title": "Technical words on the page",
+      "why": "words like \"authenticatie\", \"sessie\" or \"invalid input\" mean nothing to most people; plain.md rule 5",
+      "fix": "say what happened and what to do, in the user's words (plain.md, Words)"
+    },
+    "leak": {
+      "severity": "high",
+      "title": "A programming value shows on the page",
+      "why": "\"undefined\", \"NaN\" or \"[object Object]\" on a screen is a bug that a visitor sees",
+      "fix": "find where the value is built and show a real value or a sentence instead"
+    },
+    "long_form": {
+      "severity": "low",
+      "title": "A long form in one go",
+      "why": "many fields at once tire people and make them give up; plain.md rule 8",
+      "fix": "split it in steps of 5 or 6 fields with \"Stap 2 van 3\" and a bar, or drop the fields that are not needed"
+    },
+    "long_menu": {
+      "severity": "low",
+      "title": "A menu with many items",
+      "why": "more than 7 choices at once is hard to scan; plain.md rule 13",
+      "fix": "keep 5 main items and put the rest under one of them, or in a page of its own"
+    }
+  },
+  "vague": [
+    "submit", "send", "ok", "okay", "go", "click here", "here", "more", "read more", "learn more", "click",
+    "continue", "proceed", "apply", "confirm",
+    "verzenden", "versturen", "indienen", "klik hier", "hier", "meer", "lees meer", "klik", "oké", "ga",
+    "doorgaan", "toepassen", "bevestigen"
+  ],
+  "jargon": [
+    "authentication", "authenticatie", "authorization", "autorisatie", "unauthorized", "forbidden",
+    "invalid input", "ongeldige invoer", "invalid request", "bad request", "internal server error",
+    "server error", "serverfout", "error code", "foutcode", "status code", "statuscode", "exception",
+    "session expired", "sessie verlopen", "payload", "timeout",
+    "validation failed", "validatie mislukt", "database error", "databasefout", "http 401", "http 403",
+    "http 404", "http 500", "error 401", "error 403", "error 404", "error 500", "fout 404", "fout 500"
+  ],
+  "leaks": ["undefined", "NaN", "[object Object]", "null", "Traceback", "NullPointerException", "TypeError"],
+  "steps": "\\b(stap|step)\\s+\\d+\\s+(van|of|/)\\s+\\d+\\b",
+  "long_form": 6,
+  "long_menu": 7
+}
