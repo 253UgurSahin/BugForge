@@ -195,11 +195,11 @@ stateDiagram-v2
 
 ## Quality notes
 
-- 1,952 tests in `tests/` cover every script and the repository's conventions (`tests/test_repo.py`).
+- 1,954 tests in `tests/` cover every script and the repository's conventions (`tests/test_repo.py`).
   Without Node, the scene kit and screenshot tests are skipped.
 - `python3 plugin/forge-check/craftcheck.py plugin` finds no duplicated code, swallowed errors or
   commented-out code. It still lists functions with four or more arguments and some long script
   functions; they get smaller as the code is touched.
-- Two false positives that this documentation run found in BugForge's own scanners: `detect.py`
-  names a "Django test runner" because a test fixture holds that text, and `inventory.py` lists
-  itself as generated because its own pattern holds the words it looks for.
+- This documentation run found two false positives in BugForge's own scanners, both fixed with a test:
+  `detect.py` named a Django test runner for a test file that only held Django code in strings, and
+  `inventory.py` (and `craftcheck.py`) took a file that quotes "DO NOT EDIT" for generated code.

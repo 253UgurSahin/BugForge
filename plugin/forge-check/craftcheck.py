@@ -28,7 +28,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SEVERITIES = ["critical", "high", "medium", "low"]
 MAX_BYTES = 1024 * 1024
-GENERATED = re.compile(r"@generated|DO NOT EDIT|\bGenerated (by|for|from)\b|webpackBootstrap|\A\s*/\*!", re.M)
+GENERATED = re.compile(r"(?<![\"'])(?:@generated|DO NOT EDIT|\bGenerated (by|for|from)\b)|webpackBootstrap|\A\s*/\*!", re.M)
 TEST_PATH = re.compile(r"(^|/)(tests?|__tests__|spec|specs|e2e|cypress)/|(^|/)test_[^/]*\.py$|_test\.(py|go)$"
                        r"|\.(test|spec)\.[cm]?[jt]sx?$|Tests?\.(php|java|cs)$")
 KEYWORDS = {"if", "for", "while", "switch", "catch", "return", "new", "else", "do", "try", "foreach", "elseif",

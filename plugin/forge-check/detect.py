@@ -186,7 +186,6 @@ def read_manifest(root, path, found):
     for package, spec in deps.items():
         found["declared"][ecosystem].setdefault(package_key(ecosystem, package), (str(spec or ""), path))
 
-
 def known_items(root, files, found):
     """The frameworks and test tools in stacks.json that a manifest declares, else that a telltale file
     gives away, unless its "unless" was found. Versions: the nearest lockfile, else the manifest."""
@@ -204,7 +203,8 @@ def known_items(root, files, found):
             version, source = lock.get(keys[0], (version, source))
         for path in [] if source else [path for path in files if matches(path, known["telltale"])]:
             word = next((word for name, word in STACKS["telltale_words"].items() if matches(path, [name])), "")
-            source = source or (path if word in (read_file(root, path, found) or "").lower() else None)
+            text = (read_file(root, path, found) or "").lower()  # a word starting with ^: a pattern per line
+            source = source or (path if (re.search(word, text, re.M) if word[:1] == "^" else word in text) else None)
         add_item(items, known["name"], source, version, role=known["role"], ecosystem=ecosystem)
     return items
 
