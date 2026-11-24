@@ -24,6 +24,8 @@ import sys
 import tempfile
 import urllib.parse
 
+from _report import format_findings  # next to this script: the report for people
+
 SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
 GETPAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "forge-check", "getpage.py")
 MAX_BYTES = 5 * 1024 * 1024  # read at most this much of a saved page
@@ -247,16 +249,6 @@ def load(url, path=None):
         with open(saved, "rb") as handle:
             return answer["status"], handle.read(), answer["cut"]
 
-def format_human(findings, summary, intro):  # the intro, one block per finding, then a one-line summary
-    lines = [intro, ""]
-    for f in findings:
-        lines.append("%-8s  %s\n          where: %s\n          why:   %s\n          fix:   %s\n"
-                     % (f["severity"].upper(), f["title"], f["where"], f["why"], f["fix"]))
-    counts = ", ".join("%d %s" % (summary[sev], sev) for sev in SEVERITIES if summary[sev])
-    noun = "finding" if len(findings) == 1 else "findings"
-    lines.append("%d %s: %s." % (len(findings), noun, counts) if findings else "No findings.")
-    return "\n".join(lines)
-
 def main(argv=None):
     """Read the command line, read or load the page, print the report and return the exit code."""
     getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
@@ -293,7 +285,7 @@ def main(argv=None):
     where = "%s (%s)" % (source, summary["url"] or "https assumed") if args.file else source
     intro = "Checked %s: %.1f KB%s." % (where, len(data) / 1024.0, ", only the first 5 MB read" if cut else "")
     print(json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
-          else format_human(findings, summary, intro))
+          else format_findings(findings, summary, intro))
     return 1 if failed else 0
 
 if __name__ == "__main__":

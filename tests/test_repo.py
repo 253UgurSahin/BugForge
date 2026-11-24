@@ -8,9 +8,16 @@ break the rules in the spec:
   (and the plugin directory's review) holds only what the skills run.
 - A skill folder is a folder in plugin/ with a SKILL.md: frontmatter with the
   folder's name and a description, a short body, and the shared Ground rules.
-- A script is a .py file directly inside a forge* folder in plugin/: standard
-  library only, Python 3.9 syntax, a docstring with usage, a main(), a test file,
-  and nothing risky (no shell=True, eval, exec or pickle).
+- A script is a .py file directly inside a forge* folder in plugin/, its name not
+  starting with _: standard library only, Python 3.9 syntax, a docstring with
+  usage, a main(), a test file, and nothing risky (no shell=True, eval, exec or
+  pickle). Scripts never import each other.
+- A helper is a _*.py file next to the scripts: the code scripts in its folder
+  share, imported by name (Python puts a script's own folder first on sys.path).
+  Standard library only (and other helpers in its folder), Python 3.9 syntax, a
+  module docstring, at most 300 lines, nothing risky, no main guard. Only scripts
+  in its own folder import it, but for the few in ACROSS_FOLDERS, which put that
+  folder on sys.path. A helper's name is unique in the plugin and used.
 - Docs only point at forge files that exist.
 - The plugin manifests, the LICENSE and forge/rules.md are in place.
 - The repo passes its own secret scan.
@@ -36,6 +43,9 @@ SKIP_FOLDERS = {".git", "__pycache__", "node_modules", "venv", ".venv"}
 NOT_IN_REPO = {"forge-work"}  # lives in the user's project, never in this repo
 STDLIB = getattr(sys, "stdlib_module_names", None)  # Python 3.10+; None on 3.9
 BANNED_IMPORTS = {"pickle"}  # standard library, but never allowed in forge
+# The helpers a script in another folder imports, after it put the helper's folder on sys.path: {script: helpers}.
+ACROSS_FOLDERS = {"forge-design/eyedropper.py": {"forge-check/_png.py"},
+                  "forge-design/motioncheck.py": {"forge-check/_walk.py"}}
 MAIN_GUARD = re.compile(r"\nif __name__ == ['\"]__main__['\"]:\n    sys\.exit\(main\(\)\)\n*\Z")
 
 # Every SKILL.md carries this block word for word.
@@ -83,8 +93,19 @@ def skill_folders():
 
 
 def scripts():
-    """Every .py file directly inside a top-level forge* folder, sorted."""
-    return sorted(glob.glob(os.path.join(ROOT, "forge*", "*.py")))
+    """Every .py file directly inside a top-level forge* folder, sorted, but the helpers (_*.py)."""
+    return sorted(path for path in glob.glob(os.path.join(ROOT, "forge*", "*.py"))
+                  if not os.path.basename(path).startswith("_"))
+
+
+def helpers():
+    """Every _*.py file directly inside a top-level forge* folder: code its folder's scripts share. Sorted."""
+    return sorted(glob.glob(os.path.join(ROOT, "forge*", "_*.py")))
+
+
+def shown(path):
+    """A path in the plugin as the tests name it: forge-check/_walk.py."""
+    return os.path.relpath(path, ROOT).replace(os.sep, "/")
 
 
 def markdown_files():
@@ -215,14 +236,59 @@ class ScriptTests(unittest.TestCase):
 
     def test_standard_library_only(self):
         names = {os.path.basename(path)[:-3] for path in scripts()}
-        for path in scripts():
-            with self.subTest(script=os.path.relpath(path, ROOT)):
+        shared = {os.path.basename(path)[:-3] for path in helpers()}
+        for path in scripts() + helpers():
+            with self.subTest(script=shown(path)):
                 imported = imported_modules(ast.parse(read(path)))
-                self.assertNotIn(".", imported, "no relative imports: scripts stand alone")
-                self.assertFalse(imported & names, "scripts must not import each other")
+                self.assertNotIn(".", imported, "no relative imports: a helper is imported by its name")
+                self.assertFalse(imported & names, "scripts must not import each other: share code in a _*.py helper")
                 self.assertFalse(imported & BANNED_IMPORTS, "pickle is never allowed")
                 if STDLIB is not None:
-                    self.assertEqual(imported - set(STDLIB), set(), "standard library only")
+                    self.assertEqual(imported - shared - set(STDLIB), set(), "standard library only")
+
+    def test_helpers_are_imported_from_their_own_folder(self):
+        for path in scripts() + helpers():
+            folder = os.path.dirname(path)
+            allowed = ACROSS_FOLDERS.get(shown(path), set()) if not os.path.basename(path).startswith("_") else set()
+            for name in sorted(imported_modules(ast.parse(read(path)))):
+                if not name.startswith("_") or (STDLIB is not None and name in STDLIB):
+                    continue
+                with self.subTest(script=shown(path), helper=name):
+                    here = os.path.isfile(os.path.join(folder, name + ".py"))
+                    across = any(os.path.basename(helper) == name + ".py" for helper in allowed)
+                    self.assertTrue(here or across, "%s.py is not next to %s, nor listed for it in ACROSS_FOLDERS"
+                                    % (name, shown(path)))
+        for script, needed in ACROSS_FOLDERS.items():
+            for helper in needed:
+                with self.subTest(script=script, helper=helper):
+                    folder = os.path.basename(os.path.dirname(os.path.join(ROOT, helper)))
+                    self.assertTrue(os.path.isfile(os.path.join(ROOT, helper)))
+                    self.assertIn('"..", "%s")' % folder, read(os.path.join(ROOT, script)),
+                                  "put ../%s on sys.path before the import" % folder)
+
+
+class HelperModuleTests(unittest.TestCase):
+    """The _*.py helpers next to the scripts: shared code, not scripts."""
+
+    def test_helpers(self):
+        self.assertTrue(helpers(), "no _*.py helpers found in forge* folders")
+        names = [os.path.basename(path) for path in helpers()]
+        self.assertEqual(len(names), len(set(names)), "a helper's name is unique in the plugin: tests load them all")
+        used = set()
+        for path in scripts() + helpers():
+            used |= {name for name in imported_modules(ast.parse(read(path))) if name.startswith("_")}
+        for path in helpers():
+            with self.subTest(helper=shown(path)):
+                source = read(path)
+                tree = ast.parse(source, filename=path, feature_version=(3, 9))
+                self.assertTrue(ast.get_docstring(tree), "start with a docstring: what it holds and who uses it")
+                self.assertLessEqual(len(source.splitlines()), MAX_SCRIPT_LINES)
+                self.assertEqual(risky_calls(tree), [], "no eval, exec or shell=True")
+                self.assertNotIn("__main__", source, "a helper has no command line: no main guard")
+                name = os.path.basename(path)[:-3]
+                self.assertIn(name, used, "no script imports it")
+                if STDLIB is not None:
+                    self.assertNotIn(name, STDLIB, "%s.py shadows the standard library module %s" % (name, name))
 
     def test_nothing_risky(self):
         for path in scripts():
@@ -347,8 +413,13 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(len(risky_calls(ast.parse(risky))), 3)
 
     def test_imports(self):
-        tree = ast.parse("import os.path\nfrom urllib import parse\nfrom . import sibling\n")
-        self.assertEqual(imported_modules(tree), {"os", "urllib", "."})
+        tree = ast.parse("import os.path\nfrom urllib import parse\nfrom . import sibling\nimport _walk\n")
+        self.assertEqual(imported_modules(tree), {"os", "urllib", ".", "_walk"})
+
+    def test_scripts_and_helpers(self):
+        self.assertIn(os.path.join(ROOT, "forge-check", "_walk.py"), helpers())
+        self.assertNotIn(os.path.join(ROOT, "forge-check", "_walk.py"), scripts())
+        self.assertIn(os.path.join(ROOT, "forge-check", "codecheck.py"), scripts())
 
     def test_doc_paths(self):
         text = "Run `../forge-check/scope.py`, see ../forge/rules.md. Also forge-check/deps.py and forge-*/x."

@@ -56,7 +56,8 @@ import os
 import re
 import sys
 
-MAX_BYTES = 1000000
+from _dash import MAX_BYTES, level_on_record  # next to this script: the level on record
+
 KIT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenes")  # the scene kit, copied into apps
 SKIP = {".git", "node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".next", ".nuxt", "out",
         "coverage", "forge-work", "e2e", "tests", "test", "__tests__"}  # tests prove an item; they do not build it
@@ -92,8 +93,6 @@ CODE = [re.compile(code, re.I) if code else None for _, _, _, code, _ in ITEMS]
 PLACE = re.compile(r"(?<![\w/.-])([\w@+~()\[\].-]+(?:/[\w@+~()\[\].-]+)*\.[A-Za-z]\w*):(\d+)")  # app/x.tsx:41
 NONE = re.compile(r"\bnone\b\W+\w+(?:\W+\w+){2,}", re.I)  # "none" and why, in three words or more
 UNSEEN = re.compile(r"<!--.*?(?:-->|\Z)|^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1|\Z)", re.S | re.M)  # comments, code
-ASK = ("Ask the user how rich the dashboard should be, 1 to 5 (python3 ../forge/level.py show dashboard has "
-       "the table), then record it: python3 ../forge/level.py set dashboard N --said '<their words>'")
 
 
 def reports(path):
@@ -214,24 +213,6 @@ def check(path, text, level, root, kit):
                 "the %s needs that code; the files named (%s) do not have it" % (item, ", ".join(places)[:200]),
                 "name the file that does it, or build it there")
     return items, findings
-
-
-def level_on_record(path):
-    """The dashboard level in forge-work/levels.json (see the top). ValueError, saying to ask, when there is none."""
-    folder = os.path.dirname(os.path.abspath(path))
-    record = os.path.join(folder if os.path.basename(folder) == "forge-work" else "forge-work", "levels.json")
-    try:
-        if os.path.islink(os.path.dirname(os.path.abspath(record))) or os.path.islink(record):
-            raise ValueError("it is a link, so it was not read: tell the user")
-        if not os.path.isfile(record) or os.path.getsize(record) > MAX_BYTES:
-            raise ValueError("there is no such file (of at most 1 MB)")
-        with open(record, encoding="utf-8", errors="replace") as handle:
-            level = json.load(handle)["dashboard"]["level"]
-        if type(level) is int and 1 <= level <= 5:
-            return level
-        raise ValueError("its dashboard level is %r, not 1 to 5" % (level,))
-    except (OSError, ValueError, LookupError, TypeError, RecursionError) as error:
-        raise ValueError("no dashboard level on record in %s (%s). %s" % (record, error, ASK))
 
 
 def project_root(path):

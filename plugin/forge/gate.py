@@ -30,8 +30,9 @@ import re
 import shlex
 import subprocess
 import sys
-import tempfile
 import unicodedata
+
+import _files  # next to this script: a file in forge-work written whole
 
 STATE = os.path.join("forge-work", "state.json")
 LINKED = ("%s is a link. forge writes only into a folder of its own in the project, so it wrote nothing. "
@@ -130,16 +131,8 @@ def write_whole(root, name, text):
     folder = os.path.join(root, "forge-work")
     if os.path.islink(folder):
         raise StateError(LINKED % "forge-work")
-    handle, temp = tempfile.mkstemp(prefix=".forge-", suffix=".tmp", dir=folder)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as out:
-            out.write(text if isinstance(text, str) else json.dumps(text, indent=2, ensure_ascii=False) + "\n")
-            out.flush()
-            os.fsync(out.fileno())
-        os.replace(temp, os.path.join(folder, name))
-    finally:
-        if os.path.exists(temp):
-            os.unlink(temp)
+    _files.write_whole(folder, name, text if isinstance(text, str) else json.dumps(text, indent=2, ensure_ascii=False)
+                       + "\n")
 
 
 def still_open(state, phase=None):

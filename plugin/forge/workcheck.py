@@ -36,13 +36,14 @@ Exit codes:
     2  a file it needs cannot be read
 """
 
-import argparse
 import csv
 import glob
 import json
 import os
 import re
 import sys
+
+from _cli import checks_parser  # next to this script: the start of the command line
 
 PACK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the forge skill pack
 HEADER = ["feature", "area", "priority", "original", "clone", "notes"]
@@ -204,10 +205,7 @@ def shown(path):
 
 def main(argv=None):
     """Run one check. Returns the exit code: 0, 1 or 2 (see the top)."""
-    for stream in (sys.stdout, sys.stderr):  # what the console cannot show comes out as \u escapes, not a crash
-        getattr(stream, "reconfigure", lambda **_: None)(errors="backslashreplace")
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    commands = parser.add_subparsers(dest="command", metavar="CHECK", required=True)
+    parser, commands = checks_parser(__doc__)
     for command, arguments, words in (
             ("features", ["file"], "features.csv in the contract, with a must-have"),
             ("built", ["file"], "each must-have built, or partial or skipped with a note"),

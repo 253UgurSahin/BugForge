@@ -23,20 +23,18 @@ scan), or flows.json is missing or broken.
 """
 
 import argparse
-import errno
 import json
 import os
 import re
 import sys
 
-SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
+import _walk
+from _walk import SEVERITIES
+
 SKIP_DIRS = {".git", "node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".next", ".nuxt",
              "out", "coverage", "storage/framework", ".cache", ".idea", ".vscode", "forge-work"}
-MAX_BYTES = 1024 * 1024  # bigger files are not checked
 MAX_LINE = 2000  # characters read per line: minified code is not followed
 WINDOW = 40  # lines a value is followed, and a function is read, below its start
-LANGUAGES = {".php": "php", ".py": "python", ".js": "js", ".jsx": "js", ".ts": "js", ".tsx": "js",
-             ".mjs": "js", ".cjs": "js", ".vue": "js", ".svelte": "js"}
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "flows.json")
 FOOTER = "A heuristic that follows one variable name: it can miss problems and flag safe code. Check each finding."
 STRING = re.compile(r'"(?:[^"\\\n]|\\.)*"|\'(?:[^\'\\\n]|\\.)*\'|`[^`]*`')  # a quoted string or a `template`
@@ -197,51 +195,11 @@ def scan_text(text, language, where):
     unique = {(item["rule"], item["line"]): item for item in reversed(found)}  # the first one wins
     return sorted(unique.values(), key=lambda item: (item["line"], item["rule"]))
 
-def language_of(path):
-    """Return "php", "python" or "js" for a file type we check, else None."""
-    return LANGUAGES.get(os.path.splitext(path)[1].lower())
-
-def shown_path(full, folder):
-    """The path as the report shows it: relative to the scanned folder, always printable."""
-    shown = os.path.relpath(full, folder).replace(os.sep, "/")
-    return os.fsencode(folder if shown == "." else shown).decode("utf-8", errors="backslashreplace")
-
-def files_under(folder, unreadable):
-    """Yield (full path, shown path) for each file to check under folder; a folder that cannot be opened: unreadable."""
-    def cannot_open(error):  # os.walk calls this for a folder it cannot list
-        unreadable.append((shown_path(error.filename or folder, folder), error.strerror or "error"))
-    for parent, dirs, files in os.walk(folder, onerror=cannot_open):
-        here = os.path.basename(os.path.abspath(parent))  # to spot storage/framework
-        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and here + "/" + d not in SKIP_DIRS)
-        for name in sorted(files):  # os.walk skips symlinked folders; we skip symlinked files
-            full = os.path.join(parent, name)
-            if language_of(name) and os.path.isfile(full) and not os.path.islink(full):
-                yield full, shown_path(full, folder)
-
 def scan_path(path):
-    """(findings, stats) for a file or folder; stats: files_checked, files_skipped, unreadable. ValueError."""
-    is_file = os.path.isfile(path)
-    if not is_file and not os.path.isdir(path):
-        raise ValueError("%s does not exist, or is not a file or folder" % path)
-    if is_file and not language_of(path):
-        raise ValueError("%s is not a PHP, Python or JS/TS file" % path)
-    findings, checked, skipped, unreadable = [], 0, [], []
-    shown_file = os.fsencode(path).decode("utf-8", errors="backslashreplace")
-    for full, shown in [(path, shown_file)] if is_file else files_under(path, unreadable):
-        try:
-            with open(full, "rb") as handle:
-                data = handle.read(MAX_BYTES + 1)
-        except OSError as error:
-            unreadable.append((shown, error.strerror or "error"))
-            continue
-        if len(data) > MAX_BYTES or b"\0" in data[:8192]:
-            skipped.append(shown)
-            continue
-        findings += scan_text(data.decode("utf-8", errors="replace"), language_of(full), shown)
-        checked += 1
-    if is_file and skipped:
-        raise ValueError("%s is a binary file or over 1 MB, so it cannot be checked" % path)
-    return findings, {"files_checked": checked, "files_skipped": skipped, "unreadable": sorted(unreadable)}
+    """(findings, stats) for a file or folder; stats: files_checked, files_skipped, unreadable. ValueError, also
+    for a broken flows.json (read first)."""
+    rules()
+    return _walk.scan_path(path, scan_text, SKIP_DIRS, open)  # open as this script sees it
 
 def format_human(findings, summary):
     """One block per finding, then a one-line summary and the footer."""
@@ -250,19 +208,7 @@ def format_human(findings, summary):
         pad = " " * (len(item["severity"]) + 2)
         lines += ["%s  %s [%s]" % (item["severity"].upper(), item["title"], item["rule"])]
         lines += [pad + "%-7s%s" % (key + ":", item[key]) for key in ("where", "why", "fix")] + [""]
-    total, checked = summary["total"], summary["files_checked"]
-    counts = ", ".join("%d %s" % (summary[s], s) for s in SEVERITIES if summary[s])
-    result = "No findings in the files that were read." if summary["unreadable"] else "No findings."
-    if not checked:
-        result = "Nothing was checked: no PHP, Python or JS/TS file was found and read."
-    elif total:
-        result = "%d %s: %s." % (total, "finding" if total == 1 else "findings", counts)
-    lines += [result, "Files checked: %d (PHP, Python, JS/TS)." % checked]
-    if summary["files_skipped"]:
-        lines.append("Skipped (binary or over 1 MB): " + ", ".join(summary["files_skipped"]))
-    if summary["unreadable"]:
-        could_not = ", ".join("%s (%s)" % pair for pair in summary["unreadable"])
-        lines.append("INCOMPLETE, so not a pass. Could not read: " + could_not)
+    lines += _walk.result_lines(summary)
     return "\n".join(lines + [FOOTER])
 
 def main(argv=None):
@@ -273,25 +219,7 @@ def main(argv=None):
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     parser.add_argument("--fail-on", choices=SEVERITIES, default="high", help="exit 1 at this severity or worse")
     args = parser.parse_args(argv)
-    try:
-        rules()
-        findings, stats = scan_path(args.path)
-    except ValueError as error:
-        print("error: %s" % error, file=sys.stderr)
-        return 2
-    findings.sort(key=lambda f: (SEVERITIES.index(f["severity"]), f["file"], f["line"]))
-    summary = {s: sum(f["severity"] == s for f in findings) for s in SEVERITIES}
-    summary.update(stats, total=len(findings), incomplete=bool(stats["unreadable"]))
-    shown = dict(summary, unreadable=[{"path": p, "reason": r} for p, r in stats["unreadable"]])
-    try:
-        print(json.dumps({"findings": findings, "summary": shown, "note": FOOTER}, indent=2)
-              if args.json else format_human(findings, summary), flush=True)
-    except OSError as error:  # the reader stopped early (| head): end quietly, no traceback
-        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
-            raise
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
-    failed = any(SEVERITIES.index(f["severity"]) <= SEVERITIES.index(args.fail_on) for f in findings)
-    return 2 if stats["unreadable"] else int(failed)  # some code was never read: that result cannot be trusted
+    return _walk.run(scan_path, args, FOOTER, format_human)
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -37,8 +37,9 @@ import json
 import os
 import re
 import sys
-import tempfile
 import unicodedata
+
+import _files  # next to this script: a file in forge-work written whole
 
 TABLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "levels.json")  # every name and requirement
 RECORD = os.path.join("forge-work", "levels.json")  # the user's choice, in the project
@@ -133,16 +134,7 @@ def save(root, record):
     os.makedirs(folder, exist_ok=True)
     ignore = [] if os.path.lexists(os.path.join(folder, ".gitignore")) else [(".gitignore", IGNORE)]
     for name, body in ignore + [("levels.json", text)]:
-        handle, temp = tempfile.mkstemp(prefix=".forge-", suffix=".tmp", dir=folder)
-        try:
-            with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as out:
-                out.write(body)
-                out.flush()
-                os.fsync(out.fileno())
-            os.replace(temp, os.path.join(folder, name))
-        finally:
-            if os.path.exists(temp):
-                os.unlink(temp)
+        _files.write_whole(folder, name, body, newline="\n")
 
 
 def find(folder, parts, since=None, shown=""):

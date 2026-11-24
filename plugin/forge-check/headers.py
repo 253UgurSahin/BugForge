@@ -16,18 +16,18 @@ Exit codes: 0 = nothing at or above --fail-on (default: high); 1 = a finding at 
 """
 
 import argparse
-import errno
 import http.client
 import json
-import os
 import re
 import socket
 import ssl
 import sys
-import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from _http import KeepEveryAnswer, within  # next to this script: one GET under one deadline
+from _report import format_findings, print_report
 
 SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
 USER_AGENT = "forge-headers (passive check)"
@@ -194,30 +194,13 @@ def check(headers, url=None, status=None):
               if VERSION.search(get(headers, name.lower()))]
     return sorted(found, key=lambda f: SEVERITIES.index(f["severity"]))
 
-class KeepEveryAnswer(urllib.request.HTTPErrorProcessor):
-    """Hand back every answer as it is: no redirect is followed, and a 404 or 500 is not an error."""
-    def http_response(self, request, response):
-        return response
-    https_response = http_response
-
 def fetch(url):
     """The one passive GET: (status, headers), body unread. One deadline for it all: slow headers cannot stall it."""
-    outcome = []  # (status, headers), or the error
     def get_once():
-        try:
-            request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-            with urllib.request.build_opener(KeepEveryAnswer).open(request, timeout=TIMEOUT) as answer:
-                outcome.append((answer.status, [(name.lower(), value) for name, value in answer.headers.items()]))
-        except Exception as error:  # raised again below, in the caller's thread
-            outcome.append(error)
-    worker = threading.Thread(target=get_once, daemon=True)
-    worker.start()
-    worker.join(TIMEOUT)
-    if not outcome:
-        raise TimeoutError("no complete answer within %d seconds" % TIMEOUT)
-    if isinstance(outcome[0], Exception):
-        raise outcome[0]
-    return outcome[0]
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.build_opener(KeepEveryAnswer).open(request, timeout=TIMEOUT) as answer:
+            return answer.status, [(name.lower(), value) for name, value in answer.headers.items()]
+    return within(TIMEOUT, get_once)
 
 def explain(error):
     """A plain reason why the headers could not be read."""
@@ -238,17 +221,6 @@ def load_saved(path, url):
     for status, headers in answers[:-1]:
         url = redirect_target(url, status, headers) or url
     return answers[-1][0], answers[-1][1], url
-
-def format_human(findings, summary, intro):
-    """The report for people: the intro, one block per finding, then a one-line summary."""
-    lines = [intro, ""]
-    for f in findings:
-        lines.append("%-8s  %s\n          where: %s\n          why:   %s\n          fix:   %s\n"
-                     % (f["severity"].upper(), f["title"], f["where"], f["why"], f["fix"]))
-    counts = ", ".join("%d %s" % (summary[sev], sev) for sev in SEVERITIES if summary[sev])
-    noun = "finding" if len(findings) == 1 else "findings"
-    lines.append("%d %s: %s." % (len(findings), noun, counts) if findings else "No findings.")
-    return "\n".join(lines)
 
 def main(argv=None):
     """Read the command line, get the headers once, print the report and return the exit code."""
@@ -287,13 +259,8 @@ def main(argv=None):
     summary = {sev: sum(f["severity"] == sev for f in findings) for sev in SEVERITIES}
     summary.update(total=len(findings), url=safe_url(url), status=status, redirect_to=safe_url(target),
                    fail_on=args.fail_on, failed=failed)
-    try:
-        print(json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
-              else format_human(findings, summary, intro), flush=True)
-    except OSError as error:  # the reader stopped early (| head): end quietly, no traceback
-        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
-            raise
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    print_report(json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
+                 else format_findings(findings, summary, intro))
     return 1 if failed else 0
 
 if __name__ == "__main__":

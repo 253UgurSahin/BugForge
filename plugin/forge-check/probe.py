@@ -21,19 +21,18 @@ finding). Never a pass. --json prints the report on stdout, but that of a run cu
 that stdout is saved in then stays empty, so only a finished run ever counts as the evidence of level 4.
 """
 
-import argparse
 import html.parser
 import http.client
-import json
 import os
 import re
-import subprocess
 import sys
 import time
 import urllib.parse
 import urllib.request
 
-SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
+from _http import (SEVERITIES, KeepEveryAnswer, Stop, active_parser, add_limits, app_address,  # next to this script
+                   finding_lines, in_scope, print_active, refused, show, tally)
+
 USER_AGENT = "forge-probe (self-check of your own app)"
 TIMEOUT, BODY_CAP, PAUSE = 10, 200000, 0.1  # seconds per request, bytes read of an answer, seconds between requests
 ELSEWHERE = "https://example.invalid"  # .invalid names never exist: nothing is ever sent there
@@ -97,14 +96,6 @@ SKIPPED = [  # the notes under "Not checked": the first only when no query param
     "login rate limit (it needs POSTs), cookie flags (headers.py reports them), source maps",
 ]
 
-class Stop(Exception):
-    """The request cap is reached: the run ends here."""
-
-class KeepEveryAnswer(urllib.request.HTTPErrorProcessor):  # no redirect is followed; a 404 or 500 is not an error
-    def http_response(self, request, response):
-        return response
-    https_response = http_response
-
 class Forms(html.parser.HTMLParser):
     """Collects the forms of a page: ({"method", "action", "fields": [(type, name, value)]}, ...)."""
     forms = ()
@@ -147,9 +138,6 @@ class Run:
             self.findings.append({"check": check, "severity": severity or default, "title": title, "where": where,
                                   "why": why, "fix": fix})
 
-def show(text, limit=80):  # text from a server or a file made safe to print: no control characters, not too long
-    text = "".join(ch if ch.isprintable() else "?" for ch in str(text))
-    return text if len(text) <= limit else text[:limit] + "..."
 def get(headers, name):  # all values of one header (lowercase name) joined with ", ", or "" when missing
     return ", ".join(value for key, value in headers if key == name)
 
@@ -157,17 +145,6 @@ def forms_of(text):
     parser = Forms()
     parser.feed(text)
     return parser.forms
-
-def in_scope(host, scope_file=None):
-    """(allowed, what scope.py said). scope.py next to this file decides; only its exit 0 means yes."""
-    command = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scope.py"), host]
-    try:
-        done = subprocess.run(command + (["--scope", scope_file] if scope_file else []), timeout=30,
-                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except (OSError, subprocess.SubprocessError) as error:
-        return False, "scope.py could not be run: %s" % show(error)
-    said = (done.stdout + done.stderr).decode("utf-8", errors="replace").splitlines()
-    return done.returncode == 0, show(" / ".join(said[:2]), 300)
 
 def check_answer(run, label, got):
     """What any answer can show: a debug page or stack trace, a folder listing, CORS open to every site."""
@@ -241,31 +218,18 @@ def load_paths(path, first):
 
 def main(argv=None):
     """Read the command line, ask scope.py, probe, print the report and return the exit code."""
-    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=__doc__)
-    parser.add_argument("url", help="http:// or https:// address of your own running app")
+    parser = active_parser(__doc__)
     parser.add_argument("--paths", metavar="FILE", help="text file: one path per line, query string allowed")
-    parser.add_argument("--scope", metavar="FILE", help="scope file for scope.py (default: forge-work/scope.json)")
-    parser.add_argument("--max-requests", type=int, default=150, metavar="N", help="request cap, 1 to 500 (default: 150)")
-    parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
-    parser.add_argument("--fail-on", choices=SEVERITIES, default="high",
-                        help="exit 1 when a finding is this bad or worse (default: high)")
+    add_limits(parser)
     args = parser.parse_args(argv)
     try:
-        parts = urllib.parse.urlsplit(args.url)
-        if parts.scheme not in ("http", "https") or not parts.hostname or "@" in parts.netloc or (parts.port or 1) < 1:
-            raise ValueError("give an http:// or https:// address, without a user name or password in it")
-        if not 1 <= args.max_requests <= 500:
-            raise ValueError("--max-requests must be from 1 to 500: this is a check, not a load test")
+        parts = app_address(args)
         first = urllib.parse.quote(parts.path or "/", safe="/%") + ("?" + parts.query if parts.query else "")
         pages = load_paths(args.paths, first)
     except (OSError, ValueError) as error:
         print("error: %s" % show(error, 300), file=sys.stderr)
         return 2
-    allowed, said = in_scope(parts.hostname, args.scope)  # asked about the host the requests would go to
-    if not allowed:
-        print("refused: active tests may not run against %s. Nothing was sent.\nscope.py says: %s"
-              % (show(parts.hostname), said), file=sys.stderr)
+    if refused(parts.hostname, args.scope):
         return 2
     run = Run("%s://%s" % (parts.scheme, parts.netloc), args.max_requests)
     try:
@@ -277,21 +241,14 @@ def main(argv=None):
         print("error: could not reach %s: %s" % (show(run.base), show(error, 200)), file=sys.stderr)
         return 2
     run.notes += SKIPPED[1 if "?" in "".join(pages) else 0:]
-    run.findings.sort(key=lambda f: SEVERITIES.index(f["severity"]))
-    failed = any(SEVERITIES.index(f["severity"]) <= SEVERITIES.index(args.fail_on) for f in run.findings)
-    summary = {sev: sum(f["severity"] == sev for f in run.findings) for sev in SEVERITIES}
+    failed, summary = tally(run.findings, args.fail_on)
     summary.update(total=len(run.findings), url=show(run.base), requests=run.count, fail_on=args.fail_on,
                    failed=failed, incomplete=run.cut_short)
     lines = ["Probed %s with %d requests." % (summary["url"], run.count), ""]
-    lines += ["%-8s  %s [%s]\n          where: %s\n          why:   %s\n          fix:   %s\n" % (f["severity"].upper(),
-              f["title"], f["check"], f["where"], f["why"], f["fix"]) for f in run.findings]
-    counts = ", ".join("%d %s" % (summary[sev], sev) for sev in SEVERITIES if summary[sev])
-    lines += ["%d finding(s): %s." % (len(run.findings), counts) if run.findings else "No findings.", "", "Not checked:"]
-    lines += ["- " + note for note in run.notes]
+    lines += finding_lines(run.findings, summary, run.notes)
     lines += ["", "The run was cut short (see Not checked): not a pass. Fix that and run again."] if run.cut_short else []
     report = {"findings": run.findings, "not_checked": run.notes, "summary": summary}
-    print(json.dumps(report, indent=2) if args.json else "\n".join(lines), flush=True,
-          file=sys.stderr if args.json and run.cut_short else sys.stdout)  # cut short: never in a saved report
+    print_active(report, lines, args.json, run.cut_short)  # cut short: never in a saved report
     return 2 if run.cut_short else 1 if failed else 0
 
 if __name__ == "__main__":

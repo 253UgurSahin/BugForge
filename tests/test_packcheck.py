@@ -5,7 +5,6 @@ secret-looking literal: the repo itself is scanned with secretscan.py in CI.
 """
 
 import contextlib
-import inspect
 import io
 import json
 import os
@@ -562,13 +561,11 @@ class DockerfileTests(unittest.TestCase):
         self.assertFalse(mod.check_dockerfile("FROM a:1\nHEALTHCHECK NONE\n", "D")[1])
 
     def test_secret_rule_is_the_same_as_composecheck(self):
-        for name in ("SECRET_NAME", "SWITCH_NAME", "SWITCH_VALUES", "FALLBACK", "FILE_PATH"):
-            with self.subTest(name=name):
-                self.assertEqual(getattr(mod, name), getattr(compose, name))
-        for function in ("is_written_secret", "unquote"):
+        """Both checks take the rule from _pack.py next to them, so it cannot drift apart."""
+        for function in ("is_written_secret", "unquote", "read"):
             with self.subTest(function=function):
-                self.assertEqual(inspect.getsource(getattr(mod, function)),
-                                 inspect.getsource(getattr(compose, function)))
+                self.assertIs(getattr(mod, function), getattr(compose, function))
+                self.assertEqual(getattr(mod, function).__module__, "_pack")
 
 
 class DockerignoreTests(unittest.TestCase):

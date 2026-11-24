@@ -25,8 +25,9 @@ import os
 import re
 import sys
 
+from _walk import MAX_BYTES, read_code  # next to this script: a file read, at most 1 MB
+
 SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
-MAX_BYTES = 1024 * 1024
 SKIP_FOLDERS = set(""".git node_modules vendor bower_components venv .venv .tox site-packages
     __pycache__ dist build out .next .nuxt .output .svelte-kit coverage .cache .idea .vscode
     forge-work .claude forge-check""".split())  # the last three: forge's own notes and code
@@ -172,19 +173,11 @@ def scan_path(path):
     """Return ({service name: ["file:line", ...]}, files checked, [what could not be checked])."""
     places, checked, not_checked = {}, 0, []
     for file_path in files_under(path, not_checked) if os.path.isdir(path) else [path]:
-        try:
-            with open(file_path, "rb") as handle:
-                data = handle.read(MAX_BYTES + 1)
-        except OSError:
-            not_checked.append(file_path)
-            continue
-        if len(data) > MAX_BYTES or b"\0" in data[:8192]:  # too big, or binary (a NUL byte)
-            print("skipped: %s (binary, or over 1 MB)" % file_path, file=sys.stderr)
-            if file_path == path:  # the user named this file, so skipping it is an error
-                not_checked.append(file_path + " (binary, or over 1 MB)")
+        text = read_code(file_path, not_checked, file_path == path)  # named: skipped is an error
+        if text is None:
             continue
         checked += 1
-        for name, line in find_services(data.decode("utf-8", errors="replace")).items():
+        for name, line in find_services(text).items():
             places.setdefault(name, []).append("%s:%d" % (file_path, line))
     return places, checked, not_checked
 

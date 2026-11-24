@@ -338,9 +338,11 @@ copy and how to mount one in each stack.
 
 ## The scripts
 
-Standard-library Python 3.9+, one job each. Every one has `--help`. Unless noted: exit 0 when
-clean, 1 when something is at or above `--fail-on` (default `high`), 2 when it could not run (bad
-input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-readable output.
+Standard-library Python 3.9+, one job each. The scripts of one folder share code in helper modules
+next to them (`_*.py`, such as `forge-check/_walk.py`): imported by the scripts, never run on their
+own. Every script has `--help`. Unless noted: exit 0 when clean, 1 when something is at or above
+`--fail-on` (default `high`), 2 when it could not run (bad input, or an incomplete scan). Exit 2 is
+never a pass. `--json` gives machine-readable output.
 
 **forge/**
 
