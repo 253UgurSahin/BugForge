@@ -51,7 +51,7 @@ MARKER = re.compile(r"\b(TODO|FIXME|HACK)\b")
 # Where a comment starts: # // /* <!-- {{-- or, at the start of a line, * (inside /* */) or -- (SQL).
 COMMENT_START = re.compile(r"^\s*(\*|--)|(^|\s)(#|//|/\*|<!--|\{\{--)")
 # Signs in the first 1 KB that a file was generated or copied in from a library.
-GENERATED = re.compile(r"@generated|DO NOT EDIT|\bGenerated (by|for|from)\b|webpackBootstrap|\A\s*/\*(!|\*{5}/)"
+GENERATED = re.compile(r"(?<![\"'])(?:@generated|DO NOT EDIT|\bGenerated (by|for|from)\b)|webpackBootstrap|\A\s*/\*(!|\*{5}/)"
                        r"|^-- (MySQL|MariaDB) dump|^-- PostgreSQL database dump", re.M)
 MINIFIED = 300  # characters per line on average
 LOCKFILES = {"composer.lock", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",

@@ -5,7 +5,7 @@
     "role = the forge profile it points to, 'server' (a server framework forge has no profile for),",
     "'static' (a front end), 'test' or 'theming' (how the look is themed: forge-design picks theme.py --format scss",
     "for Sass, js for MUI, Chakra, Mantine and the CSS-in-JS ones). telltale = files that give it away when no manifest names it.",
-    "telltale_words: such a file counts only when it holds the word (a Flask-Script manage.py is not Django).",
+    "telltale_words: such a file counts only when it holds the word (a Flask-Script manage.py is not Django); a word that starts with ^ is a pattern for one line (a test file that imports django, not one that only names it).",
     "unless = leave it out when that one was found. Django's test runner (manage.py test) is built in, so it",
     "has no packages: its test files give it away, unless pytest was found (pytest runs those tests too).",
     "ecosystems: the language, the forge profile in that language, and file names in that language.",
@@ -65,8 +65,8 @@
     "artisan": "illuminate",
     "manage.py": "django",
     "pyproject.toml": "[tool.pytest",
-    "tests.py": "django",
-    "test_*.py": "django"
+    "tests.py": "^\\s*(?:from|import) django\\b",
+    "test_*.py": "^\\s*(?:from|import) django\\b"
   },
   "ecosystems": {
     "php": {"language": "PHP", "profile": "laravel", "files": ["*.php"]},

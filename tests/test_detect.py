@@ -361,6 +361,13 @@ class TelltaleTests(Project):
                     handle.write(content)
                 self.assertEqual(by_name(mod.describe(folder)[kind], name)["source"], path)
 
+    def test_a_test_file_that_only_names_django_is_no_django_test(self):
+        """Dogfood: BugForge's own test_codecheck.py holds Django code in strings and was named a Django test."""
+        self.write("tests/test_scan.py", 'CASES = ["from django.db import models", "import django"]\nimport unittest\n')
+        self.assertEqual(self.describe()["tests"], [])
+        self.write("tests/test_views.py", "import unittest\n\nfrom django.test import TestCase\n")
+        self.assertEqual(by_name(self.describe()["tests"], "Django test runner")["source"], "tests/test_views.py")
+
     def test_a_telltale_must_name_its_tool(self):
         self.write("artisan", "#!/usr/bin/env php\n<?php echo 'my own console';\n")
         self.write("manage.py", "import click\n")
