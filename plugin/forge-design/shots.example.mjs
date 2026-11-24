@@ -788,7 +788,7 @@ async function frames(page, shot) {
   const grab = await grabber(page);
   // The page starts showing at the first frame the browser draws of it: an entrance starts there too.
   const firstFrame = () => new Promise((drawn) => requestAnimationFrame(drawn));
-  await within(patience(shot), page.evaluate(firstFrame)).catch(() => {});
+  await within(patience(shot), page.evaluate(firstFrame)).catch(() => { /* no frame in time: start counting now */ });
   const shown = Date.now();
   for (const [index, at] of FRAME_AT.entries()) {
     await page.waitForTimeout(Math.max(0, shown + flags.wait + at - Date.now()));
@@ -904,7 +904,7 @@ async function visit(target, job) {
       if (!told.has(text) && told.size < 10) console.log(`console  ${target.path}: ${text.slice(0, 240)}`);
       told.add(text);
     }
-    if (context) await context.close().catch(() => {});
+    if (context) await context.close().catch(() => { /* already closed with its browser */ });
   }
   return answered;
 }

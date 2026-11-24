@@ -252,7 +252,7 @@ def say(text, stream=None):
         try:
             os.dup2(os.open(os.devnull, os.O_WRONLY), stream.fileno())
         except (OSError, ValueError, AttributeError):
-            pass
+            return  # the reader is gone and the stream cannot be redirected: nothing is left to tell
 
 
 def main(argv=None):

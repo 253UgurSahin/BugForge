@@ -121,11 +121,10 @@ def check_tool(root, script, *args):
     checks comes out as a line of this phase. When it cannot check (exit 2, a crash), it fails as check_run does."""
     code, out, err, shown = run_script(root, script, *(args + ("--json",)))
     try:
-        if code in (0, 1):
-            return [(item["ok"], item["what"], item["output"]) for item in json.loads(out)["checks"]]
+        checks = json.loads(out)["checks"] if code in (0, 1) else None
+        return [(item["ok"], item["what"], item["output"]) for item in checks] if checks is not None else ran(code, out, err, shown)
     except (ValueError, KeyError, TypeError):
-        pass
-    return ran(code, out, err, shown)
+        return ran(code, out, err, shown)  # not the --json shape: a run that could not check
 
 
 def check_doc(root, name, *args):
