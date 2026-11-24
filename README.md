@@ -297,7 +297,7 @@ it out of git and out of every image. The reports you will read most:
 
 ## The skills
 
-The eight skills are the folders in [`plugin/`](plugin), which is all the plugin holds. The
+The nine skills are the folders in [`plugin/`](plugin), which is all the plugin holds. The
 gallery (`examples/`), the tests and CI stay outside it, so an install holds only what the skills run.
 
 | skill | parts | what it does |
@@ -307,9 +307,10 @@ gallery (`examples/`), the tests and CI stay outside it, so an install holds onl
 | `/forge-plan` | | Picks the stack profile and PWA with you, records the look and dashboard levels; writes the schema, routes, payments and build order. |
 | `/forge-design` | design, brand, dashboard, motion | Three moving concepts from the app's own world, then the brief, tokens, the theme and how you switch it, open fonts and icons, WCAG AA contrast, and the look built into your app (in an app that exists: the theme, the fonts, each component, then screen by screen, one commit each); your own name, palette and voice; dashboards on the app's own data; motion and 3D at your level, with the scene kit. Shows the result on your localhost with proof. |
 | `/forge-build` | build, pack | Scaffolds with the official installer, then builds screen by screen: auth, data access, Stripe with iDEAL, email, jobs; shows the first slice and the finished app on your localhost; fits the container templates and runs the stack until it is healthy. In clone mode it checks that no text is copied from the original. |
-| `/forge-check` | test, diff, secure, audit, inspect | Tests at your level (unit, Playwright, a walk of every page at three widths in light and dark, edge cases, a fix loop); scores a clone against the original; the security gate with a verdict PASS or FAIL; reads your codebase without changing it; looks at a live URL like a visitor. |
+| `/forge-check` | test, diff, secure, audit, inspect | Tests at your level (unit, Playwright, a walk of every page at three widths in light and dark, edge cases, a fix loop); scores a clone against the original; the security gate with a verdict PASS or FAIL; reads your codebase without changing it, including how well it is made (Clean Code, SOLID, GRASP, design patterns: [`forge-check/craft.md`](plugin/forge-check/craft.md)); looks at a live URL like a visitor. |
 | `/forge-improve` | | One list of what to improve, from the audits and from the look (a redesign, motion and 3D, dashboards, each at a level), and the tests at a level; fixed on a new branch, one small commit each, tested where possible, then the security check. |
 | `/forge-launch` | | Landing page in your concept at your look level, prices in EUR with VAT, privacy policy, terms, cookie check, basic SEO, launch checklist. |
+| `/forge-docs` | readme, architecture, api, glossary, decisions, guide, comments | Documents an app that exists from its own code: a README that gets it running, the architecture in views with Mermaid diagrams that render on GitHub (context, layers, domain model, database, main flows as sequence diagrams, containers), the API, a glossary, decision records and a user guide in plain words. `docslint.py` checks diagrams, links, file names and placeholders. |
 
 ## The 3D scene kit
 
@@ -410,6 +411,7 @@ rules of the two motion checks.
 | `inventory.py PATH [--json]` | size and health in plain numbers: lines per language, biggest files, TODOs, tests; 0 or 2 |
 | `getpage.py URL OUT [--json]` | loads one page passively and saves its HTML in a new file; 0 or 2 |
 | `pagecheck.py URL [--json] [--fail-on L] [--no-pwa]` or `--file FILE [--url URL]` | SEO, accessibility, speed, PWA and mixed-content basics of one page |
+| `craftcheck.py PATH [--json] [--fail-on L] [--tests]` | code craft (`forge-check/craft.md`): long functions, many or flag arguments, deep nesting, long switches, big classes, swallowed errors, duplicated blocks, commented-out code, getter chains; Python by its parser, brace languages by structure |
 | `plaincheck.py PAGE... [--json] [--fail-on L]` | clear for everyone (`forge-design/plain.md`): vague button words, an icon alone, a field without a label, jargon, programming values on screen, long forms and menus; PAGE a saved page or a URL |
 | `testdb.py PATH [--json]` | which database the app's own tests reach, read from the test settings only (Laravel, Django, Node, each workspace); it runs nothing and never shows a password; 1 = the database the app uses here, or it cannot tell: ask first; 2 = PATH is not a folder |
 | `bugs.py BUGS.md [--json] [--fail-on L]` | open bugs in forge-work/bugs.md; 1 = one at or above `--fail-on` |
@@ -417,6 +419,12 @@ rules of the two motion checks.
 | `shotcheck.py BEFORE_DIR AFTER_DIR [--min SCORE] [--timeout SECONDS] [--json]` | the screenshots of two rounds, compared with imgdiff.py; 1 = a changed, missing or new shot |
 | `imgdiff.py ORIGINAL.png CLONE.png [--out DIFF.png] [--json]` | layout score of two screenshots, colour ignored; 0 or 2 |
 | `parity.py FEATURES.csv [--visual JSON...] [--json \| --markdown] [--fail-under N]` | feature parity score; 1 = a must-have is missing |
+
+**forge-docs/**
+
+| usage | what it does |
+| --- | --- |
+| `docslint.py PATH [--parts readme,architecture,...] [--json] [--fail-on L]` | the docs forge-docs wrote: each part's file, headings and diagrams, known and non-empty Mermaid blocks, links and file names that exist, no placeholder or secret-looking value; TO-FILL lines counted for the user |
 
 **examples/**
 

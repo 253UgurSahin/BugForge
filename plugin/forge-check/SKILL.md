@@ -2,14 +2,14 @@
 name: forge-check
 description: >-
   Checks an app from every side and fixes what it finds. Five parts. test: a
-  test plan, unit and Playwright tests, a walk of every page at phone, tablet
-  and desktop width in light and dark, edge cases, bugs in forge-work/bugs.md
+  test plan, unit and Playwright tests, a walk of every page at three widths,
+  light and dark, edge cases, bugs in forge-work/bugs.md
   and a fix loop, as deep as the test level the user picks (1 Quick to 5
   Exhaustive). diff: scores a clone against the original. secure: the
   security and privacy gate (secrets, risky code, dependencies, supply chain,
-  headers, probes and an access check on the user's own running app,
+  headers, probes and an access check on the user's own app,
   trackers, AVG/GDPR) at a level from 1 to 5, verdict PASS or FAIL. audit:
-  reads a codebase without changing it. inspect: looks at a live URL like a
+  reads a codebase without changing it, craft (SOLID, clean code) too. inspect: looks at a live URL like a
   visitor. Active tests only on the user's own app. Use when the user says
   "test my app", "find bugs", "QA this", "a quick test", "is this safe",
   "security audit", "pentest my app", "scan for secrets", "GDPR check",
@@ -48,7 +48,7 @@ Also for this skill:
 | test | test plan, unit and end-to-end tests, the walk, edge cases, bugs, the fix loop | test, 1 to 5 | `../forge-check/steps/test.md` | `forge-work/test-plan.md`, `bugs.md`, `test/` |
 | diff | scores a clone against the original: features, layout, behaviour | none | `../forge-check/steps/diff.md` | `forge-work/parity.md` |
 | secure | the security and privacy gate, verdict PASS or FAIL | secure, 1 to 5 | `../forge-check/steps/secure.md` | `forge-work/security.md`, `sbom.json` |
-| audit | reads the user's codebase without changing it: stack, size, tests, bugs, security, speed | none | `../forge-check/steps/audit.md` | `forge-work/audit.md` |
+| audit | reads the user's codebase without changing it: stack, size, tests, bugs, security, speed, code craft (Clean Code, SOLID, GRASP, patterns: `../forge-check/craft.md`) | none | `../forge-check/steps/audit.md` | `forge-work/audit.md` |
 | inspect | looks at a live URL like a visitor: headers, SEO, accessibility, speed, PWA | none | `../forge-check/steps/inspect.md` | `forge-work/inspect.md` |
 
 A part is named after the skill: `/forge-check test`, `/forge-check secure`. The step numbers the
@@ -58,7 +58,7 @@ gate names (for example "forge-check secure, Step 3") are the ones in that part'
 
 - "Test", "find bugs", "QA", "does it work", "fix the bugs", "testen": **test**.
 - "Is this safe", "security", "secrets", "GDPR", "AVG", "pentest", "headers", "veilig": **secure**.
-- "Audit my code", "review my repo", "what is wrong with my codebase": **audit**.
+- "Audit my code", "review my repo", "what is wrong with my codebase", "is my code clean", "SOLID": **audit**.
 - A live URL to look at, "check my site", "SEO", "is it fast": **inspect**.
 - "How close is the clone", "compare with the original": **diff** (clone projects only).
 - "Check everything", "alles controleren": all of them in order (below).

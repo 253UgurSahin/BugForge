@@ -1,0 +1,78 @@
+{
+  "about": "What craftcheck.py measures and when it reports it: the code-craft rules of craft.md that a scan can see. Limits are inclusive (a function of 31 lines is over a limit of 30). Each rule names its id in craft.md, its severity, the words a non-developer reads and the fix.",
+  "limits": {
+    "function_lines": {"low": 30, "medium": 60},
+    "params": {"low": 3, "medium": 5},
+    "nesting": {"low": 3, "medium": 4},
+    "branches": {"low": 5, "medium": 9},
+    "class_methods": {"low": 20, "medium": 35},
+    "duplicate_lines": 6,
+    "commented_code": 3,
+    "getter_chain": 3
+  },
+  "rules": {
+    "long_function": {
+      "id": "CR-F1", "title": "Long functions",
+      "why": "a function that does many things is hard to read, test and change without breaking something else",
+      "fix": "split it into small functions that each do one thing, named for what they do (extract method)"
+    },
+    "many_params": {
+      "id": "CR-F2", "title": "Functions with many arguments",
+      "why": "every argument is one more thing to understand and to get in the right order",
+      "fix": "pass one object that groups the values that belong together, or split the function"
+    },
+    "flag_param": {
+      "id": "CR-F3", "title": "A true/false argument that switches behaviour",
+      "why": "a flag says the function does two things; callers read foo(true) and cannot tell what it means",
+      "fix": "make two functions with names that say what each one does"
+    },
+    "deep_nesting": {
+      "id": "CR-F4", "title": "Deeply nested code",
+      "why": "if inside if inside loop: the reader has to keep every level in mind at once",
+      "fix": "return early for the simple cases (guard clauses) and move inner blocks into functions of their own"
+    },
+    "type_switch": {
+      "id": "CR-O2", "title": "A long switch or if/else chain",
+      "why": "every new case means opening this code again; the same chain tends to appear in more places",
+      "fix": "when it chooses by kind or state: polymorphism, a Strategy or State object, or a lookup table (Open/Closed)"
+    },
+    "large_class": {
+      "id": "CR-C1", "title": "Classes with many methods",
+      "why": "a class with many jobs changes for many reasons (Single Responsibility) and every change risks the others",
+      "fix": "split it by responsibility; let each class keep the data it works on (Information Expert, High Cohesion)"
+    },
+    "swallowed_error": {
+      "id": "CR-E1", "title": "Errors caught and ignored",
+      "why": "an empty catch hides failures: the app goes on with wrong data and nobody knows why",
+      "fix": "handle the error, log it with context, or let it reach a place that can tell the user"
+    },
+    "duplicate": {
+      "id": "CR-G1", "title": "Duplicated code",
+      "why": "the same lines in two places drift apart; a fix in one is forgotten in the other (Don't Repeat Yourself)",
+      "fix": "move the shared lines into one function or class and call it from both places"
+    },
+    "commented_code": {
+      "id": "CR-K2", "title": "Commented-out code",
+      "why": "dead code in comments rots: nobody dares to delete it and nobody knows if it still matters",
+      "fix": "delete it; git remembers the old version"
+    },
+    "train_wreck": {
+      "id": "CR-O1", "title": "Long chains of calls through other objects",
+      "why": "a.getB().getC().getD() reaches through objects it should not know about (Law of Demeter), so a change deep inside breaks it",
+      "fix": "ask the nearest object for what you need (tell, don't ask), or give it a method that does the work"
+    }
+  },
+  "severity_for": {
+    "flag_param": "low", "swallowed_error": "medium", "duplicate": "medium", "commented_code": "low",
+    "train_wreck": "low"
+  },
+  "languages": {
+    ".py": "python",
+    ".js": "brace", ".jsx": "brace", ".mjs": "brace", ".cjs": "brace", ".ts": "brace", ".tsx": "brace",
+    ".php": "brace", ".java": "brace", ".cs": "brace", ".go": "brace", ".kt": "brace", ".swift": "brace",
+    ".c": "brace", ".cpp": "brace", ".h": "brace", ".rs": "brace"
+  },
+  "skip_folders": [".git", "node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".next",
+                   ".nuxt", "out", "coverage", ".cache", ".idea", ".vscode", "forge-work", "staticfiles",
+                   "migrations", "bin", "obj", "target"]
+}

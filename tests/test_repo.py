@@ -281,7 +281,7 @@ class PackTests(unittest.TestCase):
                        for folder, subfolders, files in os.walk(os.path.join(REPO, top))
                        for name in files if not name.endswith(UNSHIPPED)]
         self.assertLessEqual({path.split("/")[1] for path in tracked if path.startswith("plugin/")}, allowed)
-        self.assertEqual(len(skill_folders()), 8)
+        self.assertEqual(len(skill_folders()), 9)
         manifests = sorted(path for path in tracked if "/.claude-plugin/" in "/" + path)
         self.assertEqual(manifests, [".claude-plugin/marketplace.json", "plugin/.claude-plugin/icon.png",
                                      "plugin/.claude-plugin/plugin.json"])
