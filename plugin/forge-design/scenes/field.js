@@ -385,7 +385,43 @@ const number = (value, fallback, low, high) =>
   (Number.isFinite(Number(value)) && value !== null && value !== "" ? Math.min(high, Math.max(low, Number(value))) : fallback);
 
 export function mount(container, options = {}) {
-  const settings = {
+  const settings = readSettings(options);
+  const stage = createStage(container, {
+    stillTime: 14, camera: { fov: 38, position: [0, 0.35, 7.2], lookAt: [0, 0, 0] }, ...options,
+  });
+  if (stage.failed) return stage.handle();
+  const f = buildField(stage, settings);
+
+  stage.onQuality((quality) => reseed(f, quality));
+  stage.onTokens((tokens) => {
+    f.material.blending = tokens.blending;    // light added on dark, ink laid down on light
+    setAlpha(f);
+  });
+  stage.onResize((size) => compose(f, size));
+  stage.onFrame((time, delta) => drift(f, time, delta));
+
+  stage.setProgress(FORMATIONS.indexOf(settings.formation) / 4);
+  let shownStop = Math.round(stage.progress * 4);
+
+  return stage.handle({
+    setProgress(value) {
+      stage.setProgress(value);
+      const stop = Math.round(stage.progress * 4);
+      // A still or paused frame shows the nearest formation whole (see onFrame), so it only needs
+      // drawing again when the scroll passes halfway to the next one.
+      if (stop !== shownStop) { shownStop = stop; stage.invalidate(); }
+    },
+    setData(values) {
+      const list = Array.from(values || [], Number).filter(Number.isFinite);
+      f.dataOnGoal = list.length ? 1 : 0;
+      resample(list, f.dataGoal);
+      stage.invalidate();
+    },
+  });
+}
+
+function readSettings(options) {
+  return {
     count: options.count ? number(options.count, 0, 2000, 300000) : 0,
     formation: pick(options.formation, FORMATIONS, "cloud"),
     speed: number(options.speed, 1, 0, 4),
@@ -395,12 +431,12 @@ export function mount(container, options = {}) {
     streak: number(options.streak, 0, 0, 4),
     phone: options.phone && typeof options.phone === "object" ? options.phone : null,
   };
-  const stage = createStage(container, {
-    stillTime: 14, camera: { fov: 38, position: [0, 0.35, 7.2], lookAt: [0, 0, 0] }, ...options,
-  });
-  if (stage.failed) return stage.handle();
-  const defines = settings.streak > 0 ? { CURL_STEPS: 2, STREAK: 1 } : { CURL_STEPS: 2 };
+}
 
+// The points, their material and the group that places them. The object it returns is what one
+// mounted field keeps; the functions below take it as `f`.
+function buildField(stage, settings) {
+  const defines = settings.streak > 0 ? { CURL_STEPS: 2, STREAK: 1 } : { CURL_STEPS: 2 };
   const dataNow = new Float32Array(DATA).fill(0.5), dataGoal = new Float32Array(DATA).fill(0.5);
   const uniforms = {
     ...stage.uniforms,
@@ -421,139 +457,143 @@ export function mount(container, options = {}) {
   const group = new THREE.Group();
   group.add(points);
   stage.scene.add(group);
+  return { stage, settings, uniforms, material, points, group, dataNow, dataGoal,
+           count: 0, fit: 1, baseSize: 0.016, dataOn: 0, dataOnGoal: 0, wake: 0,
+           trail: new THREE.Vector2(), target: new THREE.Vector2() };
+}
 
-  let count = 0, fit = 1, baseSize = 0.016, dataOn = 0, dataOnGoal = 0, wake = 0;
-  const trail = new THREE.Vector2(), target = new THREE.Vector2();
+// Brightness: many points share the light, few points each carry more. On a light page each
+// point is a thin wash of ink, so the shape only darkens where many of them meet.
+function setAlpha(f) {
+  const dark = f.stage.tokens.dark;
+  const share = Math.pow(REFERENCE / Math.max(f.count, 1), 0.85);
+  f.uniforms.uAlpha.value = f.settings.intensity * share * (dark ? 0.2 : 0.22) * Math.min(1, 0.35 + 0.65 * f.fit);
+  f.points.geometry.setDrawRange(0, f.count);
+}
 
-  // Brightness: many points share the light, few points each carry more. On a light page each
-  // point is a thin wash of ink, so the shape only darkens where many of them meet.
-  function setAlpha() {
-    const dark = stage.tokens.dark;
-    const share = Math.pow(REFERENCE / Math.max(count, 1), 0.85);
-    uniforms.uAlpha.value = settings.intensity * share * (dark ? 0.2 : 0.22) * Math.min(1, 0.35 + 0.65 * fit);
-    points.geometry.setDrawRange(0, count);
+function reseed(f, quality) {
+  const { settings, points, material } = f;
+  f.count = Math.round(settings.count || quality.pick(...COUNTS) / (settings.streak > 0 ? 3 : 1));
+  const { slots, seeds } = pointSeeds(f.count);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(slots, 3));
+  geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 4));
+  points.geometry.dispose();
+  points.geometry = geometry;
+  material.defines.CURL_STEPS = quality.name === "low" ? 1 : 2;
+  f.uniforms.uSize.value = f.baseSize * quality.pick(1.12, 1.05, 1);   // fewer points: each a little larger
+  material.needsUpdate = true;
+  setAlpha(f);
+}
+
+// Four random numbers and a lattice node for each of COUNT points.
+function pointSeeds(count) {
+  const [nx, ny] = LATTICE, nodes = nx * ny;
+  const seeds = new Float32Array(count * 4), slots = new Float32Array(count * 3);
+  let state = 0x2f6b1d;                   // a fixed start: the field looks the same on every load
+  const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
+  for (let i = 0; i < count; i++) {
+    // Points take the nodes in turn, so every node gets the same number of points (give or take one).
+    const node = i % nodes, ix = node % nx, iy = Math.floor(node / nx);
+    slots.set([(ix + 0.5) / nx, (iy + 0.5) / ny, Math.floor(i / nodes)], i * 3);
+    // seed x follows the node across (still even from 0 to 1), so a point keeps its place from
+    // left to right in every formation and the transitions read as a flow.
+    seeds.set([(ix + random()) / nx, random(), random(), random()], i * 4);
   }
+  return { slots, seeds };
+}
 
-  stage.onQuality((quality) => {
-    count = Math.round(settings.count || quality.pick(...COUNTS) / (settings.streak > 0 ? 3 : 1));
-    const [nx, ny] = LATTICE, nodes = nx * ny;
-    const seeds = new Float32Array(count * 4), slots = new Float32Array(count * 3);
-    let state = 0x2f6b1d;                   // a fixed start: the field looks the same on every load
-    const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
-    for (let i = 0; i < count; i++) {
-      // Points take the nodes in turn, so every node gets the same number of points (give or take one).
-      const node = i % nodes, ix = node % nx, iy = Math.floor(node / nx);
-      slots.set([(ix + 0.5) / nx, (iy + 0.5) / ny, Math.floor(i / nodes)], i * 3);
-      // seed x follows the node across (still even from 0 to 1), so a point keeps its place from
-      // left to right in every formation and the transitions read as a flow.
-      seeds.set([(ix + random()) / nx, random(), random(), random()], i * 4);
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(slots, 3));
-    geometry.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 4));
-    points.geometry.dispose();
-    points.geometry = geometry;
-    material.defines.CURL_STEPS = quality.name === "low" ? 1 : 2;
-    uniforms.uSize.value = baseSize * quality.pick(1.12, 1.05, 1);   // fewer points: each a little larger
-    material.needsUpdate = true;
-    setAlpha();
-  });
+// Composition. Wide: the mass to one side, the headline's half kept calm. Phone: low and wide,
+// under the text, or where the phone option puts it. In between: lower and a little smaller.
+function compose(f, size) {
+  const { settings, uniforms, stage } = f;
+  const view = stage.viewSize(7.2);
+  const phone = settings.phone && size.width < number(settings.phone.below, 600, 0, 10000) ? settings.phone : null;
+  let scale;
+  if (phone) scale = placeForPhone(f, phone, view);
+  else if (size.aspect >= 1.1) scale = placeWide(f, view);
+  else scale = placeNarrow(f, size, view);
+  f.fit = scale;                                       // a smaller field packs its light closer: dim it
+  setAlpha(f);
+  f.baseSize = 0.016 * Math.sqrt(scale);               // points shrink less than the shape
+  uniforms.uSize.value = f.baseSize * stage.quality.pick(1.12, 1.05, 1);
+  uniforms.uView.value.set(size.width, size.height);
+  // The hollow the pointer opens: about 130 px across on a desktop, a little less on a phone.
+  uniforms.uWakeRadius.value = Math.min(72, Math.max(40, Math.min(size.width, size.height) * 0.072));
+}
 
-  stage.onTokens((tokens) => {
-    material.blending = tokens.blending;    // light added on dark, ink laid down on light
-    setAlpha();
-  });
+// The page's own phone layout: the middle of the form shown first at `at`, its width a part
+// of the container's, the calm on the page's text block. Returns the scale.
+function placeForPhone(f, phone, view) {
+  const { uniforms, group } = f;
+  const at = Array.isArray(phone.at) && phone.at.length === 2 ? phone.at : [0.5, 0.75];
+  const [wide, middle] = FORM_SPAN[f.settings.formation];
+  const scale = (number(phone.size, 1, 0.1, 3) * view.width) / wide;
+  group.position.set((number(at[0], 0.5, -1, 2) - 0.5) * view.width - middle * scale,
+    (0.5 - number(at[1], 0.75, -1, 2)) * view.height, 0);
+  group.scale.setScalar(scale);
+  const calm = Array.isArray(phone.calmBox) && phone.calmBox.length === 4 ? phone.calmBox.map((v) => number(v, 0, 0, 1)) : null;
+  if (calm) uniforms.uCalm.value.set(calm[0] * 2 - 1, calm[2] * 2 - 1, 1 - calm[3] * 2, 1 - calm[1] * 2);
+  uniforms.uCalmAmount.value = calm ? 0.92 : 0;
+  uniforms.uGridShift.value = 0;
+  return scale;
+}
 
-  // Composition. Wide: the mass to one side, the headline's half kept calm. Phone: low and wide,
-  // under the text, or where the phone option puts it. In between: lower and a little smaller.
-  stage.onResize((size) => {
-    const view = stage.viewSize(7.2);
-    const sign = settings.side === "left" ? -1 : 1, centred = settings.side === "center";
-    const phone = settings.phone && size.width < number(settings.phone.below, 600, 0, 10000) ? settings.phone : null;
-    let scale = 1;
-    if (phone) {
-      // The page's own phone layout: the middle of the form shown first at `at`, its width a part
-      // of the container's, the calm on the page's text block.
-      const at = Array.isArray(phone.at) && phone.at.length === 2 ? phone.at : [0.5, 0.75];
-      const [wide, middle] = FORM_SPAN[settings.formation];
-      scale = (number(phone.size, 1, 0.1, 3) * view.width) / wide;
-      group.position.set((number(at[0], 0.5, -1, 2) - 0.5) * view.width - middle * scale,
-        (0.5 - number(at[1], 0.75, -1, 2)) * view.height, 0);
-      group.scale.setScalar(scale);
-      const calm = Array.isArray(phone.calmBox) && phone.calmBox.length === 4 ? phone.calmBox.map((v) => number(v, 0, 0, 1)) : null;
-      if (calm) uniforms.uCalm.value.set(calm[0] * 2 - 1, calm[2] * 2 - 1, 1 - calm[3] * 2, 1 - calm[1] * 2);
-      uniforms.uCalmAmount.value = calm ? 0.92 : 0;
-      uniforms.uGridShift.value = 0;
-    } else if (size.aspect >= 1.1) {
-      scale = Math.min(1.12, view.width / 7.2);
-      group.position.set(centred ? 0 : sign * view.width * 0.14, 0.05, 0);
-      group.scale.set(centred ? scale : sign * scale, scale, scale);   // "left" mirrors the field
-      uniforms.uCalm.value.set(sign < 0 ? 0.0 : -1, sign < 0 ? 1 : 0.0, -0.7, 0.7);
-      uniforms.uCalmAmount.value = centred ? 0.45 : 0.94;
-      uniforms.uGridShift.value = centred ? 0 : 0.45;
-    } else {
-      const phone = size.aspect < 0.8;
-      scale = view.width / (phone ? 5.2 : 6.4);
-      group.position.set(0, -view.height * (phone ? 0.34 : 0.26), 0);
-      group.scale.setScalar(scale);
-      uniforms.uCalm.value.set(-1.2, 1.2, phone ? -0.32 : -0.25, 0.75);
-      uniforms.uCalmAmount.value = 0.6;
-      uniforms.uGridShift.value = 0;
-    }
-    fit = scale;                                         // a smaller field packs its light closer: dim it
-    setAlpha();
-    baseSize = 0.016 * Math.sqrt(scale);                 // points shrink less than the shape
-    uniforms.uSize.value = baseSize * stage.quality.pick(1.12, 1.05, 1);
-    uniforms.uView.value.set(size.width, size.height);
-    // The hollow the pointer opens: about 130 px across on a desktop, a little less on a phone.
-    uniforms.uWakeRadius.value = Math.min(72, Math.max(40, Math.min(size.width, size.height) * 0.072));
-  });
+function placeWide(f, view) {
+  const { uniforms, group, settings } = f;
+  const sign = settings.side === "left" ? -1 : 1, centred = settings.side === "center";
+  const scale = Math.min(1.12, view.width / 7.2);
+  group.position.set(centred ? 0 : sign * view.width * 0.14, 0.05, 0);
+  group.scale.set(centred ? scale : sign * scale, scale, scale);   // "left" mirrors the field
+  uniforms.uCalm.value.set(sign < 0 ? 0.0 : -1, sign < 0 ? 1 : 0.0, -0.7, 0.7);
+  uniforms.uCalmAmount.value = centred ? 0.45 : 0.94;
+  uniforms.uGridShift.value = centred ? 0 : 0.45;
+  return scale;
+}
 
-  stage.onFrame((time, delta) => {
-    const p = stage.pointer, still = stage.still;
-    // A frame drawn while the loop stands (reduced motion, or paused) is a picture on its own: it
-    // shows the nearest formation whole, never a transition caught halfway, and new data at once.
-    const frozen = still || !stage.running;
-    if (frozen) uniforms.uProgress.value = Math.round(stage.progressEased * 4) / 4;
-    // The wake opens while a pointer is over the field and closes slowly when it leaves. Its tail
-    // follows the pointer about a second behind, so a moving pointer leaves a channel that closes.
-    const wakeGoal = p.inside && !still ? 1 : 0;
-    wake = still ? wakeGoal : THREE.MathUtils.damp(wake, wakeGoal, wakeGoal > wake ? 3 : 1.2, delta);
-    uniforms.uWake.value = wake;
-    if (still || wake < 0.001) trail.set(p.x, p.y);
-    else trail.lerp(target.set(p.x, p.y), 1 - Math.exp(-delta / 0.9));
-    uniforms.uTrail.value.copy(trail);
-    uniforms.uSwirl.value = 1.1 + 0.35 * Math.sin(time * 0.45) + Math.min(1, p.speed * 0.5) * 0.6;
-    // Data eases towards its new values in about a second.
-    const k = frozen || delta === 0 ? 1 : 1 - Math.exp(-delta * 2.5);
-    for (let i = 0; i < DATA; i++) dataNow[i] += (dataGoal[i] - dataNow[i]) * k;
-    dataOn += (dataOnGoal - dataOn) * k;
-    uniforms.uDataOn.value = dataOn;
-    // The whole field turns a few degrees towards the pointer and sways slowly: parallax depth.
-    const sway = still ? 0 : Math.sin(time * 0.07) * 0.05;
-    group.rotation.set(-p.y * 0.05, p.x * 0.1 + sway, 0);
-  });
+function placeNarrow(f, size, view) {
+  const { uniforms, group } = f;
+  const phone = size.aspect < 0.8;
+  const scale = view.width / (phone ? 5.2 : 6.4);
+  group.position.set(0, -view.height * (phone ? 0.34 : 0.26), 0);
+  group.scale.setScalar(scale);
+  uniforms.uCalm.value.set(-1.2, 1.2, phone ? -0.32 : -0.25, 0.75);
+  uniforms.uCalmAmount.value = 0.6;
+  uniforms.uGridShift.value = 0;
+  return scale;
+}
 
-  stage.setProgress(FORMATIONS.indexOf(settings.formation) / 4);
-  let shownStop = Math.round(stage.progress * 4);
+function drift(f, time, delta) {
+  const { stage, uniforms, trail } = f;
+  const p = stage.pointer, still = stage.still;
+  // A frame drawn while the loop stands (reduced motion, or paused) is a picture on its own: it
+  // shows the nearest formation whole, never a transition caught halfway, and new data at once.
+  const frozen = still || !stage.running;
+  if (frozen) uniforms.uProgress.value = Math.round(stage.progressEased * 4) / 4;
+  // The wake opens while a pointer is over the field and closes slowly when it leaves. Its tail
+  // follows the pointer about a second behind, so a moving pointer leaves a channel that closes.
+  const wakeGoal = p.inside && !still ? 1 : 0;
+  f.wake = still ? wakeGoal : THREE.MathUtils.damp(f.wake, wakeGoal, wakeGoal > f.wake ? 3 : 1.2, delta);
+  uniforms.uWake.value = f.wake;
+  if (still || f.wake < 0.001) trail.set(p.x, p.y);
+  else trail.lerp(f.target.set(p.x, p.y), 1 - Math.exp(-delta / 0.9));
+  uniforms.uTrail.value.copy(trail);
+  uniforms.uSwirl.value = 1.1 + 0.35 * Math.sin(time * 0.45) + Math.min(1, p.speed * 0.5) * 0.6;
+  // Data eases towards its new values in about a second.
+  const k = frozen || delta === 0 ? 1 : 1 - Math.exp(-delta * 2.5);
+  for (let i = 0; i < DATA; i++) f.dataNow[i] += (f.dataGoal[i] - f.dataNow[i]) * k;
+  f.dataOn += (f.dataOnGoal - f.dataOn) * k;
+  uniforms.uDataOn.value = f.dataOn;
+  // The whole field turns a few degrees towards the pointer and sways slowly: parallax depth.
+  const sway = still ? 0 : Math.sin(time * 0.07) * 0.05;
+  f.group.rotation.set(-p.y * 0.05, p.x * 0.1 + sway, 0);
+}
 
-  return stage.handle({
-    setProgress(value) {
-      stage.setProgress(value);
-      const stop = Math.round(stage.progress * 4);
-      // A still or paused frame shows the nearest formation whole (see onFrame), so it only needs
-      // drawing again when the scroll passes halfway to the next one.
-      if (stop !== shownStop) { shownStop = stop; stage.invalidate(); }
-    },
-    setData(values) {
-      const list = Array.from(values || [], Number).filter(Number.isFinite);
-      dataOnGoal = list.length ? 1 : 0;
-      for (let i = 0; i < DATA && list.length; i++) {
-        const at = (i / (DATA - 1)) * (list.length - 1), j = Math.floor(at), f = at - j;
-        const v = list[j] * (1 - f) + (list[Math.min(j + 1, list.length - 1)] * f);
-        dataGoal[i] = Math.min(1, Math.max(0, v));
-      }
-      stage.invalidate();
-    },
-  });
+// LIST resampled to the DATA values the shader reads, each clamped to 0..1.
+function resample(list, goal) {
+  for (let i = 0; i < DATA && list.length; i++) {
+    const at = (i / (DATA - 1)) * (list.length - 1), j = Math.floor(at), f = at - j;
+    const v = list[j] * (1 - f) + (list[Math.min(j + 1, list.length - 1)] * f);
+    goal[i] = Math.min(1, Math.max(0, v));
+  }
 }

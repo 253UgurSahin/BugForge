@@ -396,12 +396,40 @@ void main() {
   gl_FragColor += vec4(dither(gl_FragCoord.xy), dither(gl_FragCoord.yx).x);
 }`;
 
+const num = (value, fallback, low, high) => (Number.isFinite(Number(value)) ? Math.min(high, Math.max(low, Number(value))) : fallback);
+
 export function mount(container, options = {}) {
   const o = { mode: "aurora", calm: "left", calmAmount: 0.8, intensity: 1, speed: 1, scale: 1, ripples: true, ...options };
   const stage = createStage(container, { antialias: false, renderScale: [0.5, 0.6, 0.75], stillTime: 7, ...options });
   if (stage.failed) return stage.handle({ setMode() {} });
-  const num = (value, fallback, low, high) => (Number.isFinite(Number(value)) ? Math.min(high, Math.max(low, Number(value))) : fallback);
-  const rings = Array.from({ length: RINGS }, () => new THREE.Vector4(0, 0, 0, 0));
+  const a = { o, stage, rings: Array.from({ length: RINGS }, () => new THREE.Vector4(0, 0, 0, 0)) };
+  a.material = makeSky(a);
+  a.mode = MODES[o.mode] === undefined ? 0 : MODES[o.mode];
+  Object.assign(a, { flow: 0, energy: 0.5, energyTarget: 0.5, presence: 0, nextRing: 0 });
+  Object.assign(a, { lastRing: { x: 9, y: 9, t: -9 }, settling: null, speed: num(o.speed, 1, 0, 10) });
+
+  stage.onQuality(() => build(a));
+  stage.onResize((size) => placeCalm(a, size));
+  stage.onPointer((pointer) => ripple(a, pointer));
+  stage.onFrame((time, delta) => flowOn(a, time, delta));
+
+  return stage.handle({
+    setData(values) {
+      const list = Array.from(values || [], Number).filter(Number.isFinite);
+      a.energyTarget = list.length ? Math.min(1, Math.max(0, list.reduce((x, y) => x + y, 0) / list.length)) : 0.5;
+      stage.invalidate();
+    },
+    setMode(name) {
+      if (MODES[name] === undefined || MODES[name] === a.mode) return;
+      a.mode = MODES[name];
+      build(a);
+    },
+  });
+}
+
+// The one rectangle and its material, in the stage's scene. `a` is what one mounted sky keeps.
+function makeSky(a) {
+  const { o, stage } = a;
   const material = new THREE.ShaderMaterial({
     uniforms: {
       ...stage.uniforms,
@@ -411,7 +439,7 @@ export function mount(container, options = {}) {
       uEnergy: { value: 0.5 },
       uReach: { value: new THREE.Vector3() },
       uCalm: { value: new THREE.Vector4() },
-      uRings: { value: rings },
+      uRings: { value: a.rings },
     },
     vertexShader, fragmentShader,
     transparent: true, premultipliedAlpha: true, depthTest: false, depthWrite: false,
@@ -419,90 +447,77 @@ export function mount(container, options = {}) {
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
   quad.frustumCulled = false;   // placed by the vertex shader, never by the camera
   stage.scene.add(quad);
+  return material;
+}
 
-  let mode = MODES[o.mode] === undefined ? 0 : MODES[o.mode];
-  let flow = 0, energy = 0.5, energyTarget = 0.5, presence = 0, nextRing = 0;
-  let lastRing = { x: 9, y: 9, t: -9 }, settling = null;
-  const speed = num(o.speed, 1, 0, 10);
-
-  // Shader cost follows the quality: octaves, curtains, noise layers and rings are compiled in.
-  function build() {
-    const q = stage.quality;
-    material.defines = {
-      MODE: mode,
-      FBM_OCTAVES: q.pick(3, 4, 5),
-      CURTAINS: q.pick(2, 3, 3),
-      RING_COUNT: q.pick(4, RINGS, RINGS),
-    };
-    material.needsUpdate = true;
-    stage.invalidate();
-  }
-  stage.onQuality(build);
-
-  stage.onResize((size) => {
-    const [x, y] = CALM[o.calm] || CALM.left;
-    const sideways = x !== 0 && size.aspect < 0.85;   // a phone: the text spans the width
-    material.uniforms.uCalm.value.set(x, y, o.calm === "none" ? 0 : num(o.calmAmount, 0.8, 0, 1), sideways ? 1 : 0);
-  });
-
-  // Water: a ring as the pointer sets off or a finger comes down, at most one every 0.4 s along the
-  // way (a quick sweep would otherwise leave a chain of rings), and one more where it comes to rest.
-  // stage.pointer.raw runs -1..1 over the container; the shader wants scene units, which depend on
-  // the shape of the container. Outside the container the stage clamps raw to its edge: no ring.
-  const toScene = (x, y) => {
-    const unit = Math.sqrt(stage.size.width * stage.size.height) || 1;
-    return [(x * stage.size.width) / (2 * unit), (y * stage.size.height) / (2 * unit)];
+// Shader cost follows the quality: octaves, curtains, noise layers and rings are compiled in.
+function build(a) {
+  const q = a.stage.quality;
+  a.material.defines = {
+    MODE: a.mode,
+    FBM_OCTAVES: q.pick(3, 4, 5),
+    CURTAINS: q.pick(2, 3, 3),
+    RING_COUNT: q.pick(4, RINGS, RINGS),
   };
-  function drop(x, y, strength) {
-    const now = stage.clock.time;
-    rings[nextRing].set(...toScene(x, y), now, strength);
-    nextRing = (nextRing + 1) % RINGS;
-    lastRing = { x, y, t: now };
-    settling = null;
+  a.material.needsUpdate = true;
+  a.stage.invalidate();
+}
+
+function placeCalm(a, size) {
+  const o = a.o;
+  const [x, y] = CALM[o.calm] || CALM.left;
+  const sideways = x !== 0 && size.aspect < 0.85;   // a phone: the text spans the width
+  a.material.uniforms.uCalm.value.set(x, y, o.calm === "none" ? 0 : num(o.calmAmount, 0.8, 0, 1), sideways ? 1 : 0);
+}
+
+// Water: a ring as the pointer sets off or a finger comes down, at most one every 0.4 s along the
+// way (a quick sweep would otherwise leave a chain of rings), and one more where it comes to rest.
+// stage.pointer.raw runs -1..1 over the container; the shader wants scene units, which depend on
+// the shape of the container. Outside the container the stage clamps raw to its edge: no ring.
+function toScene(stage, x, y) {
+  const unit = Math.sqrt(stage.size.width * stage.size.height) || 1;
+  return [(x * stage.size.width) / (2 * unit), (y * stage.size.height) / (2 * unit)];
+}
+
+function drop(a, x, y, strength) {
+  const now = a.stage.clock.time;
+  a.rings[a.nextRing].set(...toScene(a.stage, x, y), now, strength);
+  a.nextRing = (a.nextRing + 1) % RINGS;
+  a.lastRing = { x, y, t: now };
+  a.settling = null;
+}
+
+function ripple(a, pointer) {
+  if (a.mode !== 1 || a.stage.still || a.o.ripples === false) return;
+  if (!pointer.active || !pointer.inside) { a.settling = null; return; }
+  const { x, y } = pointer.raw;
+  const now = a.stage.clock.time;
+  const gap = now - a.lastRing.t;
+  const moved = Math.hypot(x - a.lastRing.x, y - a.lastRing.y);
+  // A finger that taps the same spot again a second later still makes a ring.
+  if (gap > 1 || (gap > 0.4 && moved > 0.08)) drop(a, x, y, 0.8);
+  else a.settling = { x, y, t: now };
+}
+
+function flowOn(a, time, delta) {
+  const { stage, material } = a;
+  // Flow is time that runs at the chosen speed and the data's energy, added up frame by frame so a
+  // change of speed never makes the picture jump. Scrolling sets the pace too: the aurora surges
+  // halfway and slows at the end; the water and the mist slow down.
+  const p = stage.progressEased;
+  const pace = a.mode === 0 ? 1 + 0.6 * Math.sin(Math.PI * p) - 0.45 * p : 1 - 0.4 * p;
+  a.energy = stage.still ? a.energyTarget : THREE.MathUtils.damp(a.energy, a.energyTarget, 1.5, delta);
+  a.flow = stage.still ? time * a.speed : a.flow + delta * a.speed * pace * (0.55 + 0.9 * a.energy);
+  material.uniforms.uFlow.value = a.flow;
+  material.uniforms.uEnergy.value = a.energy;
+  // Where the pointer is, in scene units, and how present it is: it fades in over the container
+  // and out when it leaves (never in a still frame).
+  const here = stage.pointer.active && stage.pointer.inside && !stage.still;
+  a.presence = stage.still ? 0 : THREE.MathUtils.damp(a.presence, here ? 1 : 0, 3, delta);
+  material.uniforms.uReach.value.set(...toScene(stage, stage.pointer.x, stage.pointer.y), a.presence);
+  const settling = a.settling;
+  if (settling && time - settling.t > 0.15) {
+    if (Math.hypot(settling.x - a.lastRing.x, settling.y - a.lastRing.y) > 0.03) drop(a, settling.x, settling.y, 0.9);
+    a.settling = null;
   }
-  stage.onPointer((pointer) => {
-    if (mode !== 1 || stage.still || o.ripples === false) return;
-    if (!pointer.active || !pointer.inside) { settling = null; return; }
-    const { x, y } = pointer.raw;
-    const now = stage.clock.time;
-    const gap = now - lastRing.t;
-    const moved = Math.hypot(x - lastRing.x, y - lastRing.y);
-    // A finger that taps the same spot again a second later still makes a ring.
-    if (gap > 1 || (gap > 0.4 && moved > 0.08)) drop(x, y, 0.8);
-    else settling = { x, y, t: now };
-  });
-
-  stage.onFrame((time, delta) => {
-    // Flow is time that runs at the chosen speed and the data's energy, added up frame by frame so a
-    // change of speed never makes the picture jump. Scrolling sets the pace too: the aurora surges
-    // halfway and slows at the end; the water and the mist slow down.
-    const p = stage.progressEased;
-    const pace = mode === 0 ? 1 + 0.6 * Math.sin(Math.PI * p) - 0.45 * p : 1 - 0.4 * p;
-    energy = stage.still ? energyTarget : THREE.MathUtils.damp(energy, energyTarget, 1.5, delta);
-    flow = stage.still ? time * speed : flow + delta * speed * pace * (0.55 + 0.9 * energy);
-    material.uniforms.uFlow.value = flow;
-    material.uniforms.uEnergy.value = energy;
-    // Where the pointer is, in scene units, and how present it is: it fades in over the container
-    // and out when it leaves (never in a still frame).
-    const here = stage.pointer.active && stage.pointer.inside && !stage.still;
-    presence = stage.still ? 0 : THREE.MathUtils.damp(presence, here ? 1 : 0, 3, delta);
-    material.uniforms.uReach.value.set(...toScene(stage.pointer.x, stage.pointer.y), presence);
-    if (settling && time - settling.t > 0.15) {
-      if (Math.hypot(settling.x - lastRing.x, settling.y - lastRing.y) > 0.03) drop(settling.x, settling.y, 0.9);
-      settling = null;
-    }
-  });
-
-  return stage.handle({
-    setData(values) {
-      const list = Array.from(values || [], Number).filter(Number.isFinite);
-      energyTarget = list.length ? Math.min(1, Math.max(0, list.reduce((a, b) => a + b, 0) / list.length)) : 0.5;
-      stage.invalidate();
-    },
-    setMode(name) {
-      if (MODES[name] === undefined || MODES[name] === mode) return;
-      mode = MODES[name];
-      build();
-    },
-  });
 }

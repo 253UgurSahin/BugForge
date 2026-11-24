@@ -162,146 +162,178 @@ export function motionToggle(button) {
 }
 
 export function lazyScene(container, loader, options = {}) {
-  const { lazy = {}, ...sceneOptions } = options;
-  const margin = lazy.margin === undefined ? "50%" : lazy.margin;
-  const timeout = lazy.timeout === undefined ? 2000 : lazy.timeout;
-  const needsWebgl = lazy.webgl !== false;
-  const calls = new Map();  // method name -> the arguments of its last call, for when the scene is there
-  const pauses = new Set(); // reasons given to pause() and not resumed yet
-  const waits = [];         // functions that cancel whatever is still waiting
-  let scene = null, state = "waiting", started = false, markedFallback = false, settle = null;
-  const ready = new Promise((resolve) => { settle = resolve; });
-
-  const forward = (name) => (...args) => {
-    if (state === "destroyed") return;
-    if (scene) {
-      if (typeof scene[name] === "function") scene[name](...args);
-    } else {
-      calls.delete(name); // so the map keeps the order of the last calls
-      calls.set(name, args);
-    }
-  };
-  const stopWaiting = () => { for (const cancel of waits.splice(0)) cancel(); };
-
-  // The poster stays: the same sign a stage gives. quiet: an expected end (no WebGL), not an error.
-  function fail(error, quiet) {
-    state = "failed";
-    handle.error = error;
-    markedFallback = true;
-    container.setAttribute("data-scene", "fallback");
-    if (!quiet) console.error("lazyScene: the scene could not be loaded, so the poster stays.", error);
-    settle(null);
-  }
-
-  function load() {
-    if (started || state === "destroyed" || state === "failed") return ready;
-    started = true;
-    stopWaiting();
-    if (needsWebgl && !webglAvailable()) {
-      fail(new Error("lazyScene: this browser has no WebGL 2, so the poster stays and the scene is not loaded"), true);
-      return ready;
-    }
-    state = "loading";
-    Promise.resolve()
-      .then(loader)
-      .then((module) => breather().then(() => module)) // evaluating three and mounting: two tasks, not one
-      .then((module) => {
-        const mount = module && (module.mount || (module.default && module.default.mount));
-        if (typeof mount !== "function") throw new TypeError("lazyScene: the loaded module has no mount()");
-        return state === "destroyed" ? null : mount(container, sceneOptions);
-      })
-      .then((mounted) => {
-        if (state === "destroyed") { // destroyed while it was loading
-          if (mounted && typeof mounted.destroy === "function") mounted.destroy();
-          return;
-        }
-        if (!mounted) throw new TypeError("lazyScene: mount() returned nothing");
-        scene = mounted;
-        state = "ready";
-        for (const reason of pauses) if (typeof scene.pause === "function") scene.pause(reason);
-        for (const [name, args] of calls) if (typeof scene[name] === "function") scene[name](...args);
-        calls.clear();
-        settle(scene);
-      })
-      .catch((error) => {
-        if (state !== "destroyed") fail(error, false);
-      });
-    return ready;
-  }
-
-  function destroy() {
-    if (state === "destroyed") return;
-    stopWaiting();
-    handles.delete(handle);
-    const mounted = scene;
-    scene = null;
-    state = "destroyed";
-    calls.clear();
-    if (mounted && typeof mounted.destroy === "function") mounted.destroy();
-    if (markedFallback) container.removeAttribute("data-scene");
-    settle(null); // does nothing when ready was already settled
-  }
-
-  const handle = {
-    ready,
-    error: null,
-    get scene() { return scene; },
-    get state() { return state; },
-    setProgress: forward("setProgress"),
-    setData: forward("setData"),
-    setPointer: forward("setPointer"),
-    pause(reason = "user") {
-      if (state === "destroyed") return;
-      pauses.add(reason);
-      if (scene && typeof scene.pause === "function") scene.pause(reason);
-    },
-    resume(reason = "user") {
-      if (state === "destroyed") return;
-      pauses.delete(reason);
-      if (scene && typeof scene.resume === "function") scene.resume(reason);
-    },
-    load,
-    destroy,
-  };
+  const s = lazyState(container, loader, options);
+  const handle = makeHandle(s);
   if (!container || container.nodeType !== 1) { // a selector that matched nothing: say so, and do nothing
-    state = "failed";
+    s.state = "failed";
     handle.error = new TypeError("lazyScene: there is no container");
     console.error(handle.error);
-    settle(null);
+    s.settle(null);
     return handle;
   }
   handles.add(handle);
-  if (motionPaused()) pauses.add(TOGGLE); // switched off on an earlier page: the scene starts as a still
+  if (motionPaused()) s.pauses.add(TOGGLE); // switched off on an earlier page: the scene starts as a still
   reflect();
 
   // Reduced data (Chromium's "Lite mode", Android's data saver): three.js is several hundred
   // kilobytes the visitor asked not to spend. The poster stays until the page calls load().
   if (navigator.connection && navigator.connection.saveData) {
-    state = "reduced-data";
+    s.state = "reduced-data";
     return handle;
   }
+  waitUntilNear(s);
+  return handle;
+}
 
-  // First: near the viewport. Then: a quiet moment, so the download and the shader compilation do
-  // not compete with the page's own first paint.
-  const whenIdle = () => {
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(load, { timeout });
-      waits.push(() => window.cancelIdleCallback(id));
-    } else { // Safari has no requestIdleCallback: a short timer is the nearest thing
-      const id = setTimeout(load, 200);
-      waits.push(() => clearTimeout(id));
+// What one lazyScene() keeps between calls. The functions below take it as `s`.
+function lazyState(container, loader, options) {
+  const { lazy = {}, ...sceneOptions } = options;
+  const s = {
+    container,
+    loader,
+    sceneOptions,
+    margin: lazy.margin === undefined ? "50%" : lazy.margin,
+    timeout: lazy.timeout === undefined ? 2000 : lazy.timeout,
+    needsWebgl: lazy.webgl !== false,
+    calls: new Map(),  // method name -> the arguments of its last call, for when the scene is there
+    pauses: new Set(), // reasons given to pause() and not resumed yet
+    waits: [],         // functions that cancel whatever is still waiting
+    scene: null, state: "waiting", started: false, markedFallback: false, settle: null, handle: null,
+  };
+  s.ready = new Promise((resolve) => { s.settle = resolve; });
+  return s;
+}
+
+function makeHandle(s) {
+  const handle = {
+    ready: s.ready,
+    error: null,
+    get scene() { return s.scene; },
+    get state() { return s.state; },
+    setProgress: forward(s, "setProgress"),
+    setData: forward(s, "setData"),
+    setPointer: forward(s, "setPointer"),
+    pause(reason = "user") {
+      if (s.state === "destroyed") return;
+      s.pauses.add(reason);
+      if (s.scene && typeof s.scene.pause === "function") s.scene.pause(reason);
+    },
+    resume(reason = "user") {
+      if (s.state === "destroyed") return;
+      s.pauses.delete(reason);
+      if (s.scene && typeof s.scene.resume === "function") s.scene.resume(reason);
+    },
+    load: () => loadScene(s),
+    destroy: () => destroyScene(s),
+  };
+  s.handle = handle;
+  return handle;
+}
+
+// A method of the handle: passed on to the scene, or kept until it is there.
+function forward(s, name) {
+  return (...args) => {
+    if (s.state === "destroyed") return;
+    if (s.scene) {
+      if (typeof s.scene[name] === "function") s.scene[name](...args);
+    } else {
+      s.calls.delete(name); // so the map keeps the order of the last calls
+      s.calls.set(name, args);
     }
   };
+}
+
+function stopWaiting(s) {
+  for (const cancel of s.waits.splice(0)) cancel();
+}
+
+// The poster stays: the same sign a stage gives. quiet: an expected end (no WebGL), not an error.
+function failScene(s, error, quiet) {
+  s.state = "failed";
+  s.handle.error = error;
+  s.markedFallback = true;
+  s.container.setAttribute("data-scene", "fallback");
+  if (!quiet) console.error("lazyScene: the scene could not be loaded, so the poster stays.", error);
+  s.settle(null);
+}
+
+function loadScene(s) {
+  if (s.started || s.state === "destroyed" || s.state === "failed") return s.ready;
+  s.started = true;
+  stopWaiting(s);
+  if (s.needsWebgl && !webglAvailable()) {
+    failScene(s, new Error("lazyScene: this browser has no WebGL 2, so the poster stays and the scene is not loaded"), true);
+    return s.ready;
+  }
+  s.state = "loading";
+  Promise.resolve()
+    .then(s.loader)
+    .then((module) => breather().then(() => module)) // evaluating three and mounting: two tasks, not one
+    .then((module) => mountModule(s, module))
+    .then((mounted) => adopt(s, mounted))
+    .catch((error) => {
+      if (s.state !== "destroyed") failScene(s, error, false);
+    });
+  return s.ready;
+}
+
+function mountModule(s, module) {
+  const mount = module && (module.mount || (module.default && module.default.mount));
+  if (typeof mount !== "function") throw new TypeError("lazyScene: the loaded module has no mount()");
+  return s.state === "destroyed" ? null : mount(s.container, s.sceneOptions);
+}
+
+// The scene is mounted: it gets the pauses and the last calls that were made while it loaded.
+function adopt(s, mounted) {
+  if (s.state === "destroyed") { // destroyed while it was loading
+    if (mounted && typeof mounted.destroy === "function") mounted.destroy();
+    return;
+  }
+  if (!mounted) throw new TypeError("lazyScene: mount() returned nothing");
+  const scene = (s.scene = mounted);
+  s.state = "ready";
+  for (const reason of s.pauses) if (typeof scene.pause === "function") scene.pause(reason);
+  for (const [name, args] of s.calls) if (typeof scene[name] === "function") scene[name](...args);
+  s.calls.clear();
+  s.settle(scene);
+}
+
+function destroyScene(s) {
+  if (s.state === "destroyed") return;
+  stopWaiting(s);
+  handles.delete(s.handle);
+  const mounted = s.scene;
+  s.scene = null;
+  s.state = "destroyed";
+  s.calls.clear();
+  if (mounted && typeof mounted.destroy === "function") mounted.destroy();
+  if (s.markedFallback) s.container.removeAttribute("data-scene");
+  s.settle(null); // does nothing when ready was already settled
+}
+
+// First: near the viewport. Then: a quiet moment, so the download and the shader compilation do
+// not compete with the page's own first paint.
+function waitUntilNear(s) {
   if (typeof IntersectionObserver === "function") {
     const watcher = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;
-      stopWaiting();
-      whenIdle();
-    }, { rootMargin: `${margin} 0px` });
-    watcher.observe(container);
-    waits.push(() => watcher.disconnect());
+      stopWaiting(s);
+      whenIdle(s);
+    }, { rootMargin: `${s.margin} 0px` });
+    watcher.observe(s.container);
+    s.waits.push(() => watcher.disconnect());
   } else {
-    whenIdle();
+    whenIdle(s);
   }
-  return handle;
+}
+
+function whenIdle(s) {
+  const load = () => loadScene(s);
+  if (typeof window.requestIdleCallback === "function") {
+    const id = window.requestIdleCallback(load, { timeout: s.timeout });
+    s.waits.push(() => window.cancelIdleCallback(id));
+  } else { // Safari has no requestIdleCallback: a short timer is the nearest thing
+    const id = setTimeout(load, 200);
+    s.waits.push(() => clearTimeout(id));
+  }
 }

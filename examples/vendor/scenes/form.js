@@ -442,20 +442,55 @@ function buildNodeGeometry(nodes) {
   return geometry;
 }
 
+const num = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
+
 export function mount(container, options = {}) {
   const o = { side: "right", scale: 1, strands: 160, speed: 1, seed: 1, intensity: 1,
               shapes: ["ring", "knot", "coil"], ...options };
   const stage = createStage(container, { stillTime: 6, ...options, camera: { fov: 32, position: [0, 0, 9] } });
   if (stage.failed) return stage.handle();
-  const num = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
-  const speed = Math.max(0, num(o.speed, 1)), seed = num(o.seed, 1);
-  const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
-  const strandCount = clamp(Math.round(num(o.strands, 160)), 12, 400), scale = clamp(num(o.scale, 1), 0.3, 3);
+  const f = readForm(stage, o);
+  buildForm(f);
+
+  stage.onQuality((quality) => rebuild(f, quality));
+  stage.onTokens((tokens) => retint(f, tokens));
+  stage.onResize((size) => placeForm(f, size));
+  stage.onFrame((time, delta) => moveForm(f, time, delta));
+
+  return stage.handle({
+    setThread(amount) {
+      f.threadTarget = clamp(num(amount, 0), 0, 1);
+      stage.invalidate();
+    },
+    setData(values) {
+      const list = Array.from(values || [], Number).filter(Number.isFinite).map((v) => Math.min(1, Math.max(0, v)));
+      f.swellTarget = list.length ? 1 : 0;
+      spreadData(list, f.dataTarget);
+      stage.invalidate();
+    },
+  });
+}
+
+// What one mounted form keeps: the options read once, and the eased state, each value its own pace.
+function readForm(stage, o) {
   const shapes = [0, 1, 2].map((i) => SHAPES[(o.shapes || [])[i]] || SHAPES[["ring", "knot", "coil"][i]])
     .map((shape) => ({ reach: 1, ...shape, thick: Math.max(shape.tube[0], shape.tube[1]) }));
-  const seedRand = random(seed + 5);
+  return {
+    o, stage, shapes,
+    speed: Math.max(0, num(o.speed, 1)), seed: num(o.seed, 1),
+    strandCount: clamp(Math.round(num(o.strands, 160)), 12, 400), scale: clamp(num(o.scale, 1), 0.3, 3),
+    // Fewer strands (low quality) each draw a little stronger, so the whole keeps its weight.
+    dim: 1, intensity: 1, phone: false,
+    morph: 0, leanX: 0, leanY: 0, swell: 0, swellTarget: 0, thread: 0, threadTarget: 0,
+    dataTarget: new Array(DATA_SLOTS).fill(0.5),
+  };
+}
 
-  const shared = {
+function formUniforms(f) {
+  const { stage, shapes } = f;
+  const seedRand = random(f.seed + 5);
+  return {
     ...stage.uniforms,
     uKnot: { value: shapes.map((s) => new THREE.Vector4(...s.knot)) },
     uTube: { value: shapes.map((s) => new THREE.Vector4(...s.tube)) },
@@ -468,135 +503,139 @@ export function mount(container, options = {}) {
     uIntensity: { value: 1 }, uWidth: { value: 0.01 }, uNodeSize: { value: 30 }, uHalo: { value: 2 },
     uPulses: { value: 0.11 }, uReach: { value: 1 }, uThread: { value: 0 },
   };
+}
+
+function buildForm(f) {
+  const shared = (f.shared = formUniforms(f));
+  f.data = shared.uData.value;
   // One uniforms object for both materials, so a value set once reaches both.
-  const strandMaterial = new THREE.ShaderMaterial({ uniforms: shared, vertexShader: strandVertex,
+  f.strandMaterial = new THREE.ShaderMaterial({ uniforms: shared, vertexShader: strandVertex,
     fragmentShader: strandFragment, transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
-  const nodeMaterial = new THREE.ShaderMaterial({ uniforms: shared, vertexShader: nodeVertex,
+  f.nodeMaterial = new THREE.ShaderMaterial({ uniforms: shared, vertexShader: nodeVertex,
     fragmentShader: nodeFragment, transparent: true, depthWrite: false, depthTest: false });
 
   const place = new THREE.Group(), form = new THREE.Group(); // place: where, how large, the lean; form: tilt, turn
-  const strands = new THREE.Mesh(undefined, strandMaterial);
-  const nodes = new THREE.Points(undefined, nodeMaterial);
+  const strands = new THREE.Mesh(undefined, f.strandMaterial);
+  const nodes = new THREE.Points(undefined, f.nodeMaterial);
   strands.frustumCulled = nodes.frustumCulled = false; // the shader places every vertex
   nodes.renderOrder = 1;
-  stage.scene.add(place.add(form.add(strands, nodes)));
+  f.stage.scene.add(place.add(form.add(strands, nodes)));
+  Object.assign(f, { place, form, strands, nodes });
+}
 
-  // Fewer strands (low quality) each draw a little stronger, so the whole keeps its weight.
-  let dim = 1, intensity = 1, phone = false;
-  const setIntensity = () => {
-    intensity = num(o.intensity, 1) * dim * (stage.tokens.dark ? 0.5 : 0.62) * stage.quality.pick(1.55, 1.2, 1);
-  };
-  const setNodeSize = () => {
-    shared.uNodeSize.value = stage.tokens.dark ? (phone ? 30 : 40) : 15;
-  };
-  stage.onQuality((quality) => {
-    const count = Math.max(12, Math.round(strandCount * quality.pick(0.5, 0.75, 1)));
-    const list = makeStrands(count, seed);
-    strands.geometry.dispose();
-    strands.geometry = buildStrandGeometry(list, quality.pick(260, 360, 460));
-    nodes.geometry.dispose();
-    nodes.geometry = buildNodeGeometry(makeNodes(list, quality.pick(10, 12, 14), seed));
-    shared.uHalo.value = quality.pick(1.6, 1.9, 2.2);   // the glow widens the pixels drawn: narrower on weak devices
-    shared.uPulses.value = quality.pick(0.14, 0.11, 0.09); // about the same number of pulses at every count
-    setIntensity();
-  });
+function setIntensity(f) {
+  const stage = f.stage;
+  f.intensity = num(f.o.intensity, 1) * f.dim * (stage.tokens.dark ? 0.5 : 0.62) * stage.quality.pick(1.55, 1.2, 1);
+}
 
-  stage.onTokens((tokens) => {
-    strandMaterial.blending = nodeMaterial.blending = tokens.blending; // glow on dark, ink on light
-    shared.uWidth.value = tokens.dark ? 0.01 : 0.011;
-    setIntensity();
-    setNodeSize();
-  });
+function setNodeSize(f) {
+  f.shared.uNodeSize.value = f.stage.tokens.dark ? (f.phone ? 30 : 40) : 15;
+}
 
-  stage.onResize((size) => {
-    const view = stage.viewSize(9);
-    phone = size.aspect < 0.8;
-    const sign = o.side === "left" ? -1 : o.side === "centre" || o.side === "center" ? 0 : 1;
-    let x = 0, y = 0, diameter;
-    if (phone) {             // low and large: its upper arcs pass dimmed behind the text, the rest fills the bottom
-      diameter = Math.max(view.width * 1.85, view.height * 0.58) * scale;
-      y = -view.height * 0.23;
-      dim = 0.7;
-      shared.uCalm.value.set(0, -1, 0.6, 0.86);
-      shared.uCalmLow.value = 0.4;
-    } else {                 // to one side, running off the edge
-      diameter = Math.min(view.height * 1.18, view.width * 0.82) * scale;
-      x = sign * (view.width * 0.5 - diameter * 0.3);
-      y = -view.height * 0.02;
-      dim = sign === 0 ? 0.75 : 1;
-      shared.uCalm.value.set(sign, 0, sign === 0 ? -1 : 0.28, sign === 0 ? 0 : 0.55);
-      shared.uCalmLow.value = 0.05;
-    }
-    place.position.set(x, y, 0);
-    place.scale.setScalar(diameter / 4);  // the shapes are about 4 units across
-    const reach = diameter * 0.45;
-    shared.uFade.value.set(9 - reach, 9 + reach);
-    setIntensity();
-    setNodeSize();
-  });
+function rebuild(f, quality) {
+  const { strands, nodes, shared } = f;
+  const count = Math.max(12, Math.round(f.strandCount * quality.pick(0.5, 0.75, 1)));
+  const list = makeStrands(count, f.seed);
+  strands.geometry.dispose();
+  strands.geometry = buildStrandGeometry(list, quality.pick(260, 360, 460));
+  nodes.geometry.dispose();
+  nodes.geometry = buildNodeGeometry(makeNodes(list, quality.pick(10, 12, 14), f.seed));
+  shared.uHalo.value = quality.pick(1.6, 1.9, 2.2);   // the glow widens the pixels drawn: narrower on weak devices
+  shared.uPulses.value = quality.pick(0.14, 0.11, 0.09); // about the same number of pulses at every count
+  setIntensity(f);
+}
 
-  // Eased state: the morph, the lean and the data, each its own pace.
-  let morph = 0, leanX = 0, leanY = 0, swell = 0, swellTarget = 0, thread = 0, threadTarget = 0;
-  const data = shared.uData.value, dataTarget = new Array(DATA_SLOTS).fill(0.5);
-  stage.onFrame((time, delta) => {
-    const jump = stage.still || stage.clock.frame === 0;
-    const ease = (value, target, rate) => (jump ? target : THREE.MathUtils.damp(value, target, rate, delta));
-    // Progress walks the three shapes: 0 the first, 0.5 the second, 1 the third, smoothly between.
-    morph = ease(morph, stage.progressEased * 2, 2.2);
-    const w = [0, 1, 2].map((i) => Math.max(0, 1 - Math.abs(morph - i)));
-    const smooth = w.map((v) => v * v * (3 - 2 * v)), total = smooth[0] + smooth[1] + smooth[2] || 1;
-    const tube = smooth.map((v) => v / total);
-    // The line changes mostly in the middle of a crossing (the cube sharpens it), the tube evenly, and
-    // the tube draws in while they cross: a wide tube never carries the next shape's tight windings,
-    // which would crowd into ruffles. cross is 0 on a shape and 1 halfway between two.
-    const cubed = tube.map((v) => v * v * v), cubedTotal = cubed[0] + cubed[1] + cubed[2] || 1;
-    const line = cubed.map((v) => v / cubedTotal);
-    const cross = Math.min(1, 2 * (1 - tube[0] * tube[0] - tube[1] * tube[1] - tube[2] * tube[2]));
-    shared.uWeights.value.set(...line);
-    shared.uTubeWeights.value.set(...tube);
-    shared.uNarrow.value = 1 - 0.4 * cross;
-    const mixed = (key, k = line) => k[0] * shapes[0][key] + k[1] * shapes[1][key] + k[2] * shapes[2][key];
-    const tilt = mixed("tilt");
-    shared.uBend.value = mixed("bend");
-    shared.uReach.value = mixed("reach");
-    // A thin tube packs its strands close together: draw each fainter so it does not burn out, and a
-    // little fainter again mid-crossing, where two shapes share the strands.
-    shared.uIntensity.value = intensity * (1 - 0.2 * cross)
-      * (0.5 + 0.5 * THREE.MathUtils.smoothstep(mixed("thick", tube) * shared.uNarrow.value, 0.05, 0.22));
-    leanX = ease(leanX, stage.pointer.x, 1.6);
-    leanY = ease(leanY, stage.pointer.y, 1.6);
-    shared.uSwell.value = swell = ease(swell, swellTarget, 2.5);
-    shared.uThread.value = thread = ease(thread, threadTarget, 2.5);
-    for (let i = 0; i < DATA_SLOTS; i++) data[i] = ease(data[i], dataTarget[i], 2.5);
-    const clock = (shared.uClock.value = time * speed);
-    // One turn in 75 seconds round its own axis, a slow sway of the tilt, and a lean of up to
-    // about 7 degrees toward the pointer.
-    form.rotation.set(-tilt + 0.06 * Math.sin(clock * 0.13), 0.32 + 0.05 * Math.sin(clock * 0.09),
-                      seed * 1.7 + clock * (Math.PI * 2) / 75);
-    place.rotation.set(-leanY * 0.12, leanX * 0.12, 0);   // 0.12 radians: about 7 degrees
-  });
+function retint(f, tokens) {
+  f.strandMaterial.blending = f.nodeMaterial.blending = tokens.blending; // glow on dark, ink on light
+  f.shared.uWidth.value = tokens.dark ? 0.01 : 0.011;
+  setIntensity(f);
+  setNodeSize(f);
+}
 
-  return stage.handle({
-    setThread(amount) {
-      threadTarget = clamp(num(amount, 0), 0, 1);
-      stage.invalidate();
-    },
-    setData(values) {
-      const list = Array.from(values || [], Number).filter(Number.isFinite).map((v) => Math.min(1, Math.max(0, v)));
-      swellTarget = list.length ? 1 : 0;
-      // Spread the list round the loop. Each slot takes the highest value of the stretch of the list it
-      // covers (read as a line between the values, and round the loop), so a single peak never falls
-      // between two slots, however long or short the list.
-      const n = list.length;
-      const at = (x) => { const k = Math.floor(x), f = x - k, a = list[((k % n) + n) % n]; return a + (list[(((k + 1) % n) + n) % n] - a) * f; };
-      for (let i = 0; i < DATA_SLOTS; i++) {
-        if (!n) { dataTarget[i] = 0.5; continue; }
-        const lo = ((i - 0.5) / DATA_SLOTS) * n, hi = ((i + 0.5) / DATA_SLOTS) * n;
-        let top = Math.max(at(lo), at(hi));
-        for (let k = Math.ceil(lo); k <= hi; k++) top = Math.max(top, at(k));
-        dataTarget[i] = top;
-      }
-      stage.invalidate();
-    },
-  });
+function placeForm(f, size) {
+  const { o, shared, scale } = f;
+  const view = f.stage.viewSize(9);
+  f.phone = size.aspect < 0.8;
+  const sign = o.side === "left" ? -1 : o.side === "centre" || o.side === "center" ? 0 : 1;
+  let x = 0, y = 0, diameter;
+  if (f.phone) {           // low and large: its upper arcs pass dimmed behind the text, the rest fills the bottom
+    diameter = Math.max(view.width * 1.85, view.height * 0.58) * scale;
+    y = -view.height * 0.23;
+    f.dim = 0.7;
+    shared.uCalm.value.set(0, -1, 0.6, 0.86);
+    shared.uCalmLow.value = 0.4;
+  } else {                 // to one side, running off the edge
+    diameter = Math.min(view.height * 1.18, view.width * 0.82) * scale;
+    x = sign * (view.width * 0.5 - diameter * 0.3);
+    y = -view.height * 0.02;
+    f.dim = sign === 0 ? 0.75 : 1;
+    shared.uCalm.value.set(sign, 0, sign === 0 ? -1 : 0.28, sign === 0 ? 0 : 0.55);
+    shared.uCalmLow.value = 0.05;
+  }
+  f.place.position.set(x, y, 0);
+  f.place.scale.setScalar(diameter / 4);  // the shapes are about 4 units across
+  const reach = diameter * 0.45;
+  shared.uFade.value.set(9 - reach, 9 + reach);
+  setIntensity(f);
+  setNodeSize(f);
+}
+
+// How much of each shape the morph shows. The line changes mostly in the middle of a crossing (the
+// cube sharpens it), the tube evenly, and the tube draws in while they cross: a wide tube never
+// carries the next shape's tight windings, which would crowd into ruffles. cross is 0 on a shape
+// and 1 halfway between two.
+function morphWeights(morph) {
+  const w = [0, 1, 2].map((i) => Math.max(0, 1 - Math.abs(morph - i)));
+  const smooth = w.map((v) => v * v * (3 - 2 * v)), total = smooth[0] + smooth[1] + smooth[2] || 1;
+  const tube = smooth.map((v) => v / total);
+  const cubed = tube.map((v) => v * v * v), cubedTotal = cubed[0] + cubed[1] + cubed[2] || 1;
+  const line = cubed.map((v) => v / cubedTotal);
+  const cross = Math.min(1, 2 * (1 - tube[0] * tube[0] - tube[1] * tube[1] - tube[2] * tube[2]));
+  return { tube, line, cross };
+}
+
+function moveForm(f, time, delta) {
+  const { stage, shared, shapes } = f;
+  const jump = stage.still || stage.clock.frame === 0;
+  const ease = (value, target, rate) => (jump ? target : THREE.MathUtils.damp(value, target, rate, delta));
+  // Progress walks the three shapes: 0 the first, 0.5 the second, 1 the third, smoothly between.
+  f.morph = ease(f.morph, stage.progressEased * 2, 2.2);
+  const { tube, line, cross } = morphWeights(f.morph);
+  shared.uWeights.value.set(...line);
+  shared.uTubeWeights.value.set(...tube);
+  shared.uNarrow.value = 1 - 0.4 * cross;
+  const mixed = (key, k = line) => k[0] * shapes[0][key] + k[1] * shapes[1][key] + k[2] * shapes[2][key];
+  const tilt = mixed("tilt");
+  shared.uBend.value = mixed("bend");
+  shared.uReach.value = mixed("reach");
+  // A thin tube packs its strands close together: draw each fainter so it does not burn out, and a
+  // little fainter again mid-crossing, where two shapes share the strands.
+  shared.uIntensity.value = f.intensity * (1 - 0.2 * cross)
+    * (0.5 + 0.5 * THREE.MathUtils.smoothstep(mixed("thick", tube) * shared.uNarrow.value, 0.05, 0.22));
+  f.leanX = ease(f.leanX, stage.pointer.x, 1.6);
+  f.leanY = ease(f.leanY, stage.pointer.y, 1.6);
+  shared.uSwell.value = f.swell = ease(f.swell, f.swellTarget, 2.5);
+  shared.uThread.value = f.thread = ease(f.thread, f.threadTarget, 2.5);
+  for (let i = 0; i < DATA_SLOTS; i++) f.data[i] = ease(f.data[i], f.dataTarget[i], 2.5);
+  const clock = (shared.uClock.value = time * f.speed);
+  // One turn in 75 seconds round its own axis, a slow sway of the tilt, and a lean of up to
+  // about 7 degrees toward the pointer.
+  f.form.rotation.set(-tilt + 0.06 * Math.sin(clock * 0.13), 0.32 + 0.05 * Math.sin(clock * 0.09),
+                      f.seed * 1.7 + clock * (Math.PI * 2) / 75);
+  f.place.rotation.set(-f.leanY * 0.12, f.leanX * 0.12, 0);   // 0.12 radians: about 7 degrees
+}
+
+// Spread the list round the loop. Each slot takes the highest value of the stretch of the list it
+// covers (read as a line between the values, and round the loop), so a single peak never falls
+// between two slots, however long or short the list.
+function spreadData(list, dataTarget) {
+  const n = list.length;
+  const at = (x) => { const k = Math.floor(x), f = x - k, a = list[((k % n) + n) % n]; return a + (list[(((k + 1) % n) + n) % n] - a) * f; };
+  for (let i = 0; i < DATA_SLOTS; i++) {
+    if (!n) { dataTarget[i] = 0.5; continue; }
+    const lo = ((i - 0.5) / DATA_SLOTS) * n, hi = ((i + 0.5) / DATA_SLOTS) * n;
+    let top = Math.max(at(lo), at(hi));
+    for (let k = Math.ceil(lo); k <= hi; k++) top = Math.max(top, at(k));
+    dataTarget[i] = top;
+  }
 }

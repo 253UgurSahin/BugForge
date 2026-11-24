@@ -221,380 +221,459 @@ function darkPage(root) {
 }
 
 export function mount(root = document.body, options = {}) {
+  const m = startDepth(root, options);
+  findElements(m);
+  listen(m);
+  tone(m);
+  asleep(m);
+  still(m);
+  // Before the first frame, fold panels must already be turned away, or they would flash open.
+  if (!flat(m)) {
+    for (const item of m.items) {
+      if (item.kind === KINDS.fold) KINDS.fold.update(m, item, { top: 1e9, bottom: 1e9 }, { h: 1, batch: 0, dt: 0, now: 0 });
+    }
+  }
+  return depthHandle(m);
+}
+
+// What one mount() keeps: every function below takes it as `m`.
+function startDepth(root, options) {
   const o = { ...DEFAULTS, ...options };
   for (const name in DEFAULTS) { // a number option that is not a number (NaN, null, "x") keeps the default
     if (typeof DEFAULTS[name] !== "number") continue;
     const value = typeof o[name] === "string" && o[name].trim() ? Number(o[name]) : o[name];
     o[name] = Number.isFinite(value) ? value : DEFAULTS[name];
   }
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const hover = window.matchMedia("(hover: hover) and (pointer: fine)");
-  const scheme = window.matchMedia("(prefers-color-scheme: dark)");
-  const pointer = { x: 0, y: 0, has: false }, pauses = new Set(), items = [], cleanups = [];
-  let frame = 0, last = 0, forced = null, destroyed = false;
-
-  const flat = () => reduced.matches || document.documentElement.getAttribute("data-motion") === "paused";
-  const optionOf = (el, name) => {
-    const own = el.getAttribute("data-depth-" + name.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()));
-    if (own === null) return o[name];
-    if (typeof o[name] === "number") return Number.isFinite(Number(own)) ? Number(own) : o[name];
-    return typeof o[name] === "boolean" ? own !== "false" : own;
+  return {
+    o, root,
+    reduced: window.matchMedia("(prefers-reduced-motion: reduce)"),
+    hover: window.matchMedia("(hover: hover) and (pointer: fine)"),
+    scheme: window.matchMedia("(prefers-color-scheme: dark)"),
+    pointer: { x: 0, y: 0, has: false }, pauses: new Set(), items: [], cleanups: [],
+    frame: 0, last: 0, forced: null, destroyed: false,
+    touched: new Map(), // element -> its own inline values of what depth.js writes
   };
-  // 4 / ease: the spring's omega (see settle); never under 0.05 s, where it would divide by zero.
-  const pace = (el) => 4 / Math.max(0.05, optionOf(el, "ease"));
-  const layersOf = (el) => [...el.querySelectorAll("[data-depth-layer]")]
+}
+
+const flat = (m) => m.reduced.matches || document.documentElement.getAttribute("data-motion") === "paused";
+
+function optionOf(m, el, name) {
+  const o = m.o;
+  const own = el.getAttribute("data-depth-" + name.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()));
+  if (own === null) return o[name];
+  if (typeof o[name] === "number") return Number.isFinite(Number(own)) ? Number(own) : o[name];
+  return typeof o[name] === "boolean" ? own !== "false" : own;
+}
+
+// 4 / ease: the spring's omega (see settle); never under 0.05 s, where it would divide by zero.
+const pace = (m, el) => 4 / Math.max(0.05, optionOf(m, el, "ease"));
+
+function layersOf(el) {
+  return [...el.querySelectorAll("[data-depth-layer]")]
     .filter((layer) => layer.closest("[data-depth]") === el)
     .map((layer) => ({ el: layer, n: Number(layer.getAttribute("data-depth-layer")) || 0,
       top: !layer.parentElement.closest("[data-depth-layer]") ||
         layer.parentElement.closest("[data-depth-layer], [data-depth]") === el }));
-  const touched = new Map(); // element -> its own inline values of what depth.js writes
-  const write = (el, name, value) => {
-    if (!touched.has(el)) touched.set(el, WRITTEN.map((p) => [p, el.style.getPropertyValue(p)]));
-    if (value === "" || value === null) el.style.removeProperty(name);
-    else el.style.setProperty(name, value);
-  };
+}
 
-  // ---- Each kind: make(el) builds its state, update(item, rect, dt, view) moves it one frame and
-  // returns true once nothing moves any more.
-  const kinds = {
-    tilt: {
-      rect: cardRect,
-      make(item) {
-        Object.assign(item, { rx: spring(), ry: spring(), lift: spring(clamp(optionOf(item.el, "rest"))), gx: spring(), gy: spring() });
-        if (!optionOf(item.el, "glare")) return;
-        item.glare = item.el.appendChild(Object.assign(document.createElement("span"), { className: "depth-glare" }));
-        item.glare.setAttribute("aria-hidden", "true");
-      },
-      update(item, r, dt, view) {
-        const el = item.el, tilt = Math.min(MAX_TILT, optionOf(el, "tilt"));
-        const rest = clamp(optionOf(el, "rest")), [lx, ly] = pair(optionOf(el, "light"));
-        // Nobody points: a raised card keeps its glare where the light comes from.
-        let u = 0, v = 0, lift = rest, gu = lx * rest, gv = ly * rest;
-        if (!flat() && hover.matches) {
-          // Where the pointer is on the card, -1..1 from its middle to each edge.
-          const pu = (pointer.x - r.left - r.width / 2) / (r.width / 2);
-          const pv = (pointer.y - r.top - r.height / 2) / (r.height / 2);
-          if (pointer.has && Math.abs(pu) <= 1 && Math.abs(pv) <= 1) { u = gu = pu; v = gv = pv; lift = 1; }
-        } else if (!flat() && optionOf(el, "touch")) {
-          // No hover: lean with the card's place on the screen, as a sheet held below or above the eye.
-          v = gv = -TOUCH.lean * clamp((r.top + r.height / 2 - view.h / 2) / (view.h / 2), -1, 1);
-          lift = Math.max(rest, TOUCH.lift);
-        }
-        // The side under the pointer sinks: rotateY(+) moves the right edge away, rotateX(+) the top.
-        item.ry.to = u * tilt; item.rx.to = -v * tilt; item.lift.to = lift; item.gx.to = gu; item.gy.to = gv;
-        const w = pace(el);
-        let done = true;
-        for (const key of ["rx", "ry", "lift", "gx", "gy"]) done = settle(item[key], w, dt, flat()) && done;
-        // P at least twice the raise, so the card can never reach the eye.
-        const l = clamp(item.lift.x), raise = optionOf(el, "raise");
-        const P = Math.max(1, 2 * raise, optionOf(el, "perspective"));
-        // The card comes toward the eye with its lift. Lying still, that is drawn as its exact flat
-        // equal: translateZ(z) under perspective P about the middle is scale(P / (P - z)).
-        // Under 0.05 px (a 20th of a pixel) the raise is not drawn at all.
-        const z = flat() ? 0 : l * raise;
-        const flatNow = item.rx.x === 0 && item.ry.x === 0;
-        if (flatNow) write(el, "transform", z < 0.05 ? "" : `scale(${(P / (P - z)).toFixed(4)})`);
-        else write(el, "transform", `perspective(${P}px) translateZ(${px(z)}px) rotateX(${px(item.rx.x)}deg) rotateY(${px(item.ry.x)}deg)`);
-        item.drawn = { P, z: flatNow ? 0 : px(z), a: flatNow ? 0 : px(item.rx.x), b: flatNow ? 0 : px(item.ry.x) };
-        if (z >= 0.05) write(el, "z-index", "1"); else write(el, "z-index", "");
-        // The shade lies on the side away from the pointer: a gradient whose CSS angle a points from
-        // the pointer across the card, (sin a, -cos a) = -(gx, gy), so a = atan2(-gx, gy).
-        const reach = Math.min(1, Math.hypot(item.gx.x, item.gy.x));
-        for (const [name, value] of [["lift", l], ["sx", -item.ry.x / MAX_TILT], ["sy", item.rx.x / MAX_TILT],
-          ["gx", item.gx.x], ["gy", item.gy.x], ["gm", reach]]) write(el, "--depth-" + name, value ? value.toFixed(3) : "");
-        write(el, "--depth-ga", reach ? `${px((Math.atan2(-item.gx.x, item.gy.x) * 180) / Math.PI)}deg` : "");
-        // Layers rise only with the part of the lift that the pointer adds, so at rest they lie flat.
-        const rise = optionOf(el, "lift"), hand = rest < 1 ? clamp((l - rest) / (1 - rest)) : 0;
-        for (const layer of item.layers) {
-          const z = hand * layer.n * rise;
-          write(layer.el, "transform", Math.abs(z) < 0.01 ? "" : `translateZ(${px(z)}px)`);
-        }
-        return done;
-      },
-    },
+function write(m, el, name, value) {
+  if (!m.touched.has(el)) m.touched.set(el, WRITTEN.map((p) => [p, el.style.getPropertyValue(p)]));
+  if (value === "" || value === null) el.style.removeProperty(name);
+  else el.style.setProperty(name, value);
+}
 
-    stack: {
-      make(item) {
-        item.panels = [...item.el.children].filter((c) => c.nodeType === 1 && !c.hasAttribute("data-depth-skip"));
-        item.p = spring(flat() ? 1 : 0);
-        item.panels.forEach((panel, i) => write(panel, "z-index", String(item.panels.length - i)));
-      },
-      // Read before any write: the eye's distance and the point it looks from, in the stack's own
-      // pixels (perspective and perspective-origin in depth.css), where each panel's top left corner
-      // lies in the stack, and the height of each panel.
-      measure(item) {
-        const style = getComputedStyle(item.el);
-        item.P = parseFloat(style.perspective) || optionOf(item.el, "perspective");
-        item.origin = style.perspectiveOrigin.split(" ").map(parseFloat);
-        item.corners = item.panels.map((panel) => (panel.offsetParent === item.el
-          ? [panel.offsetLeft + item.el.clientLeft, panel.offsetTop + item.el.clientTop]
-          : [panel.offsetLeft - item.el.offsetLeft, panel.offsetTop - item.el.offsetTop]));
-        item.heights = item.panels.map((panel) => panel.offsetHeight);
-        item.width = item.el.clientWidth;
-      },
-      update(item, r, dt, view) {
-        const el = item.el, gap = optionOf(el, "stackGap"), depth = optionOf(el, "stackDepth");
-        const P = Math.max(1, item.P || optionOf(el, "perspective"));
-        // 0 as the stack's top enters at the bottom, 1 once its middle reaches the middle of the screen.
-        item.p.to = flat() ? 1 : clamp(2 * (forced ?? (view.h - r.top) / (view.h + r.height)));
-        const done = settle(item.p, pace(el), dt, flat());
-        const n = item.panels.length, lag = n > 1 ? ENTRY.lag / (n - 1) : 0;
-        // The whole stack stands turned a few degrees, about the middle of its front panel, so its
-        // depth shows in a still picture as well. Flat and still: no turn, the flat cascade.
-        const [tx, ty] = flat() ? [0, 0] : pair(optionOf(el, "stackTurn"));
-        const cx = Math.round((item.width || 0) / 2), cy = Math.round((item.heights[0] || 0) / 2);
-        const turn = tx || ty ? `translate(${cx}px, ${cy}px) rotateX(${tx}deg) rotateY(${ty}deg) translate(${-cx}px, ${-cy}px) ` : "";
-        item.panels.forEach((panel, i) => {
-          // Each panel has its own window of the progress: the front one goes first.
-          const t = smooth(clamp((item.p.x - i * lag) / (1 - (n - 1) * lag)));
-          const y = mix(ENTRY.drop + i * gap * ENTRY.fan, -i * gap, t);
-          const z = mix(-depth * (ENTRY.far + i * ENTRY.farStep), -i * depth, t);
-          const tip = mix(ENTRY.tip, 0, t), h = item.heights[i];
-          // Shade and shadow stay fixed per panel while it moves: changing them would repaint the
-          // whole panel every frame, where a transform alone is only composited.
-          write(panel, "--depth-dim", Math.min(PANEL.dimMost, i * PANEL.dim).toFixed(2));
-          write(panel, "--depth-lift", Math.max(0, 1 - i * PANEL.shadowStep).toFixed(2));
-          write(panel, "transform-origin", "0 0");
-          // Below a 100th of a degree, a 100th of a pixel deep and half a pixel high: nothing to draw.
-          if (tip > 0.01) {
-            // Standing up: turned back about its bottom edge, rising from below and far behind.
-            write(panel, "transform", `${turn}translate3d(0, ${px(y + h)}px, ${px(z)}px) rotateX(${px(tip)}deg) translateY(${-h}px)`);
-          } else if (turn) {
-            write(panel, "transform", `${turn}translate3d(0, ${px(y)}px, ${px(z)}px)`);
-          } else if (Math.abs(z) < 0.01 && Math.abs(y) < 0.5) {
-            write(panel, "transform", "");
-          } else {
-            // At rest, the same picture drawn flat: under perspective P a point z deep is scaled by
-            // s = P / (P - z) toward the eye point. As a 2D transform about the panel's own top left
-            // corner: move the eye point (seen from that corner) to 0, scale by s, move back, then
-            // the offset y (also scaled). Flat layers stay crisp; on whole pixels they stay sharp.
-            const s = P / (P - z), [ox, oy] = item.origin, [left, top] = item.corners[i] || [0, 0];
-            write(panel, "transform", `translate(${Math.round((ox - left) * (1 - s))}px, ${Math.round((oy - top) * (1 - s) + y * s)}px) scale(${s.toFixed(4)})`);
-          }
-        });
-        return done;
-      },
-    },
+// ---- Each kind: make(m, item) builds its state, update(m, item, rect, view) moves it one frame
+// (view: the screen's height h, the folds opened so far this frame, the step dt in seconds and the
+// time now) and returns true once nothing moves any more.
 
-    fold: {
-      make(item) {
-        const f = flat() ? 1 : 0; // f: how far it has opened, 0..1, along a fixed clock
-        Object.assign(item, { f, goal: f, from: f, since: 0, open: Boolean(f), startAt: 0 });
-      },
-      update(item, r, dt, view, now) {
-        const el = item.el, closed = optionOf(el, "fold");
-        if (flat()) Object.assign(item, { open: true, f: 1, goal: 1, from: 1 });
-        const inView = r.top < view.h * FOLD.below && r.bottom > view.h * FOLD.above;
-        if (!item.open && inView) {
-          item.open = true;
-          item.startAt = now + view.batch * optionOf(el, "foldStagger") * 1000;
-          view.batch += 1;
-        } else if (item.open && !optionOf(el, "foldOnce") && !flat() && (r.top > view.h || r.bottom < 0)) {
-          item.open = false;
-        }
-        // A page turn has a fixed length (foldTime) and ends exactly flat, where a spring's long tail
-        // would leave a row of panels a degree crooked. Its pace is a quartic ease-out,
-        // 1 - (1 - f)^4: fast off the hinge, then a long, soft landing.
-        // The clock is the wall clock, not the sum of frame steps, so a slow device ends on time too.
-        const target = item.open && now >= item.startAt ? 1 : 0;
-        if (target !== item.goal) Object.assign(item, { goal: target, from: item.f, since: now });
-        const run = (now - item.since) / 1000 / optionOf(el, "foldTime");
-        item.f = clamp(target ? item.from + run : item.from - run);
-        const done = item.f === target && now >= item.startAt;
-        const a = closed * Math.pow(1 - item.f, 4);
-        const [hinge, axis, sign] = HINGES[el.getAttribute("data-depth-axis")] || HINGES.left;
-        write(el, "transform-origin", a ? hinge : "");
-        write(el, "transform", a ? `perspective(${Math.max(1, optionOf(el, "perspective"))}px) ${axis}(${px(sign * a)}deg)` : "");
-        // A page turned away catches less light: the shade grows with the angle. The first fifth of
-        // the turn also fades it in, so the thin edge-on sliver never pops.
-        write(el, "--depth-shade", a ? (FOLD.shade * Math.sin(a * RAD)).toFixed(3) : "");
-        write(el, "opacity", a > closed * 0.8 ? (clamp((closed - a) / (closed * 0.2))).toFixed(3) : "");
-        return done;
-      },
-    },
+function makeTilt(m, item) {
+  Object.assign(item, { rx: spring(), ry: spring(), lift: spring(clamp(optionOf(m, item.el, "rest"))), gx: spring(), gy: spring() });
+  if (!optionOf(m, item.el, "glare")) return;
+  item.glare = item.el.appendChild(Object.assign(document.createElement("span"), { className: "depth-glare" }));
+  item.glare.setAttribute("aria-hidden", "true");
+}
 
-    scene: {
-      make(item) { Object.assign(item, { px: spring(), py: spring(), d: spring(), t: 0 }); },
-      update(item, r, dt, view) {
-        const el = item.el, still = flat();
-        // Its own slow life (DRIFT): a clock that runs only while the scene is drawn, and a sway that
-        // fades in over the first seconds so the first frame is the resting picture. A sway of 2 s
-        // or less would be a shiver, not a sway.
-        const sway = still ? 0 : Math.max(0, optionOf(el, "drift"));
-        item.t = sway ? item.t + dt : 0;
-        const period = Math.max(2, optionOf(el, "driftTime")), wake = smooth(clamp(item.t / DRIFT.wake));
-        const wave = (part, phase) => sway * wake * Math.sin((TAU * item.t) / (period * part) + phase);
-        let u = 0, v = 0;
-        if (!still && pointer.has && hover.matches) {
-          u = clamp((pointer.x - r.left - r.width / 2) / (r.width / 2), -1, 1);
-          v = clamp((pointer.y - r.top - r.height / 2) / (r.height / 2), -1, 1);
-          if (pointer.y < r.top || pointer.y > r.bottom) u = v = 0;
-        }
-        // Scroll: -1 below, 0 with its middle in the middle of the screen, 1 above.
-        const d = still ? 0 : 2 * (forced ?? (view.h - r.top) / (view.h + r.height)) - 1;
-        item.px.to = u; item.py.to = v; item.d.to = clamp(d, -1, 1);
-        const w = pace(el);
-        let done = true;
-        for (const key of ["px", "py", "d"]) done = settle(item[key], w, dt, still) && done;
-        const shift = optionOf(el, "shift"), drift = optionOf(el, "scrollShift"), turn = optionOf(el, "turn");
-        item.layers.forEach((layer, k) => {
-          // Parallax: a near layer (n > 0) moves against the pointer, a far one (n < 0) with it, each by
-          // its number; with scroll, near layers rise faster than the page and far ones lag behind.
-          // The sway: front layers turn a fraction of a degree, every layer floats a few pixels by its
-          // number (a layer 0 as if it were 1), each on its own phase, so nothing moves in step.
-          const front = layer.top && layer.n > 0, phase = k * DRIFT.spread + layer.n * DRIFT.byNumber;
-          const x = -item.px.x * layer.n * shift + wave(DRIFT.paceAcross, phase + DRIFT.offAcross) * layer.n * DRIFT.across;
-          const y = -item.py.x * layer.n * shift - item.d.x * layer.n * drift
-            + wave(DRIFT.paceUpDown, phase + DRIFT.offUpDown) * (layer.n || 1) * DRIFT.upDown;
-          const ry = front ? item.px.x * turn + wave(1, phase) : 0;
-          const rx = front ? -item.py.x * turn + wave(DRIFT.paceNod, phase + DRIFT.offNod) * DRIFT.nod : 0;
-          const moving = !done || ry !== 0 || rx !== 0 || sway > 0;
-          const tx = moving ? px(x) : Math.round(x), ty = moving ? px(y) : Math.round(y);
-          if (ry || rx) write(layer.el, "transform", `translate3d(${tx}px, ${ty}px, 0) rotateX(${px(rx)}deg) rotateY(${px(ry)}deg)`);
-          else write(layer.el, "transform", tx || ty ? `translate(${tx}px, ${ty}px)` : "");
-        });
-        return done && !sway;
-      },
-    },
-  };
+function updateTilt(m, item, r, view) {
+  aimTilt(m, item, r, view);
+  const w = pace(m, item.el);
+  let done = true;
+  for (const key of ["rx", "ry", "lift", "gx", "gy"]) done = settle(item[key], w, view.dt, flat(m)) && done;
+  drawTilt(m, item);
+  return done;
+}
 
-  // ---- Find the elements.
+// Where a tilt card's springs go: toward the pointer, by its place on a touch screen, or to rest.
+function aimTilt(m, item, r, view) {
+  const el = item.el, tilt = Math.min(MAX_TILT, optionOf(m, el, "tilt")), pointer = m.pointer;
+  const rest = clamp(optionOf(m, el, "rest")), [lx, ly] = pair(optionOf(m, el, "light"));
+  // Nobody points: a raised card keeps its glare where the light comes from.
+  let u = 0, v = 0, lift = rest, gu = lx * rest, gv = ly * rest;
+  if (!flat(m) && m.hover.matches) {
+    // Where the pointer is on the card, -1..1 from its middle to each edge.
+    const pu = (pointer.x - r.left - r.width / 2) / (r.width / 2);
+    const pv = (pointer.y - r.top - r.height / 2) / (r.height / 2);
+    if (pointer.has && Math.abs(pu) <= 1 && Math.abs(pv) <= 1) { u = gu = pu; v = gv = pv; lift = 1; }
+  } else if (!flat(m) && optionOf(m, el, "touch")) {
+    // No hover: lean with the card's place on the screen, as a sheet held below or above the eye.
+    v = gv = -TOUCH.lean * clamp((r.top + r.height / 2 - view.h / 2) / (view.h / 2), -1, 1);
+    lift = Math.max(rest, TOUCH.lift);
+  }
+  // The side under the pointer sinks: rotateY(+) moves the right edge away, rotateX(+) the top.
+  item.ry.to = u * tilt; item.rx.to = -v * tilt; item.lift.to = lift; item.gx.to = gu; item.gy.to = gv;
+}
+
+function drawTilt(m, item) {
+  const el = item.el;
+  // P at least twice the raise, so the card can never reach the eye.
+  const l = clamp(item.lift.x), raise = optionOf(m, el, "raise");
+  const P = Math.max(1, 2 * raise, optionOf(m, el, "perspective"));
+  // The card comes toward the eye with its lift. Lying still, that is drawn as its exact flat
+  // equal: translateZ(z) under perspective P about the middle is scale(P / (P - z)).
+  // Under 0.05 px (a 20th of a pixel) the raise is not drawn at all.
+  const z = flat(m) ? 0 : l * raise;
+  const flatNow = item.rx.x === 0 && item.ry.x === 0;
+  if (flatNow) write(m, el, "transform", z < 0.05 ? "" : `scale(${(P / (P - z)).toFixed(4)})`);
+  else write(m, el, "transform", `perspective(${P}px) translateZ(${px(z)}px) rotateX(${px(item.rx.x)}deg) rotateY(${px(item.ry.x)}deg)`);
+  item.drawn = { P, z: flatNow ? 0 : px(z), a: flatNow ? 0 : px(item.rx.x), b: flatNow ? 0 : px(item.ry.x) };
+  if (z >= 0.05) write(m, el, "z-index", "1"); else write(m, el, "z-index", "");
+  // The shade lies on the side away from the pointer: a gradient whose CSS angle a points from
+  // the pointer across the card, (sin a, -cos a) = -(gx, gy), so a = atan2(-gx, gy).
+  const reach = Math.min(1, Math.hypot(item.gx.x, item.gy.x));
+  for (const [name, value] of [["lift", l], ["sx", -item.ry.x / MAX_TILT], ["sy", item.rx.x / MAX_TILT],
+    ["gx", item.gx.x], ["gy", item.gy.x], ["gm", reach]]) write(m, el, "--depth-" + name, value ? value.toFixed(3) : "");
+  write(m, el, "--depth-ga", reach ? `${px((Math.atan2(-item.gx.x, item.gy.x) * 180) / Math.PI)}deg` : "");
+  // Layers rise only with the part of the lift that the pointer adds, so at rest they lie flat.
+  const rest = clamp(optionOf(m, el, "rest"));
+  const rise = optionOf(m, el, "lift"), hand = rest < 1 ? clamp((l - rest) / (1 - rest)) : 0;
+  for (const layer of item.layers) {
+    const lz = hand * layer.n * rise;
+    write(m, layer.el, "transform", Math.abs(lz) < 0.01 ? "" : `translateZ(${px(lz)}px)`);
+  }
+}
+
+function makeStack(m, item) {
+  item.panels = [...item.el.children].filter((c) => c.nodeType === 1 && !c.hasAttribute("data-depth-skip"));
+  item.p = spring(flat(m) ? 1 : 0);
+  item.panels.forEach((panel, i) => write(m, panel, "z-index", String(item.panels.length - i)));
+}
+
+// Read before any write: the eye's distance and the point it looks from, in the stack's own
+// pixels (perspective and perspective-origin in depth.css), where each panel's top left corner
+// lies in the stack, and the height of each panel.
+function measureStack(m, item) {
+  const style = getComputedStyle(item.el);
+  item.P = parseFloat(style.perspective) || optionOf(m, item.el, "perspective");
+  item.origin = style.perspectiveOrigin.split(" ").map(parseFloat);
+  item.corners = item.panels.map((panel) => (panel.offsetParent === item.el
+    ? [panel.offsetLeft + item.el.clientLeft, panel.offsetTop + item.el.clientTop]
+    : [panel.offsetLeft - item.el.offsetLeft, panel.offsetTop - item.el.offsetTop]));
+  item.heights = item.panels.map((panel) => panel.offsetHeight);
+  item.width = item.el.clientWidth;
+}
+
+function updateStack(m, item, r, view) {
+  const el = item.el, gap = optionOf(m, el, "stackGap"), depth = optionOf(m, el, "stackDepth");
+  const P = Math.max(1, item.P || optionOf(m, el, "perspective"));
+  // 0 as the stack's top enters at the bottom, 1 once its middle reaches the middle of the screen.
+  item.p.to = flat(m) ? 1 : clamp(2 * (m.forced ?? (view.h - r.top) / (view.h + r.height)));
+  const done = settle(item.p, pace(m, el), view.dt, flat(m));
+  const n = item.panels.length, lag = n > 1 ? ENTRY.lag / (n - 1) : 0;
+  // The whole stack stands turned a few degrees, about the middle of its front panel, so its
+  // depth shows in a still picture as well. Flat and still: no turn, the flat cascade.
+  const [tx, ty] = flat(m) ? [0, 0] : pair(optionOf(m, el, "stackTurn"));
+  const cx = Math.round((item.width || 0) / 2), cy = Math.round((item.heights[0] || 0) / 2);
+  const turn = tx || ty ? `translate(${cx}px, ${cy}px) rotateX(${tx}deg) rotateY(${ty}deg) translate(${-cx}px, ${-cy}px) ` : "";
+  const look = { gap, depth, P, n, lag, turn };
+  item.panels.forEach((panel, i) => placePanel(m, item, i, look));
+  return done;
+}
+
+function placePanel(m, item, i, { gap, depth, P, n, lag, turn }) {
+  const panel = item.panels[i];
+  // Each panel has its own window of the progress: the front one goes first.
+  const t = smooth(clamp((item.p.x - i * lag) / (1 - (n - 1) * lag)));
+  const y = mix(ENTRY.drop + i * gap * ENTRY.fan, -i * gap, t);
+  const z = mix(-depth * (ENTRY.far + i * ENTRY.farStep), -i * depth, t);
+  const tip = mix(ENTRY.tip, 0, t), h = item.heights[i];
+  // Shade and shadow stay fixed per panel while it moves: changing them would repaint the
+  // whole panel every frame, where a transform alone is only composited.
+  write(m, panel, "--depth-dim", Math.min(PANEL.dimMost, i * PANEL.dim).toFixed(2));
+  write(m, panel, "--depth-lift", Math.max(0, 1 - i * PANEL.shadowStep).toFixed(2));
+  write(m, panel, "transform-origin", "0 0");
+  // Below a 100th of a degree, a 100th of a pixel deep and half a pixel high: nothing to draw.
+  if (tip > 0.01) {
+    // Standing up: turned back about its bottom edge, rising from below and far behind.
+    write(m, panel, "transform", `${turn}translate3d(0, ${px(y + h)}px, ${px(z)}px) rotateX(${px(tip)}deg) translateY(${-h}px)`);
+  } else if (turn) {
+    write(m, panel, "transform", `${turn}translate3d(0, ${px(y)}px, ${px(z)}px)`);
+  } else if (Math.abs(z) < 0.01 && Math.abs(y) < 0.5) {
+    write(m, panel, "transform", "");
+  } else {
+    // At rest, the same picture drawn flat: under perspective P a point z deep is scaled by
+    // s = P / (P - z) toward the eye point. As a 2D transform about the panel's own top left
+    // corner: move the eye point (seen from that corner) to 0, scale by s, move back, then
+    // the offset y (also scaled). Flat layers stay crisp; on whole pixels they stay sharp.
+    const s = P / (P - z), [ox, oy] = item.origin, [left, top] = item.corners[i] || [0, 0];
+    write(m, panel, "transform", `translate(${Math.round((ox - left) * (1 - s))}px, ${Math.round((oy - top) * (1 - s) + y * s)}px) scale(${s.toFixed(4)})`);
+  }
+}
+
+function makeFold(m, item) {
+  const f = flat(m) ? 1 : 0; // f: how far it has opened, 0..1, along a fixed clock
+  Object.assign(item, { f, goal: f, from: f, since: 0, open: Boolean(f), startAt: 0 });
+}
+
+function updateFold(m, item, r, view) {
+  const el = item.el, now = view.now;
+  triggerFold(m, item, r, view);
+  // A page turn has a fixed length (foldTime) and ends exactly flat, where a spring's long tail
+  // would leave a row of panels a degree crooked. Its pace is a quartic ease-out,
+  // 1 - (1 - f)^4: fast off the hinge, then a long, soft landing.
+  // The clock is the wall clock, not the sum of frame steps, so a slow device ends on time too.
+  const target = item.open && now >= item.startAt ? 1 : 0;
+  if (target !== item.goal) Object.assign(item, { goal: target, from: item.f, since: now });
+  const run = (now - item.since) / 1000 / optionOf(m, el, "foldTime");
+  item.f = clamp(target ? item.from + run : item.from - run);
+  const done = item.f === target && now >= item.startAt;
+  drawFold(m, item);
+  return done;
+}
+
+// Open a fold that came into view (after the ones that came with it), or close it once it has
+// left again when foldOnce is false.
+function triggerFold(m, item, r, view) {
+  const el = item.el;
+  if (flat(m)) Object.assign(item, { open: true, f: 1, goal: 1, from: 1 });
+  const inView = r.top < view.h * FOLD.below && r.bottom > view.h * FOLD.above;
+  if (!item.open && inView) {
+    item.open = true;
+    item.startAt = view.now + view.batch * optionOf(m, el, "foldStagger") * 1000;
+    view.batch += 1;
+  } else if (item.open && !optionOf(m, el, "foldOnce") && !flat(m) && (r.top > view.h || r.bottom < 0)) {
+    item.open = false;
+  }
+}
+
+function drawFold(m, item) {
+  const el = item.el, closed = optionOf(m, el, "fold");
+  const a = closed * Math.pow(1 - item.f, 4);
+  const [hinge, axis, sign] = HINGES[el.getAttribute("data-depth-axis")] || HINGES.left;
+  write(m, el, "transform-origin", a ? hinge : "");
+  write(m, el, "transform", a ? `perspective(${Math.max(1, optionOf(m, el, "perspective"))}px) ${axis}(${px(sign * a)}deg)` : "");
+  // A page turned away catches less light: the shade grows with the angle. The first fifth of
+  // the turn also fades it in, so the thin edge-on sliver never pops.
+  write(m, el, "--depth-shade", a ? (FOLD.shade * Math.sin(a * RAD)).toFixed(3) : "");
+  write(m, el, "opacity", a > closed * 0.8 ? (clamp((closed - a) / (closed * 0.2))).toFixed(3) : "");
+}
+
+function makeScene(m, item) {
+  Object.assign(item, { px: spring(), py: spring(), d: spring(), t: 0 });
+}
+
+function updateScene(m, item, r, view) {
+  const el = item.el, still = flat(m), pointer = m.pointer, dt = view.dt;
+  // Its own slow life (DRIFT): a clock that runs only while the scene is drawn, and a sway that
+  // fades in over the first seconds so the first frame is the resting picture. A sway of 2 s
+  // or less would be a shiver, not a sway.
+  const sway = still ? 0 : Math.max(0, optionOf(m, el, "drift"));
+  item.t = sway ? item.t + dt : 0;
+  const period = Math.max(2, optionOf(m, el, "driftTime")), wake = smooth(clamp(item.t / DRIFT.wake));
+  const wave = (part, phase) => sway * wake * Math.sin((TAU * item.t) / (period * part) + phase);
+  let u = 0, v = 0;
+  if (!still && pointer.has && m.hover.matches) {
+    u = clamp((pointer.x - r.left - r.width / 2) / (r.width / 2), -1, 1);
+    v = clamp((pointer.y - r.top - r.height / 2) / (r.height / 2), -1, 1);
+    if (pointer.y < r.top || pointer.y > r.bottom) u = v = 0;
+  }
+  // Scroll: -1 below, 0 with its middle in the middle of the screen, 1 above.
+  const d = still ? 0 : 2 * (m.forced ?? (view.h - r.top) / (view.h + r.height)) - 1;
+  item.px.to = u; item.py.to = v; item.d.to = clamp(d, -1, 1);
+  const w = pace(m, el);
+  let done = true;
+  for (const key of ["px", "py", "d"]) done = settle(item[key], w, dt, still) && done;
+  const motion = { item, wave, sway, done, shift: optionOf(m, el, "shift"), drift: optionOf(m, el, "scrollShift"),
+                   turn: optionOf(m, el, "turn") };
+  item.layers.forEach((layer, k) => moveLayer(m, layer, k, motion));
+  return done && !sway;
+}
+
+// Parallax: a near layer (n > 0) moves against the pointer, a far one (n < 0) with it, each by
+// its number; with scroll, near layers rise faster than the page and far ones lag behind.
+// The sway: front layers turn a fraction of a degree, every layer floats a few pixels by its
+// number (a layer 0 as if it were 1), each on its own phase, so nothing moves in step.
+function moveLayer(m, layer, k, { item, wave, sway, done, shift, drift, turn }) {
+  const front = layer.top && layer.n > 0, phase = k * DRIFT.spread + layer.n * DRIFT.byNumber;
+  const x = -item.px.x * layer.n * shift + wave(DRIFT.paceAcross, phase + DRIFT.offAcross) * layer.n * DRIFT.across;
+  const y = -item.py.x * layer.n * shift - item.d.x * layer.n * drift
+    + wave(DRIFT.paceUpDown, phase + DRIFT.offUpDown) * (layer.n || 1) * DRIFT.upDown;
+  const ry = front ? item.px.x * turn + wave(1, phase) : 0;
+  const rx = front ? -item.py.x * turn + wave(DRIFT.paceNod, phase + DRIFT.offNod) * DRIFT.nod : 0;
+  const moving = !done || ry !== 0 || rx !== 0 || sway > 0;
+  const tx = moving ? px(x) : Math.round(x), ty = moving ? px(y) : Math.round(y);
+  if (ry || rx) write(m, layer.el, "transform", `translate3d(${tx}px, ${ty}px, 0) rotateX(${px(rx)}deg) rotateY(${px(ry)}deg)`);
+  else write(m, layer.el, "transform", tx || ty ? `translate(${tx}px, ${ty}px)` : "");
+}
+
+const KINDS = {
+  tilt: { rect: cardRect, make: makeTilt, update: updateTilt },
+  stack: { make: makeStack, measure: measureStack, update: updateStack },
+  fold: { make: makeFold, update: updateFold },
+  scene: { make: makeScene, update: updateScene },
+};
+
+// ---- Find the elements.
+function findElements(m) {
+  const root = m.root;
   const found = [...(root.matches && root.matches("[data-depth]") ? [root] : []), ...root.querySelectorAll("[data-depth]")];
   for (const el of found) {
-    const kind = kinds[el.getAttribute("data-depth") || "tilt"]; // a bare data-depth is a tilt card
+    const kind = KINDS[el.getAttribute("data-depth") || "tilt"]; // a bare data-depth is a tilt card
     if (!kind || owned.has(el)) continue; // another live mount() already moves it
     owned.add(el);
     const item = { el, kind, visible: false, layers: layersOf(el) };
-    kind.make(item);
-    items.push(item);
+    kind.make(m, item);
+    m.items.push(item);
   }
+}
 
-  const measure = (item) => {
-    if (item.kind.measure) item.kind.measure(item);
-    return item.kind.rect ? item.kind.rect(item) : item.el.getBoundingClientRect();
-  };
+function measure(m, item) {
+  if (item.kind.measure) item.kind.measure(m, item);
+  return item.kind.rect ? item.kind.rect(item) : item.el.getBoundingClientRect();
+}
 
-  // ---- One frame loop for all of them. Reads every rectangle first, then writes, so the browser
-  // lays out at most once a frame.
-  function tick(now) {
-    frame = 0;
-    // A step is at most 50 ms: after a stall (a busy main thread) the motion goes on, it does not jump.
-    const dt = last ? Math.min(0.05, (now - last) / 1000) : 1 / 60;
-    last = now;
-    const view = { h: window.innerHeight || 1, batch: 0 };
-    const live = items.filter((item) => item.visible);
-    const rects = live.map(measure);
-    let busy = false;
-    live.forEach((item, i) => {
-      const done = item.kind.update(item, rects[i], dt, view, now);
-      if (done) item.el.removeAttribute("data-depth-moving"); else item.el.setAttribute("data-depth-moving", "");
-      busy = busy || !done;
-    });
-    if (busy && !flat()) wake(); else last = 0;
-  }
-  // Flat and still needs no frames: still() draws every change of that state at once.
-  function wake() {
-    if (frame || destroyed || pauses.size || document.hidden || flat()) return;
-    frame = window.requestAnimationFrame(tick);
-  }
-  const stop = () => { if (frame) window.cancelAnimationFrame(frame); frame = 0; last = 0; };
-  // A still picture: one frame with no time passing, every eased value set straight to its target.
-  function still() {
-    for (const item of items) item.el.toggleAttribute("data-depth-flat", flat());
-    if (!flat()) { wake(); return; }
-    stop();
-    const view = { h: window.innerHeight || 1, batch: 0 };
-    for (const item of items) {
-      item.kind.update(item, measure(item), 0, view, performance.now());
-      item.el.removeAttribute("data-depth-moving");
-    }
-  }
+// ---- One frame loop for all of them. Reads every rectangle first, then writes, so the browser
+// lays out at most once a frame.
+function tick(m, now) {
+  m.frame = 0;
+  // A step is at most 50 ms: after a stall (a busy main thread) the motion goes on, it does not jump.
+  const dt = m.last ? Math.min(0.05, (now - m.last) / 1000) : 1 / 60;
+  m.last = now;
+  const view = { h: window.innerHeight || 1, batch: 0, dt, now };
+  const live = m.items.filter((item) => item.visible);
+  const rects = live.map((item) => measure(m, item));
+  let busy = false;
+  live.forEach((item, i) => {
+    const done = item.kind.update(m, item, rects[i], view);
+    if (done) item.el.removeAttribute("data-depth-moving"); else item.el.setAttribute("data-depth-moving", "");
+    busy = busy || !done;
+  });
+  if (busy && !flat(m)) wake(m); else m.last = 0;
+}
 
-  // Off screen, paused or flat: depth.css pauses the page's own CSS animations inside the element.
-  function asleep() {
-    for (const item of items) item.el.toggleAttribute("data-depth-asleep", !item.visible || pauses.size > 0 || flat());
-  }
+// Flat and still needs no frames: still() draws every change of that state at once.
+function wake(m) {
+  if (m.frame || m.destroyed || m.pauses.size || document.hidden || flat(m)) return;
+  m.frame = window.requestAnimationFrame((now) => tick(m, now));
+}
 
-  // ---- The page's colours: light or dark decides how shadows and glare are mixed in depth.css.
-  function tone() {
-    const dark = darkPage(root.nodeType === 1 ? root : document.body);
-    for (const item of items) item.el.setAttribute("data-depth-tone", dark ? "dark" : "light");
-  }
+function stop(m) {
+  if (m.frame) window.cancelAnimationFrame(m.frame);
+  m.frame = 0;
+  m.last = 0;
+}
 
-  // ---- Listeners, each with its remover.
+// A still picture: one frame with no time passing, every eased value set straight to its target.
+function still(m) {
+  for (const item of m.items) item.el.toggleAttribute("data-depth-flat", flat(m));
+  if (!flat(m)) { wake(m); return; }
+  stop(m);
+  const view = { h: window.innerHeight || 1, batch: 0, dt: 0, now: 0 };
+  for (const item of m.items) {
+    view.now = performance.now();
+    item.kind.update(m, item, measure(m, item), view);
+    item.el.removeAttribute("data-depth-moving");
+  }
+}
+
+// Off screen, paused or flat: depth.css pauses the page's own CSS animations inside the element.
+function asleep(m) {
+  for (const item of m.items) item.el.toggleAttribute("data-depth-asleep", !item.visible || m.pauses.size > 0 || flat(m));
+}
+
+// ---- The page's colours: light or dark decides how shadows and glare are mixed in depth.css.
+function tone(m) {
+  const dark = darkPage(m.root.nodeType === 1 ? m.root : document.body);
+  for (const item of m.items) item.el.setAttribute("data-depth-tone", dark ? "dark" : "light");
+}
+
+// ---- Listeners, each with its remover.
+function listen(m) {
   const on = (target, type, fn, opts = { passive: true }) => {
     target.addEventListener(type, fn, opts);
-    cleanups.push(() => target.removeEventListener(type, fn, opts));
+    m.cleanups.push(() => target.removeEventListener(type, fn, opts));
   };
+  const awake = () => wake(m), again = () => { asleep(m); still(m); };
   on(window, "pointermove", (e) => {
     if (e.pointerType === "touch") return; // touch tilts with the scroll instead
-    pointer.x = e.clientX; pointer.y = e.clientY; pointer.has = true; wake();
+    Object.assign(m.pointer, { x: e.clientX, y: e.clientY, has: true }); wake(m);
   });
-  const gone = () => { pointer.has = false; wake(); };
+  const gone = () => { m.pointer.has = false; wake(m); };
   on(document.documentElement, "pointerleave", gone);
   on(window, "blur", gone);
   // Scroll events of an element do not bubble: listening in the capture phase on the document
   // hears every scroll, the page's own and that of a main area scrolling inside a fixed frame.
-  on(document, "scroll", wake, { capture: true, passive: true });
-  on(window, "resize", () => (flat() ? still() : wake()));
-  on(document, "visibilitychange", () => (document.hidden ? stop() : wake()));
-  on(reduced, "change", () => { asleep(); still(); });
-  on(hover, "change", wake);
-  on(scheme, "change", tone);
+  on(document, "scroll", awake, { capture: true, passive: true });
+  on(window, "resize", () => (flat(m) ? still(m) : wake(m)));
+  on(document, "visibilitychange", () => (document.hidden ? stop(m) : wake(m)));
+  on(m.reduced, "change", again);
+  on(m.hover, "change", awake);
+  on(m.scheme, "change", () => tone(m));
   const watcher = new MutationObserver((changes) => {
-    if (changes.some((c) => c.attributeName === "data-motion")) { asleep(); still(); }
-    else tone();
+    if (changes.some((c) => c.attributeName === "data-motion")) again();
+    else tone(m);
   });
   watcher.observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion", "data-theme", "class", "style"] });
   if (document.body) watcher.observe(document.body, { attributes: true, attributeFilter: ["data-theme", "class"] });
-  cleanups.push(() => watcher.disconnect());
-  if (typeof IntersectionObserver === "function") {
-    const seen = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        const item = items.find((it) => it.el === entry.target);
-        if (item) item.visible = entry.isIntersecting;
-      }
-      asleep();
-      if (flat()) still(); else wake();
-    }, { rootMargin: "15% 0px" }); // wakes a little before it is seen, so it is in place when it appears
-    for (const item of items) seen.observe(item.el);
-    cleanups.push(() => seen.disconnect());
-  } else {
-    for (const item of items) item.visible = true;
+  m.cleanups.push(() => watcher.disconnect());
+  watchView(m);
+}
+
+function watchView(m) {
+  if (typeof IntersectionObserver !== "function") {
+    for (const item of m.items) item.visible = true;
+    return;
   }
+  const seen = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const item = m.items.find((it) => it.el === entry.target);
+      if (item) item.visible = entry.isIntersecting;
+    }
+    asleep(m);
+    if (flat(m)) still(m); else wake(m);
+  }, { rootMargin: "15% 0px" }); // wakes a little before it is seen, so it is in place when it appears
+  for (const item of m.items) seen.observe(item.el);
+  m.cleanups.push(() => seen.disconnect());
+}
 
-  tone();
-  asleep();
-  still();
-  // Before the first frame, fold panels must already be turned away, or they would flash open.
-  if (!flat()) for (const item of items) if (item.kind === kinds.fold) kinds.fold.update(item, { top: 1e9, bottom: 1e9 }, 0, { h: 1, batch: 0 }, 0);
-
+function depthHandle(m) {
+  const { pointer, pauses } = m;
   return {
     stage: null,
-    setProgress(p) { forced = p === null || p === undefined ? null : clamp(Number(p) || 0); if (flat()) still(); else wake(); },
+    setProgress(p) { m.forced = p === null || p === undefined ? null : clamp(Number(p) || 0); if (flat(m)) still(m); else wake(m); },
     setData() {},
     setPointer(x, y) {
       const u = Number(x), v = Number(y);
       // Not a number (null, NaN, Infinity): let go, as if the pointer had left the page.
       if (x === null || y === null || !Number.isFinite(u) || !Number.isFinite(v)) pointer.has = false;
       else Object.assign(pointer, { x: ((clamp(u, -1, 1) + 1) / 2) * innerWidth, y: ((1 - clamp(v, -1, 1)) / 2) * innerHeight, has: true });
-      wake();
+      wake(m);
     },
-    pause(reason = "user") { pauses.add(reason); asleep(); stop(); },
-    resume(reason = "user") { pauses.delete(reason); asleep(); wake(); },
-    destroy() {
-      if (destroyed) return;
-      destroyed = true;
-      stop();
-      for (const cleanup of cleanups.splice(0)) cleanup();
-      for (const [el, saved] of touched) for (const [name, value] of saved) {
-        if (value) el.style.setProperty(name, value); else el.style.removeProperty(name);
-      }
-      for (const item of items) for (const mark of MARKS) item.el.removeAttribute(mark);
-      for (const item of items) if (item.glare) item.glare.remove();
-      for (const item of items) owned.delete(item.el);
-      touched.clear();
-      items.length = 0;
-    },
+    pause(reason = "user") { pauses.add(reason); asleep(m); stop(m); },
+    resume(reason = "user") { pauses.delete(reason); asleep(m); wake(m); },
+    destroy: () => destroy(m),
   };
+}
+
+function destroy(m) {
+  if (m.destroyed) return;
+  m.destroyed = true;
+  stop(m);
+  for (const cleanup of m.cleanups.splice(0)) cleanup();
+  for (const [el, saved] of m.touched) for (const [name, value] of saved) {
+    if (value) el.style.setProperty(name, value); else el.style.removeProperty(name);
+  }
+  for (const item of m.items) for (const mark of MARKS) item.el.removeAttribute(mark);
+  for (const item of m.items) if (item.glare) item.glare.remove();
+  for (const item of m.items) owned.delete(item.el);
+  m.touched.clear();
+  m.items.length = 0;
 }

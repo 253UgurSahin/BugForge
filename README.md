@@ -560,6 +560,11 @@ CI (`.github/workflows/test.yml`) runs on every push and pull request:
 - per stack profile: the container templates installed in a scratch folder, checked with
   `docker compose config -q` and `packcheck.py --fail-on low`.
 
+BugForge holds itself to its own audit: `python3 plugin/forge-check/craftcheck.py plugin` finds no
+duplicated code, swallowed errors or commented-out code in the skills, and no function of the 3D scene
+kit is over 60 lines. What it still lists (functions with four or more arguments, a few long scripts'
+functions) is known and gets smaller as code is touched.
+
 ## Releasing
 
 Every push to `main`, the default branch, is a release. `plugin/.claude-plugin/plugin.json` has no

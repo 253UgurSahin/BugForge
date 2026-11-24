@@ -290,87 +290,141 @@ export function createStage(element, options = {}) {
   // No element to draw in (a selector that matched nothing): that ends as a failed stage, not as a crash.
   const container = element && element.nodeType === 1 ? element : document.createElement("div");
   if (stages.has(container)) stages.get(container).destroy(); // mounted twice: hot reload, a double effect
+  const s = startState(container, element, options);
+  openContext(s);
+  const stage = makeStage(s);
+  stages.set(container, stage);
+
+  // 8. No WebGL (or no container): say so and stop here. Every method of the stage is already a no-op.
+  if (!s.renderer) {
+    container.setAttribute("data-scene", "fallback");
+    return stage;
+  }
+
+  // 9. Into the page, and the things that change after that.
+  enterPage(s);
+  watchSize(s);
+  watchTheme(s);
+  watchPointer(s);
+  watchContext(s);
+  update(s);
+  return stage;
+}
+
+// What one stage keeps between calls. Every function below takes it as `s`; s.stage is the object a
+// scene gets.
+function startState(container, element, options) {
   const o = { ...DEFAULTS, ...options };
-  const tokenNames = { ...TOKEN_NAMES, ...o.tokens };
-  const reducedQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
-  const coarse = window.matchMedia("(pointer: coarse)").matches;
-  const lists = { frame: [], resize: [], tokens: [], quality: [], pointer: [], destroy: [] };
-  const cleanups = [];   // one function per listener and observer: destroy() runs them all
-  const pauses = new Set();
-  const posters = [];    // [poster element, its inline opacity, its inline transition]
-  let destroyed = false, inView = typeof IntersectionObserver !== "function", rafId = 0, last = null;
-  let dirty = true;      // the picture on screen is out of date (or there is none yet)
-  let live = false, auto = !TIERS.includes(o.quality), tokenSignature = null, madeRelative = false;
-  let samples = -WARM_UP, sampleTotal = 0, maxSide = 4096;
+  return {
+    o,
+    container,
+    element,
+    tokenNames: { ...TOKEN_NAMES, ...o.tokens },
+    reducedQuery: window.matchMedia("(prefers-reduced-motion: reduce)"),
+    darkQuery: window.matchMedia("(prefers-color-scheme: dark)"),
+    coarse: window.matchMedia("(pointer: coarse)").matches,
+    lists: { frame: [], resize: [], tokens: [], quality: [], pointer: [], destroy: [] },
+    cleanups: [],   // one function per listener and observer: destroy() runs them all
+    pauses: new Set(),
+    posters: [],    // [poster element, its inline opacity, its inline transition]
+    destroyed: false, inView: typeof IntersectionObserver !== "function", rafId: 0, last: null,
+    dirty: true,    // the picture on screen is out of date (or there is none yet)
+    live: false, auto: !TIERS.includes(o.quality), tokenSignature: null, madeRelative: false,
+    samples: -WARM_UP, sampleTotal: 0, maxSide: 4096,
+    canvas: null, renderer: null, gl: null, compiled: true, compiling: false, stage: null,
+  };
+}
 
-  const listen = (target, type, fn, how) => {
+// listen(target, type, fn, how) for one stage: the listener comes off again in destroy().
+function listener(s) {
+  return (target, type, fn, how) => {
     target.addEventListener(type, fn, how);
-    cleanups.push(() => target.removeEventListener(type, fn, how));
+    s.cleanups.push(() => target.removeEventListener(type, fn, how));
   };
-  const watch = (query, fn) => { // Safari before 14 has addListener only
-    if (query.addEventListener) listen(query, "change", fn);
-    else if (query.addListener) { query.addListener(fn); cleanups.push(() => query.removeListener(fn)); }
-  };
-  const emit = (list, ...args) => { for (const fn of list.slice()) fn(...args, stage); };
-  const subscribe = (list, fn, now) => {
-    if (destroyed || !renderer || typeof fn !== "function") return nothing;
-    list.push(fn);
-    const first = now && now();
-    if (first) fn(first, stage);
-    return () => { const at = list.indexOf(fn); if (at !== -1) list.splice(at, 1); };
-  };
+}
 
-  // 1. The canvas and the WebGL context. The context is asked for here, not by three, so a browser
-  //    without WebGL 2 ends in the fallback quietly instead of in an exception and a console error.
-  const canvas = document.createElement("canvas");
+function watch(s, query, fn) { // Safari before 14 has addListener only
+  if (query.addEventListener) listener(s)(query, "change", fn);
+  else if (query.addListener) { query.addListener(fn); s.cleanups.push(() => query.removeListener(fn)); }
+}
+
+function emit(s, list, ...args) {
+  for (const fn of list.slice()) fn(...args, s.stage);
+}
+
+function subscribe(s, list, fn, now) {
+  if (s.destroyed || !s.renderer || typeof fn !== "function") return nothing;
+  list.push(fn);
+  const first = now && now();
+  if (first) fn(first, s.stage);
+  return () => { const at = list.indexOf(fn); if (at !== -1) list.splice(at, 1); };
+}
+
+// 1. The canvas and the WebGL context. The context is asked for here, not by three, so a browser
+//    without WebGL 2 ends in the fallback quietly instead of in an exception and a console error.
+function openContext(s) {
+  const o = s.o;
+  const canvas = (s.canvas = document.createElement("canvas"));
   canvas.setAttribute("aria-hidden", "true");
   canvas.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;display:block;"
     + "pointer-events:none;opacity:0"; // invisible until the first frame is drawn
-  let renderer = null, gl = null;
   try {
     const wanted = { alpha: true, antialias: o.antialias !== false, depth: true, stencil: false,
                      premultipliedAlpha: true, powerPreference: "high-performance" };
-    if (container === element) gl = canvas.getContext("webgl2", wanted);
-    if (gl) {
-      renderer = new THREE.WebGLRenderer({ canvas, context: gl, alpha: true, antialias: o.antialias !== false,
-                                           premultipliedAlpha: true, stencil: false });
+    if (s.container === s.element) s.gl = canvas.getContext("webgl2", wanted);
+    if (s.gl) {
+      const renderer = new THREE.WebGLRenderer({ canvas, context: s.gl, alpha: true, antialias: o.antialias !== false,
+                                                 premultipliedAlpha: true, stencil: false });
       renderer.setClearColor(0x000000, 0);                 // transparent: the page is the background
       renderer.outputColorSpace = THREE.SRGBColorSpace;    // CSS colours are sRGB, and so is the canvas
       renderer.toneMapping = THREE.NoToneMapping;          // a token must come out as the colour it is
-      maxSide = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) || maxSide;
+      s.maxSide = s.gl.getParameter(s.gl.MAX_RENDERBUFFER_SIZE) || s.maxSide;
+      s.renderer = renderer;
     }
   } catch (error) {
-    renderer = null;
+    s.renderer = null;
   }
+  s.compiled = !s.renderer || typeof s.renderer.compile !== "function";
+}
 
+function makeCamera(option) {
+  if (option && option.isCamera) return option;
+  const c = { ...CAMERA, ...option };
+  const made = new THREE.PerspectiveCamera(c.fov, 1, c.near, c.far);
+  made.position.set(c.position[0], c.position[1], c.position[2]);
+  made.lookAt(c.lookAt[0], c.lookAt[1], c.lookAt[2]);
+  return made;
+}
+
+// The scene graph, the camera and the values a scene reads. A failed stage has them too.
+function makeParts(s) {
+  const names = Object.keys(s.tokenNames);
   const scene = new THREE.Scene();
-  const camera = o.camera && o.camera.isCamera ? o.camera : (() => {
-    const c = { ...CAMERA, ...o.camera };
-    const made = new THREE.PerspectiveCamera(c.fov, 1, c.near, c.far);
-    made.position.set(c.position[0], c.position[1], c.position[2]);
-    made.lookAt(c.lookAt[0], c.lookAt[1], c.lookAt[2]);
-    return made;
-  })();
+  const camera = makeCamera(s.o.camera);
   const clock = { time: 0, delta: 0, frame: 0 };
   const size = { width: 0, height: 0, aspect: 1, dpr: 1, pixels: new THREE.Vector2(1, 1) };
   const pointer = { x: 0, y: 0, raw: { x: 0, y: 0 }, inside: false, active: false, speed: 0 };
   const quality = { name: "high", value: 1 };
   quality.pick = (low, medium, high) => [low, medium, high][TIERS.indexOf(quality.name)];
   const tokens = { css: {}, dark: false, blending: THREE.NormalBlending };
-  for (const name of Object.keys(tokenNames)) tokens[name] = new THREE.Color();
+  for (const name of names) tokens[name] = new THREE.Color();
   const uniforms = {
     uTime: { value: 0 }, uResolution: { value: size.pixels }, uPixelRatio: { value: 1 },
     uPointer: { value: new THREE.Vector2() }, uProgress: { value: 0 }, uDark: { value: 0 },
   };
-  for (const name of Object.keys(tokenNames)) { // uBg, uText, uAccent ...: the same Color objects, so they follow
+  for (const name of names) { // uBg, uText, uAccent ...: the same Color objects, so they follow
     uniforms["u" + name[0].toUpperCase() + name.slice(1)] = { value: tokens[name] };
   }
+  return { scene, camera, clock, size, pointer, quality, tokens, uniforms };
+}
 
+function makeStage(s) {
+  const { scene, camera, clock, size, pointer, quality, tokens, uniforms } = makeParts(s);
+  const lists = s.lists;
   const stage = {
-    container,
-    canvas,
-    renderer,
+    container: s.container,
+    canvas: s.canvas,
+    renderer: s.renderer,
     scene,
     camera,
     clock,
@@ -381,437 +435,478 @@ export function createStage(element, options = {}) {
     quality,
     progress: 0,
     progressEased: 0,
-    still: Boolean(o.still) || reducedQuery.matches,
+    still: Boolean(s.o.still) || s.reducedQuery.matches,
     running: false,
-    failed: renderer ? false : (container === element ? "no-webgl" : "no-container"),
-    onFrame: (fn) => subscribe(lists.frame, fn),
-    onResize: (fn) => subscribe(lists.resize, fn, () => (size.width > 0 && size.height > 0 ? size : null)),
-    onTokens: (fn) => subscribe(lists.tokens, fn, () => tokens),
-    onQuality: (fn) => subscribe(lists.quality, fn, () => quality),
-    onPointer: (fn) => subscribe(lists.pointer, fn),
-    onDestroy: (fn) => subscribe(lists.destroy, fn),
-    setProgress,
-    setPointer,
-    setQuality,
-    refreshTokens,
-    invalidate,
-    pause,
-    resume,
-    viewSize,
+    failed: s.renderer ? false : (s.container === s.element ? "no-webgl" : "no-container"),
+    onFrame: (fn) => subscribe(s, lists.frame, fn),
+    onResize: (fn) => subscribe(s, lists.resize, fn, () => (size.width > 0 && size.height > 0 ? size : null)),
+    onTokens: (fn) => subscribe(s, lists.tokens, fn, () => tokens),
+    onQuality: (fn) => subscribe(s, lists.quality, fn, () => quality),
+    onPointer: (fn) => subscribe(s, lists.pointer, fn),
+    onDestroy: (fn) => subscribe(s, lists.destroy, fn),
+    setProgress: (p) => setProgress(s, p),
+    setPointer: (x, y) => setPointer(s, x, y),
+    setQuality: (name) => setQuality(s, name),
+    refreshTokens: () => refreshTokens(s),
+    invalidate: () => invalidate(s),
+    pause: (reason) => pause(s, reason),
+    resume: (reason) => resume(s, reason),
+    viewSize: (distance) => viewSize(stage.camera, distance),
     dispose,
-    handle,
+    handle: (methods) => handle(stage, methods),
     progressOf,
-    destroy,
+    destroy: () => destroy(s),
   };
-  stages.set(container, stage);
+  s.stage = stage;
+  return stage;
+}
 
-  // 2. The loop. One requestAnimationFrame at a time, asked for in schedule() only. update() works
-  //    out from every reason at once whether the loop should run, so the reasons cannot fight.
-  const visible = () => !destroyed && !stage.failed && inView && !document.hidden
-    && size.width > 0 && size.height > 0;
+// 2. The loop. One requestAnimationFrame at a time, asked for in schedule() only. update() works
+//    out from every reason at once whether the loop should run, so the reasons cannot fight.
+function visible(s) {
+  const size = s.stage.size;
+  return !s.destroyed && !s.stage.failed && s.inView && !document.hidden && size.width > 0 && size.height > 0;
+}
 
-  function update() {
-    const run = visible() && !stage.still && pauses.size === 0;
-    if (run && !stage.running) { last = null; samples = -WARM_UP; sampleTotal = 0; } // a fresh start: no delta
-    stage.running = run;
-    if (run || (visible() && dirty)) schedule();
-    else if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+function update(s) {
+  const stage = s.stage;
+  const run = visible(s) && !stage.still && s.pauses.size === 0;
+  if (run && !stage.running) { s.last = null; s.samples = -WARM_UP; s.sampleTotal = 0; } // a fresh start: no delta
+  stage.running = run;
+  if (run || (visible(s) && s.dirty)) schedule(s);
+  else if (s.rafId) { cancelAnimationFrame(s.rafId); s.rafId = 0; }
+}
+
+function schedule(s) {
+  if (!s.rafId) s.rafId = requestAnimationFrame((now) => tick(s, now));
+}
+
+// The shaders are compiled before the first frame, in tasks of their own (see "The first frame"
+// at the top). With KHR_parallel_shader_compile the driver builds them while the page goes on and
+// three only polls; without it compile() hands them to the driver, and the first frame comes at
+// the next quiet moment, so the wait falls outside the frame and outside mount().
+function compileFirst(s) {
+  if (s.compiling) return;
+  s.compiling = true;
+  const { renderer, stage } = s;
+  const done = () => {
+    s.compiled = true;
+    if (s.destroyed) return;
+    s.dirty = true;
+    update(s);
+  };
+  const extensions = renderer.extensions;
+  // has() asks without a console warning; compileAsync() warns where the extension is missing.
+  const parallel = extensions && typeof extensions.has === "function" && extensions.has("KHR_parallel_shader_compile");
+  if (parallel && typeof renderer.compileAsync === "function") {
+    renderer.compileAsync(stage.scene, stage.camera).catch(nothing).then(done);
+    return;
   }
+  try { renderer.compile(stage.scene, stage.camera); } catch (error) { /* the first render says what is wrong */ }
+  try { renderer.getContext().flush(); } catch (error) { /* a lost context: the first render falls back */ }
+  if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(done, { timeout: 400 });
+  else setTimeout(done, 120);
+}
 
-  function schedule() {
-    if (!rafId) rafId = requestAnimationFrame(tick);
+function tick(s, now) {
+  const { stage } = s, clock = stage.clock;
+  s.rafId = 0;
+  if (!visible(s)) return;
+  if (!s.compiled) { compileFirst(s); return; } // nothing is drawn until the shaders are there; done() asks again
+  if (stage.running) {
+    const gap = s.last === null ? 0 : now - s.last; // milliseconds since the last frame
+    s.last = now;
+    clock.delta = Math.min(gap / 1000, MAX_DELTA);
+    clock.time += clock.delta;
+    ease(s, clock.delta);
+    if (draw(s)) { measure(s, gap); schedule(s); }
+  } else if (s.dirty) { // one still frame: reduced motion, or paused with nothing on screen yet
+    if (stage.still || clock.frame === 0) clock.time = s.o.stillTime;
+    clock.delta = 0;
+    ease(s, 0);
+    draw(s);
   }
+}
 
-  // The shaders are compiled before the first frame, in tasks of their own (see "The first frame"
-  // at the top). With KHR_parallel_shader_compile the driver builds them while the page goes on and
-  // three only polls; without it compile() hands them to the driver, and the first frame comes at
-  // the next quiet moment, so the wait falls outside the frame and outside mount().
-  let compiled = !renderer || typeof renderer.compile !== "function", compiling = false;
-  function compileFirst() {
-    if (compiling) return;
-    compiling = true;
-    const done = () => {
-      compiled = true;
-      if (destroyed) return;
-      dirty = true;
-      update();
-    };
-    const extensions = renderer.extensions;
-    // has() asks without a console warning; compileAsync() warns where the extension is missing.
-    const parallel = extensions && typeof extensions.has === "function" && extensions.has("KHR_parallel_shader_compile");
-    if (parallel && typeof renderer.compileAsync === "function") {
-      renderer.compileAsync(stage.scene, stage.camera).catch(nothing).then(done);
-      return;
+function draw(s) {
+  const { stage } = s, { clock, uniforms, pointer } = stage;
+  try {
+    uniforms.uTime.value = clock.time;
+    uniforms.uProgress.value = stage.progressEased;
+    uniforms.uPointer.value.set(pointer.x, pointer.y);
+    emit(s, s.lists.frame, clock.time, clock.delta);
+    if (s.destroyed) return false; // a callback destroyed the stage
+    s.renderer.render(stage.scene, stage.camera);
+  } catch (error) { // a scene that throws must not leave half a picture: show the poster, and say why
+    fail(s, "error");
+    console.error(error);
+    return false;
+  }
+  clock.frame += 1;
+  s.dirty = false;
+  if (!s.live) goLive(s);
+  return true;
+}
+
+// Move the eased pointer and progress towards their targets, the same at every frame rate.
+function ease(s, delta) {
+  const { stage, o } = s, pointer = stage.pointer;
+  const still = delta === 0;
+  const px = pointer.x, py = pointer.y;
+  const k = still ? 0 : 1 - Math.exp(-delta / Math.max(o.pointerEase, 0.001));
+  pointer.x += (pointer.raw.x - pointer.x) * k;
+  pointer.y += (pointer.raw.y - pointer.y) * k;
+  pointer.speed = still ? 0 : Math.hypot(pointer.x - px, pointer.y - py) / delta;
+  const jump = still || stage.clock.frame === 0; // a still, or nothing drawn yet: start where the page put it
+  const j = jump ? 1 : 1 - Math.exp(-delta / Math.max(o.progressEase, 0.001));
+  stage.progressEased += (stage.progress - stage.progressEased) * j;
+}
+
+// Quality "auto": time the frames, and step down when a window of them was too slow on average.
+function measure(s, gap) {
+  const quality = s.stage.quality;
+  if (!s.auto || quality.name === "low" || gap <= 0 || gap > 250) return; // 250 ms: a hiccup, not a frame rate
+  s.samples += 1;
+  if (s.samples <= 0) return;
+  s.sampleTotal += gap;
+  const average = s.sampleTotal / s.samples;
+  if (s.samples < SAMPLE && !(s.samples >= SAMPLE / 3 && average > SLOW_FRAME * 2)) return;
+  if (average > SLOW_FRAME) applyQuality(s, average > SLOW_FRAME * 2 ? "low" : TIERS[TIERS.indexOf(quality.name) - 1]);
+  s.samples = -WARM_UP;
+  s.sampleTotal = 0;
+}
+
+function applyQuality(s, name) {
+  const quality = s.stage.quality;
+  if (!TIERS.includes(name) || name === quality.name) return;
+  quality.name = name;
+  quality.value = TIERS.indexOf(name) / 2;
+  resize(s);
+  emit(s, s.lists.quality, quality);
+  invalidate(s);
+}
+
+function setQuality(s, name) {
+  if (s.destroyed || !s.renderer) return;
+  s.auto = !TIERS.includes(name);
+  applyQuality(s, s.auto ? guessQuality(s.gl, s.coarse) : name);
+}
+
+// 3. Size. The canvas is out of the flow, so it can never change the container it measures.
+function resize(s) {
+  if (s.destroyed || !s.renderer) return;
+  const { stage } = s, size = stage.size;
+  const width = s.container.clientWidth, height = s.container.clientHeight;
+  const dpr = pixelRatio(s, width, height);
+  if (width === size.width && height === size.height && dpr === size.dpr) return;
+  size.width = width;
+  size.height = height;
+  size.aspect = width / height || 1;
+  size.dpr = dpr;
+  if (width > 0 && height > 0) {
+    s.renderer.setPixelRatio(dpr);
+    s.renderer.setSize(width, height, false); // false: the CSS size stays 100%
+    size.pixels.set(s.canvas.width, s.canvas.height);
+    stage.uniforms.uPixelRatio.value = dpr;
+    if (stage.camera.isPerspectiveCamera) {
+      stage.camera.aspect = size.aspect;
+      stage.camera.updateProjectionMatrix();
     }
-    try { renderer.compile(stage.scene, stage.camera); } catch (error) { /* the first render says what is wrong */ }
-    try { renderer.getContext().flush(); } catch (error) { /* a lost context: the first render falls back */ }
-    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(done, { timeout: 400 });
-    else setTimeout(done, 120);
+    emit(s, s.lists.resize, size);
+    s.dirty = true; // resizing a canvas empties it
   }
+  update(s);
+}
 
-  function tick(now) {
-    rafId = 0;
-    if (!visible()) return;
-    if (!compiled) { compileFirst(); return; } // nothing is drawn until the shaders are there; done() asks again
-    if (stage.running) {
-      const gap = last === null ? 0 : now - last; // milliseconds since the last frame
-      last = now;
-      clock.delta = Math.min(gap / 1000, MAX_DELTA);
-      clock.time += clock.delta;
-      ease(clock.delta);
-      if (draw()) { measure(gap); schedule(); }
-    } else if (dirty) { // one still frame: reduced motion, or paused with nothing on screen yet
-      if (stage.still || clock.frame === 0) clock.time = o.stillTime;
-      clock.delta = 0;
-      ease(0);
-      draw();
-    }
+// The pixel ratio for a container of this size: capped by the options, the quality, the pixel
+// budget and the largest buffer the graphics chip takes.
+function pixelRatio(s, width, height) {
+  const o = s.o, tier = s.stage.quality.name;
+  const scale = Array.isArray(o.renderScale) ? o.renderScale[TIERS.indexOf(tier)] : o.renderScale;
+  const cap = tier === "low" ? 1 : Math.min(o.maxDpr, s.coarse ? 1.5 : 2);
+  let dpr = Math.min(window.devicePixelRatio || 1, cap) * (scale || 1);
+  const area = width * height * dpr * dpr;
+  if (area > MAX_PIXELS[tier]) dpr *= Math.sqrt(MAX_PIXELS[tier] / area);
+  if (Math.max(width, height) * dpr > s.maxSide) dpr = s.maxSide / Math.max(width, height);
+  return dpr;
+}
+
+// 4. Colours. Any CSS colour becomes [r, g, b] in 0..1, or null. The browser does the work: the
+//    canvas shows no text, so its `color` is free to use as a probe, and that resolves var(),
+//    light-dark(), color-mix() and names. What is left in a wider colour space (oklch, lab,
+//    display-p3) is painted on one shared 1 x 1 canvas and read back as sRGB (probe2d: made with
+//    willReadFrequently, so the read-back stays on the processor and never stalls the GPU).
+function resolveColor(canvas, value) {
+  if (!value) return null;
+  canvas.style.color = "";
+  canvas.style.color = value;
+  if (!canvas.style.color) return null; // not a colour
+  const computed = getComputedStyle(canvas).color;
+  canvas.style.color = "";
+  const numbers = (computed.match(/-?[\d.]+(?:e-?\d+)?%?/g) || []).map(parseFloat);
+  const scale = /^rgba?\(/.test(computed) ? 255 : (/^color\(srgb /.test(computed) ? 1 : 0);
+  if (scale && numbers.length >= 3) return numbers.slice(0, 3).map((n) => clamp(n / scale, 0, 1));
+  try {
+    const context = probe2d();
+    context.clearRect(0, 0, 1, 1);
+    context.fillStyle = computed;
+    context.fillRect(0, 0, 1, 1);
+    return Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3), (n) => n / 255);
+  } catch (error) {
+    return null;
   }
+}
 
-  function draw() {
-    try {
-      uniforms.uTime.value = clock.time;
-      uniforms.uProgress.value = stage.progressEased;
-      uniforms.uPointer.value.set(pointer.x, pointer.y);
-      emit(lists.frame, clock.time, clock.delta);
-      if (destroyed) return false; // a callback destroyed the stage
-      renderer.render(stage.scene, stage.camera);
-    } catch (error) { // a scene that throws must not leave half a picture: show the poster, and say why
-      fail("error");
-      console.error(error);
-      return false;
-    }
-    clock.frame += 1;
-    dirty = false;
-    if (!live) goLive();
-    return true;
+// The colour behind the container: the first background up the tree that is not see-through.
+function backdrop(s) {
+  for (let node = s.container; node && node.nodeType === 1; node = node.parentNode) {
+    const color = getComputedStyle(node).backgroundColor;
+    const numbers = (color.match(/-?[\d.]+/g) || []).map(parseFloat);
+    const alpha = /^rgba\(|\/ /.test(color) ? numbers[numbers.length - 1] : 1;
+    const seeThrough = color === "transparent" || alpha === 0;
+    if (!seeThrough) return resolveColor(s.canvas, color) || [1, 1, 1];
   }
+  const scheme = getComputedStyle(document.documentElement).colorScheme || "";
+  return /dark/.test(scheme) && (s.darkQuery.matches || !/light/.test(scheme)) ? [0.07, 0.07, 0.07] : [1, 1, 1];
+}
 
-  // Move the eased pointer and progress towards their targets, the same at every frame rate.
-  function ease(delta) {
-    const still = delta === 0;
-    const px = pointer.x, py = pointer.y;
-    const k = still ? 0 : 1 - Math.exp(-delta / Math.max(o.pointerEase, 0.001));
-    pointer.x += (pointer.raw.x - pointer.x) * k;
-    pointer.y += (pointer.raw.y - pointer.y) * k;
-    pointer.speed = still ? 0 : Math.hypot(pointer.x - px, pointer.y - py) / delta;
-    const jump = still || clock.frame === 0; // a still, or nothing drawn yet: start where the page put it
-    const j = jump ? 1 : 1 - Math.exp(-delta / Math.max(o.progressEase, 0.001));
-    stage.progressEased += (stage.progress - stage.progressEased) * j;
+function refreshTokens(s) {
+  if (s.destroyed || !s.renderer) return;
+  const style = getComputedStyle(s.container);
+  const raw = {};
+  for (const [name, source] of Object.entries(s.tokenNames)) {
+    raw[name] = String(source).startsWith("--") ? style.getPropertyValue(source).trim() : String(source);
   }
-
-  // Quality "auto": time the frames, and step down when a window of them was too slow on average.
-  function measure(gap) {
-    if (!auto || quality.name === "low" || gap <= 0 || gap > 250) return; // 250 ms: a hiccup, not a frame rate
-    samples += 1;
-    if (samples <= 0) return;
-    sampleTotal += gap;
-    const average = sampleTotal / samples;
-    if (samples < SAMPLE && !(samples >= SAMPLE / 3 && average > SLOW_FRAME * 2)) return;
-    if (average > SLOW_FRAME) applyQuality(average > SLOW_FRAME * 2 ? "low" : TIERS[TIERS.indexOf(quality.name) - 1]);
-    samples = -WARM_UP;
-    sampleTotal = 0;
+  // Reading is cheap, resolving is not: stop here when nothing a colour can depend on has changed.
+  const signature = [style.colorScheme, style.color, style.backgroundColor, ...Object.values(raw)].join("|");
+  if (signature === s.tokenSignature) return;
+  s.tokenSignature = signature;
+  const found = {};
+  for (const name of Object.keys(s.tokenNames)) found[name] = resolveColor(s.canvas, raw[name]);
+  const rgb = withStandIns(s, found, style);
+  const tokens = s.stage.tokens;
+  for (const name of Object.keys(s.tokenNames)) {
+    const [r, g, b] = rgb[name] || rgb.text;
+    tokens[name].setRGB(r, g, b, THREE.SRGBColorSpace); // stored as linear working colour, as three expects
+    const stand = [r, g, b].map((value) => Math.round(value * 255)).join(" ");
+    tokens.css[name] = found[name] ? raw[name] : `rgb(${stand})`;
   }
+  // Relative luminance of the background (the Color holds linear values). Under 0.2 light adds up
+  // to a glow that reads; above it only darker "ink" does.
+  tokens.dark = 0.2126 * tokens.bg.r + 0.7152 * tokens.bg.g + 0.0722 * tokens.bg.b < 0.2;
+  tokens.blending = tokens.dark ? THREE.AdditiveBlending : THREE.NormalBlending;
+  s.stage.uniforms.uDark.value = tokens.dark ? 1 : 0;
+  emit(s, s.lists.tokens, tokens);
+  invalidate(s);
+}
 
-  function applyQuality(name) {
-    if (!TIERS.includes(name) || name === quality.name) return;
-    quality.name = name;
-    quality.value = TIERS.indexOf(name) / 2;
-    resize();
-    emit(lists.quality, quality);
-    invalidate();
+// The colours found, with a sensible stand-in for each one the page does not set.
+function withStandIns(s, found, style) {
+  const mix = (a, b, t) => a.map((value, i) => value + (b[i] - value) * t);
+  const rgb = { ...found };
+  rgb.bg = found.bg || backdrop(s);
+  rgb.text = found.text || resolveColor(s.canvas, style.color) || [0, 0, 0];
+  rgb.accent = found.accent || rgb.text;
+  rgb.accent2 = found.accent2 || rgb.accent;
+  rgb.surface = found.surface || rgb.bg;
+  rgb.border = found.border || mix(rgb.bg, rgb.text, 0.2);
+  rgb.muted = found.muted || mix(rgb.bg, rgb.text, 0.6);
+  return rgb;
+}
+
+// 5. Pointer and progress.
+function setRaw(s, x, y, active) {
+  const pointer = s.stage.pointer;
+  if (x === pointer.raw.x && y === pointer.raw.y && active === pointer.active) return;
+  pointer.raw.x = x;
+  pointer.raw.y = y;
+  pointer.active = active;
+  emit(s, s.lists.pointer, pointer);
+}
+
+function pointerAt(s, clientX, clientY) {
+  const box = s.container.getBoundingClientRect();
+  if (!box.width || !box.height) return;
+  const x = ((clientX - box.left) / box.width) * 2 - 1;
+  const y = 1 - ((clientY - box.top) / box.height) * 2;
+  s.stage.pointer.inside = Math.abs(x) <= 1 && Math.abs(y) <= 1;
+  setRaw(s, clamp(x, -1, 1), clamp(y, -1, 1), true);
+}
+
+function pointerGone(s) { // the pointer left the page, or the finger lifted: ease back to the middle
+  s.stage.pointer.inside = false;
+  setRaw(s, 0, 0, false);
+}
+
+function setPointer(s, x, y) {
+  if (s.destroyed || !s.renderer || !Number.isFinite(x) || !Number.isFinite(y)) return;
+  s.stage.pointer.inside = true;
+  setRaw(s, clamp(x, -1, 1), clamp(y, -1, 1), true);
+}
+
+function setProgress(s, p) {
+  if (s.destroyed || !Number.isFinite(Number(p))) return;
+  s.stage.progress = clamp(Number(p), 0, 1);
+}
+
+// 6. What a scene and a page call.
+function invalidate(s) {
+  if (s.destroyed || !s.renderer) return;
+  s.dirty = true;
+  update(s);
+}
+
+function pause(s, reason = "user") {
+  if (s.destroyed) return;
+  s.pauses.add(String(reason));
+  update(s);
+}
+
+function resume(s, reason = "user") {
+  if (s.destroyed) return;
+  s.pauses.delete(String(reason));
+  update(s);
+}
+
+function viewSize(cam, distance = cam.position.length()) {
+  if (cam.isPerspectiveCamera) {
+    const height = (2 * Math.tan((cam.fov * Math.PI) / 360) * distance) / cam.zoom;
+    return { width: height * cam.aspect, height };
   }
+  return { width: (cam.right - cam.left) / cam.zoom, height: (cam.top - cam.bottom) / cam.zoom };
+}
 
-  function setQuality(name) {
-    if (destroyed || !renderer) return;
-    auto = !TIERS.includes(name);
-    applyQuality(auto ? guessQuality(gl, coarse) : name);
+function dispose(object) {
+  if (!object) return;
+  if (object.parent) object.parent.remove(object);
+  disposeTree(object);
+}
+
+function handle(stage, methods = {}) {
+  const { setProgress, setPointer, pause, resume, destroy } = stage;
+  return { stage, setProgress, setPointer, setData: nothing, pause, resume, destroy, ...methods };
+}
+
+// 7. Live, fallback and the poster.
+function showPosters(s, show) {
+  const o = s.o;
+  for (const [poster, opacity, transition] of s.posters) {
+    poster.style.transition = show || s.stage.still || !o.fade ? transition : `opacity ${o.fade}ms ease-out`;
+    poster.style.opacity = show ? opacity : "0";
   }
+}
 
-  // 3. Size. The canvas is out of the flow, so it can never change the container it measures.
-  function resize() {
-    if (destroyed || !renderer) return;
-    const width = container.clientWidth, height = container.clientHeight;
-    const scale = Array.isArray(o.renderScale) ? o.renderScale[TIERS.indexOf(quality.name)] : o.renderScale;
-    const cap = quality.name === "low" ? 1 : Math.min(o.maxDpr, coarse ? 1.5 : 2);
-    let dpr = Math.min(window.devicePixelRatio || 1, cap) * (scale || 1);
-    const area = width * height * dpr * dpr;
-    if (area > MAX_PIXELS[quality.name]) dpr *= Math.sqrt(MAX_PIXELS[quality.name] / area);
-    if (Math.max(width, height) * dpr > maxSide) dpr = maxSide / Math.max(width, height);
-    if (width === size.width && height === size.height && dpr === size.dpr) return;
-    size.width = width;
-    size.height = height;
-    size.aspect = width / height || 1;
-    size.dpr = dpr;
-    if (width > 0 && height > 0) {
-      renderer.setPixelRatio(dpr);
-      renderer.setSize(width, height, false); // false: the CSS size stays 100%
-      size.pixels.set(canvas.width, canvas.height);
-      uniforms.uPixelRatio.value = dpr;
-      if (stage.camera.isPerspectiveCamera) {
-        stage.camera.aspect = size.aspect;
-        stage.camera.updateProjectionMatrix();
-      }
-      emit(lists.resize, size);
-      dirty = true; // resizing a canvas empties it
-    }
-    update();
+function goLive(s) {
+  const { canvas, o } = s;
+  s.live = true;
+  s.container.setAttribute("data-scene", "live");
+  void getComputedStyle(canvas).opacity; // read it once, so the change below is a transition, not a jump
+  if (o.fade && !s.stage.still) canvas.style.transition = `opacity ${o.fade}ms ease-out`;
+  canvas.style.opacity = "1";
+  showPosters(s, false);
+}
+
+function fail(s, reason) {
+  s.stage.failed = reason;
+  s.live = false;
+  s.container.setAttribute("data-scene", "fallback");
+  s.canvas.style.transition = "";
+  s.canvas.style.opacity = "0";
+  showPosters(s, true);
+  update(s);
+}
+
+function destroy(s) {
+  if (s.destroyed) return;
+  const { stage, container, renderer } = s;
+  s.destroyed = true;
+  stage.running = false;
+  for (const fn of s.lists.destroy.slice()) {
+    try { fn(); } catch (error) { console.error(error); } // one scene's mistake must not stop the clean-up
   }
-
-  // 4. Colours. Any CSS colour becomes [r, g, b] in 0..1, or null. The browser does the work: the
-  //    canvas shows no text, so its `color` is free to use as a probe, and that resolves var(),
-  //    light-dark(), color-mix() and names. What is left in a wider colour space (oklch, lab,
-  //    display-p3) is painted on one shared 1 x 1 canvas and read back as sRGB (probe2d: made with
-  //    willReadFrequently, so the read-back stays on the processor and never stalls the GPU).
-  function resolveColor(value) {
-    if (!value) return null;
-    canvas.style.color = "";
-    canvas.style.color = value;
-    if (!canvas.style.color) return null; // not a colour
-    const computed = getComputedStyle(canvas).color;
-    canvas.style.color = "";
-    const numbers = (computed.match(/-?[\d.]+(?:e-?\d+)?%?/g) || []).map(parseFloat);
-    const scale = /^rgba?\(/.test(computed) ? 255 : (/^color\(srgb /.test(computed) ? 1 : 0);
-    if (scale && numbers.length >= 3) return numbers.slice(0, 3).map((n) => clamp(n / scale, 0, 1));
-    try {
-      const context = probe2d();
-      context.clearRect(0, 0, 1, 1);
-      context.fillStyle = computed;
-      context.fillRect(0, 0, 1, 1);
-      return Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3), (n) => n / 255);
-    } catch (error) {
-      return null;
-    }
+  if (s.rafId) cancelAnimationFrame(s.rafId);
+  s.rafId = 0;
+  for (const off of s.cleanups.splice(0)) off();
+  for (const list of Object.values(s.lists)) list.length = 0;
+  disposeTree(stage.scene);
+  stage.scene.clear();
+  if (renderer) {
+    renderer.dispose();          // also takes three's own context listeners off the canvas
+    renderer.forceContextLoss(); // give the context back now: a browser allows only about sixteen
   }
+  s.canvas.remove();
+  showPosters(s, true);
+  s.posters.length = 0;
+  container.removeAttribute("data-scene");
+  if (s.madeRelative) container.style.position = "";
+  if (stages.get(container) === stage) stages.delete(container);
+}
 
-  // The colour behind the container: the first background up the tree that is not see-through.
-  function backdrop() {
-    for (let node = container; node && node.nodeType === 1; node = node.parentNode) {
-      const color = getComputedStyle(node).backgroundColor;
-      const numbers = (color.match(/-?[\d.]+/g) || []).map(parseFloat);
-      const alpha = /^rgba\(|\/ /.test(color) ? numbers[numbers.length - 1] : 1;
-      const seeThrough = color === "transparent" || alpha === 0;
-      if (!seeThrough) return resolveColor(color) || [1, 1, 1];
-    }
-    const scheme = getComputedStyle(document.documentElement).colorScheme || "";
-    return /dark/.test(scheme) && (darkQuery.matches || !/light/.test(scheme)) ? [0.07, 0.07, 0.07] : [1, 1, 1];
-  }
-
-  function refreshTokens() {
-    if (destroyed || !renderer) return;
-    const style = getComputedStyle(container);
-    const raw = {};
-    for (const [name, source] of Object.entries(tokenNames)) {
-      raw[name] = String(source).startsWith("--") ? style.getPropertyValue(source).trim() : String(source);
-    }
-    // Reading is cheap, resolving is not: stop here when nothing a colour can depend on has changed.
-    const signature = [style.colorScheme, style.color, style.backgroundColor, ...Object.values(raw)].join("|");
-    if (signature === tokenSignature) return;
-    tokenSignature = signature;
-    const mix = (a, b, t) => a.map((value, i) => value + (b[i] - value) * t);
-    const found = {};
-    for (const name of Object.keys(tokenNames)) found[name] = resolveColor(raw[name]);
-    const rgb = { ...found };
-    rgb.bg = found.bg || backdrop();
-    rgb.text = found.text || resolveColor(style.color) || [0, 0, 0];
-    rgb.accent = found.accent || rgb.text;
-    rgb.accent2 = found.accent2 || rgb.accent;
-    rgb.surface = found.surface || rgb.bg;
-    rgb.border = found.border || mix(rgb.bg, rgb.text, 0.2);
-    rgb.muted = found.muted || mix(rgb.bg, rgb.text, 0.6);
-    for (const name of Object.keys(tokenNames)) {
-      const [r, g, b] = rgb[name] || rgb.text;
-      tokens[name].setRGB(r, g, b, THREE.SRGBColorSpace); // stored as linear working colour, as three expects
-      const stand = [r, g, b].map((value) => Math.round(value * 255)).join(" ");
-      tokens.css[name] = found[name] ? raw[name] : `rgb(${stand})`;
-    }
-    // Relative luminance of the background (the Color holds linear values). Under 0.2 light adds up
-    // to a glow that reads; above it only darker "ink" does.
-    tokens.dark = 0.2126 * tokens.bg.r + 0.7152 * tokens.bg.g + 0.0722 * tokens.bg.b < 0.2;
-    tokens.blending = tokens.dark ? THREE.AdditiveBlending : THREE.NormalBlending;
-    uniforms.uDark.value = tokens.dark ? 1 : 0;
-    emit(lists.tokens, tokens);
-    invalidate();
-  }
-
-  // 5. Pointer and progress.
-  function setRaw(x, y, active) {
-    if (x === pointer.raw.x && y === pointer.raw.y && active === pointer.active) return;
-    pointer.raw.x = x;
-    pointer.raw.y = y;
-    pointer.active = active;
-    emit(lists.pointer, pointer);
-  }
-
-  function pointerAt(clientX, clientY) {
-    const box = container.getBoundingClientRect();
-    if (!box.width || !box.height) return;
-    const x = ((clientX - box.left) / box.width) * 2 - 1;
-    const y = 1 - ((clientY - box.top) / box.height) * 2;
-    pointer.inside = Math.abs(x) <= 1 && Math.abs(y) <= 1;
-    setRaw(clamp(x, -1, 1), clamp(y, -1, 1), true);
-  }
-
-  function pointerGone() { // the pointer left the page, or the finger lifted: ease back to the middle
-    pointer.inside = false;
-    setRaw(0, 0, false);
-  }
-
-  function setPointer(x, y) {
-    if (destroyed || !renderer || !Number.isFinite(x) || !Number.isFinite(y)) return;
-    pointer.inside = true;
-    setRaw(clamp(x, -1, 1), clamp(y, -1, 1), true);
-  }
-
-  function setProgress(p) {
-    if (destroyed || !Number.isFinite(Number(p))) return;
-    stage.progress = clamp(Number(p), 0, 1);
-  }
-
-  // 6. What a scene and a page call.
-  function invalidate() {
-    if (destroyed || !renderer) return;
-    dirty = true;
-    update();
-  }
-
-  function pause(reason = "user") {
-    if (destroyed) return;
-    pauses.add(String(reason));
-    update();
-  }
-
-  function resume(reason = "user") {
-    if (destroyed) return;
-    pauses.delete(String(reason));
-    update();
-  }
-
-  function viewSize(distance = stage.camera.position.length()) {
-    const cam = stage.camera;
-    if (cam.isPerspectiveCamera) {
-      const height = (2 * Math.tan((cam.fov * Math.PI) / 360) * distance) / cam.zoom;
-      return { width: height * cam.aspect, height };
-    }
-    return { width: (cam.right - cam.left) / cam.zoom, height: (cam.top - cam.bottom) / cam.zoom };
-  }
-
-  function dispose(object) {
-    if (!object) return;
-    if (object.parent) object.parent.remove(object);
-    disposeTree(object);
-  }
-
-  function handle(methods = {}) {
-    return { stage, setProgress, setPointer, setData: nothing, pause, resume, destroy, ...methods };
-  }
-
-  // 7. Live, fallback and the poster.
-  function showPosters(show) {
-    for (const [poster, opacity, transition] of posters) {
-      poster.style.transition = show || stage.still || !o.fade ? transition : `opacity ${o.fade}ms ease-out`;
-      poster.style.opacity = show ? opacity : "0";
-    }
-  }
-
-  function goLive() {
-    live = true;
-    container.setAttribute("data-scene", "live");
-    void getComputedStyle(canvas).opacity; // read it once, so the change below is a transition, not a jump
-    if (o.fade && !stage.still) canvas.style.transition = `opacity ${o.fade}ms ease-out`;
-    canvas.style.opacity = "1";
-    showPosters(false);
-  }
-
-  function fail(reason) {
-    stage.failed = reason;
-    live = false;
-    container.setAttribute("data-scene", "fallback");
-    canvas.style.transition = "";
-    canvas.style.opacity = "0";
-    showPosters(true);
-    update();
-  }
-
-  function destroy() {
-    if (destroyed) return;
-    destroyed = true;
-    stage.running = false;
-    for (const fn of lists.destroy.slice()) {
-      try { fn(); } catch (error) { console.error(error); } // one scene's mistake must not stop the clean-up
-    }
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = 0;
-    for (const off of cleanups.splice(0)) off();
-    for (const list of Object.values(lists)) list.length = 0;
-    disposeTree(stage.scene);
-    stage.scene.clear();
-    if (renderer) {
-      renderer.dispose();          // also takes three's own context listeners off the canvas
-      renderer.forceContextLoss(); // give the context back now: a browser allows only about sixteen
-    }
-    canvas.remove();
-    showPosters(true);
-    posters.length = 0;
-    container.removeAttribute("data-scene");
-    if (madeRelative) container.style.position = "";
-    if (stages.get(container) === stage) stages.delete(container);
-  }
-
-  // 8. No WebGL (or no container): say so and stop here. Every method above is already a no-op.
-  if (!renderer) {
-    container.setAttribute("data-scene", "fallback");
-    return stage;
-  }
-
-  // 9. Into the page, and the things that change after that.
+// 9. Into the page: the canvas, the posters, the first size and the first colours.
+function enterPage(s) {
+  const { container, stage } = s;
   if (getComputedStyle(container).position === "static") {
     container.style.position = "relative";
-    madeRelative = true;
+    s.madeRelative = true;
   }
   for (const poster of container.querySelectorAll("[data-scene-poster]")) {
-    posters.push([poster, poster.style.opacity, poster.style.transition]);
+    s.posters.push([poster, poster.style.opacity, poster.style.transition]);
   }
-  container.insertBefore(canvas, container.firstChild);
-  quality.name = auto ? guessQuality(gl, coarse) : o.quality;
-  quality.value = TIERS.indexOf(quality.name) / 2;
-  resize();
-  refreshTokens();
+  container.insertBefore(s.canvas, container.firstChild);
+  stage.quality.name = s.auto ? guessQuality(s.gl, s.coarse) : s.o.quality;
+  stage.quality.value = TIERS.indexOf(stage.quality.name) / 2;
+  resize(s);
+  refreshTokens(s);
+}
 
+// The size, whether the container is on screen, and whether the tab is visible.
+function watchSize(s) {
+  const listen = listener(s), container = s.container;
+  const onResize = () => resize(s);
   if (typeof ResizeObserver === "function") {
-    const sizeWatcher = new ResizeObserver(resize);
+    const sizeWatcher = new ResizeObserver(onResize);
     sizeWatcher.observe(container);
-    cleanups.push(() => sizeWatcher.disconnect());
+    s.cleanups.push(() => sizeWatcher.disconnect());
   }
-  listen(window, "resize", resize, { passive: true }); // also catches a zoom or a move to another screen
+  listen(window, "resize", onResize, { passive: true }); // also catches a zoom or a move to another screen
   if (typeof IntersectionObserver === "function") {
     const viewWatcher = new IntersectionObserver((entries) => {
-      inView = entries[entries.length - 1].isIntersecting;
-      update();
+      s.inView = entries[entries.length - 1].isIntersecting;
+      update(s);
     });
     viewWatcher.observe(container);
-    cleanups.push(() => viewWatcher.disconnect());
+    s.cleanups.push(() => viewWatcher.disconnect());
   }
-  listen(document, "visibilitychange", update);
-  watch(reducedQuery, () => {
-    stage.still = Boolean(o.still) || reducedQuery.matches;
-    invalidate();
+  listen(document, "visibilitychange", () => update(s));
+}
+
+// Reduced motion and the theme.
+function watchTheme(s) {
+  const onTheme = () => refreshTokens(s);
+  watch(s, s.reducedQuery, () => {
+    s.stage.still = Boolean(s.o.still) || s.reducedQuery.matches;
+    invalidate(s);
   });
-  watch(darkQuery, refreshTokens);
+  watch(s, s.darkQuery, onTheme);
   if (typeof MutationObserver === "function") { // data-theme, a class such as "dark", an inline style
-    const themeWatcher = new MutationObserver(refreshTokens);
+    const themeWatcher = new MutationObserver(onTheme);
     themeWatcher.observe(document.documentElement, { attributes: true });
     if (document.body) themeWatcher.observe(document.body, { attributes: true });
-    cleanups.push(() => themeWatcher.disconnect());
+    s.cleanups.push(() => themeWatcher.disconnect());
   }
-  // The pointer is read from the window: the canvas usually sits behind text and never gets the
-  // event. Every listener is passive, so none of them can hold up a scroll.
+}
+
+// The pointer is read from the window: the canvas usually sits behind text and never gets the
+// event. Every listener is passive, so none of them can hold up a scroll.
+function watchPointer(s) {
+  const listen = listener(s);
   const passive = { passive: true };
-  const onPointer = (event) => pointerAt(event.clientX, event.clientY);
+  const onPointer = (event) => pointerAt(s, event.clientX, event.clientY);
+  const onGone = () => pointerGone(s);
   const onTouch = (event) => {
     const touch = event.touches[0];
-    if (touch) pointerAt(touch.clientX, touch.clientY);
-    else pointerGone();
+    if (touch) pointerAt(s, touch.clientX, touch.clientY);
+    else pointerGone(s);
   };
   listen(window, "pointermove", onPointer, passive);
   listen(window, "pointerdown", onPointer, passive);
@@ -819,20 +914,21 @@ export function createStage(element, options = {}) {
   listen(window, "touchmove", onTouch, passive); // goes on while the page scrolls; pointermove stops there
   listen(window, "touchend", onTouch, passive);
   listen(window, "touchcancel", onTouch, passive);
-  listen(document.documentElement, "pointerleave", pointerGone, passive);
-  listen(window, "blur", pointerGone, passive);
-  // A lost context empties the canvas: show the poster at once. Most are restored, and three then
-  // builds its state again by itself; one that is not restored simply stays on the poster.
-  listen(canvas, "webglcontextlost", (event) => {
-    event.preventDefault(); // without this the browser never restores it
-    fail("context-lost");
-  });
-  listen(canvas, "webglcontextrestored", () => {
-    if (stage.failed !== "context-lost") return; // a scene that threw stays down
-    stage.failed = false;
-    invalidate();
-  });
+  listen(document.documentElement, "pointerleave", onGone, passive);
+  listen(window, "blur", onGone, passive);
+}
 
-  update();
-  return stage;
+// A lost context empties the canvas: show the poster at once. Most are restored, and three then
+// builds its state again by itself; one that is not restored simply stays on the poster.
+function watchContext(s) {
+  const listen = listener(s);
+  listen(s.canvas, "webglcontextlost", (event) => {
+    event.preventDefault(); // without this the browser never restores it
+    fail(s, "context-lost");
+  });
+  listen(s.canvas, "webglcontextrestored", () => {
+    if (s.stage.failed !== "context-lost") return; // a scene that threw stays down
+    s.stage.failed = false;
+    invalidate(s);
+  });
 }
