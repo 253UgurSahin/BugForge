@@ -5,8 +5,10 @@ backticks exists, no placeholder or secret-looking value is left, and the TO-FIL
 
 Reads README.md and every .md under docs/ in PATH (the project root). What each part needs is in
 docs.json next to this script. File names in backticks are looked for from the project root, then next
-to the doc; routes (/bookings), URLs and forge-work/ are not file names. Code blocks are skipped for
-links, file names and placeholders, never for secrets. It prints names and line numbers, never a
+to the doc, then as the end of a path in the repository (forge/gate.py for plugin/forge/gate.py); a bare
+name (nginx.conf), routes (/bookings), URLs and forge-work/ are not file paths. Code blocks are skipped for
+links, file names and placeholders, never for secrets; inline code is skipped for placeholders and
+TO-FILL (a command's <slot> is not one). It prints names and line numbers, never a
 secret-looking value.
 
 Usage:
@@ -27,7 +29,7 @@ SEVERITIES = ["critical", "high", "medium", "low"]
 FENCE = re.compile(r"^\s*(```|~~~)\s*([\w-]*)")
 LINK = re.compile(r"!?\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 TICKED = re.compile(r"`([^`\s]+)`")
-FILE_NAME = re.compile(r"^(?:\.{1,2}/)*[\w.@-]+(?:/[\w.@-]+)+\.\w{1,8}$|^[\w-]+\.(?:md|json|ya?ml|toml|py|php|js|ts|tsx|jsx)$")
+FILE_NAME = re.compile(r"^(?:\.{1,2}/)*[\w.@-]+(?:/[\w.@-]+)+\.\w{1,8}$")  # a path; a bare name like nginx.conf is no claim
 NOT_FILES = ("forge-work/", "node_modules/", "vendor/", "http://", "https://", "/", "~")
 HEADING = re.compile(r"^#{2,3}\s+(.+?)\s*#*\s*$")
 
@@ -58,7 +60,23 @@ def read(root, rel):
         return handle.read()
 
 
-def lint_file(root, rel, text, rules):
+def repo_files(root):
+    """Every file below ROOT as a /-path, for names that leave out a leading folder (forge/gate.py)."""
+    found = []
+    for folder, subfolders, files in os.walk(root):
+        subfolders[:] = [name for name in subfolders if name not in (".git", "node_modules", "vendor")]
+        found += [os.path.relpath(os.path.join(folder, name), root).replace(os.sep, "/") for name in files]
+    return found
+
+
+def exists(root, rel, name, known):
+    """NAME is a file from ROOT, next to the doc REL, or the end of a known path."""
+    return any(os.path.exists(os.path.normpath(os.path.join(base, name)))
+               for base in (root, os.path.join(root, os.path.dirname(rel)))) \
+        or any(path.endswith("/" + name.lstrip("./")) for path in known)
+
+
+def lint_file(root, rel, text, rules, known=()):
     """Findings of one doc: [(rule, severity, where)], and the Mermaid kinds and headings it holds."""
     found, kinds, headings = [], [], []
     fence, block, start = None, [], 0
@@ -88,22 +106,20 @@ def lint_file(root, rel, text, rules):
         heading = HEADING.match(line)
         if heading:
             headings.append(heading.group(1).strip())
-        if "TO-FILL" in line:
+        outside = re.sub(r"`[^`]*`", "", line)  # inline code: commands and names, with their own <slots>
+        if "TO-FILL:" in outside:  # a question in the form TO-FILL: <what>, not a mention of the word
             found.append(("to_fill", "low", where))
         for pattern in rules["placeholder_res"]:
-            if pattern.search(line.replace("TO-FILL", "")):
+            if pattern.search(outside.replace("TO-FILL", "")):
                 found.append(("placeholder", "medium", where))
                 break
-        outside = re.sub(r"`[^`]*`", "", line)
         for target in LINK.findall(outside):
             path = target.split("#")[0].split("?")[0]
             if path and not re.match(r"[a-z][a-z0-9+.-]*:", path, re.I) \
                     and not os.path.exists(os.path.normpath(os.path.join(root, os.path.dirname(rel), path))):
                 found.append(("broken_link", "medium", where))
         for name in TICKED.findall(line):
-            if FILE_NAME.match(name) and not name.startswith(NOT_FILES) and not any(
-                    os.path.exists(os.path.normpath(os.path.join(base, name)))
-                    for base in (root, os.path.join(root, os.path.dirname(rel)))):
+            if FILE_NAME.match(name) and not name.startswith(NOT_FILES) and not exists(root, rel, name, known):
                 found.append(("missing_file", "medium", where))
     if fence:
         found.append(("open_fence", "medium", "%s:%d" % (rel, start)))
@@ -144,9 +160,9 @@ def check(root, parts, rules):
     def add(rule, severity, where):
         hits.setdefault(rule, [severity, []])[1].append(where)
 
-    linted = {}
+    linted, known = {}, repo_files(root)
     for rel in doc_files(root):
-        found, kinds, headings = lint_file(root, rel, read(root, rel), rules)
+        found, kinds, headings = lint_file(root, rel, read(root, rel), rules, known)
         linted[rel] = (kinds, headings)
         for rule, severity, where in found:
             add(rule, severity, where)

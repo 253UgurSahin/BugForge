@@ -117,6 +117,20 @@ class LintTests(Project):
         self.assertEqual(found["missing_file"]["where"], ["docs/api.md:4"])
         self.assertEqual(found["missing_file"]["count"], 1)
 
+    def test_a_path_may_leave_out_leading_folders_and_a_bare_name_is_no_claim(self):
+        self.write("plugin/forge/gate.py", "x\n")
+        self.write("README.md", "# X\n\nRun `forge/gate.py` and `plugin/forge/gate.py`; see `nginx.conf` and `rate.py`.\n"
+                   "Not `orge/gate.py` (only whole folders count).\n")
+        found, _ = self.found(["readme"])
+        self.assertEqual(found["missing_file"]["where"], ["README.md:4"])
+
+    def test_inline_code_holds_slots_not_placeholders(self):
+        self.write("README.md", "# X\n\nRun `gate.py done plan --approved '<your exact words>'`.\n"
+                   "Unknown answers become a `TO-FILL` line.\nTO-FILL: who approves a refund?\n")
+        found, _ = self.found(["readme"])
+        self.assertNotIn("placeholder", found)
+        self.assertEqual(found["to_fill"]["where"], ["README.md:5"])
+
     def test_placeholders_to_fill_and_secrets(self):
         self.write("README.md", "# X\n\n<your app name here>\nTBD\nTO-FILL: who uses the app?\n"
                    "The key is `STRIPE_SECRET`, set it in .env.\n"
