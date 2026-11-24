@@ -98,6 +98,16 @@ class RuleTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(rules_of("<p>%s</p>" % text), [])
 
+    def test_a_professional_tone(self):
+        finding = found("<p>Oeps, er ging iets mis!! Probeer het simpelweg opnieuw.</p><button>Opslaan 🎉</button>", "tone")
+        self.assertEqual(len(finding), 1)
+        self.assertEqual(finding[0]["severity"], "low")
+        for part in ('"oeps"', '"simpelweg"', '"!!"', "emoji on 1 control(s): line 1"):
+            self.assertIn(part, finding[0]["where"])
+        calm = "<p>Uw afspraak staat op 3 mei om 14:00. Let op: de factuur volgt per e-mail!</p><button>Afspraak maken</button>"
+        self.assertEqual(rules_of(calm), [], "one exclamation mark and the user's own words are fine")
+        self.assertEqual(rules_of("<button>Volgende →</button>"), [], "an arrow is not an emoji")
+
     def test_a_long_form_needs_steps(self):
         fields = "".join('<label for="f%d">Veld</label><input id="f%d">' % (n, n) for n in range(8))
         self.assertEqual(rules_of("<form>%s</form>" % fields), ["long_form"])

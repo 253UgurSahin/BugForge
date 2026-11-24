@@ -34,6 +34,13 @@ BugForge has 8 skills. `/forge` runs a whole project; the other seven each do on
 Four of them have parts you can call on their own, such as `/forge-design motion` or
 `/forge-check secure`. The skills' scripts are standard-library Python 3.9+, each with its tests.
 
+## Documentation
+
+- [Architecture](docs/architecture.md): the layers, the domain model, the main flows and how it is installed, with diagrams.
+- [Glossary](docs/glossary.md): BugForge's words, one meaning each.
+- [Decisions](docs/decisions/): why it is built as it is.
+- [User guide](docs/user-guide.md): how to use it, step by step.
+
 ## Quick start
 
 1. Install BugForge (below).
@@ -287,9 +294,9 @@ it out of git and out of every image. The reports you will read most:
 
 | file in `forge-work/` | from | what it holds |
 | --- | --- | --- |
-| `design/concepts/` | `/forge-design` | the board with the three moving concepts you picked from |
-| `design/brief.md`, `design/review.md`, `design/shots/` | `/forge-design` | the concept and signature of the look; the scores per screen and round; before and after shots, frames and the film |
-| `design/redesign.md`, `design/specimen/` | `/forge-design` on your own app | how your app runs, each old value and its token, each commit and the proof; one page of the design system, shot before the build |
+| `forge-work/design/concepts/` | `/forge-design` | the board with the three moving concepts you picked from |
+| `forge-work/design/brief.md`, `forge-work/design/review.md`, `forge-work/design/shots/` | `/forge-design` | the concept and signature of the look; the scores per screen and round; before and after shots, frames and the film |
+| `forge-work/design/redesign.md`, `forge-work/design/specimen/` | `/forge-design` on your own app | how your app runs, each old value and its token, each commit and the proof; one page of the design system, shot before the build |
 | `dashboard.md` (and `dashboard-<screen>.md`), `motion.md` | `/forge-design dashboard`, `/forge-design motion` | each number with its source, and where the app builds each item of the level; which moments move, at which level, and the proof they show |
 | `levels.json` | every skill with a level | the levels you chose, in your own words |
 | `test-plan.md`, `bugs.md`, `test/` | `/forge-check test` | every case and its result; the bugs; the walk's findings and the screenshots per round |

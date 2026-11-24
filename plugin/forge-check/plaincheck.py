@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check pages for the plain rules a person sees without help: clear button words, an icon with a word,
-a visible label on every field, no jargon or programming values on screen, short forms and menus.
+a visible label on every field, no jargon or programming values on screen, a professional tone (no
+"oeps", "!!" or emoji on buttons), short forms and menus.
 
 The rules are those of ../forge-design/plain.md that a page's HTML shows by itself; the words to look for
 are in plain.json next to this script (English and Dutch). A URL is loaded once by getpage.py: one
@@ -33,17 +34,19 @@ VOID = set("area base br col embed hr img input link meta source track wbr".spli
 UNSEEN_TAGS = {"script", "style", "template", "noscript", "head", "title"}
 UNSEEN_CLASS = re.compile(r"(^|\s)(sr-only|visually-hidden|screen-reader-text|visuallyhidden)(\s|$)")
 NOT_FIELDS = ("hidden", "submit", "button", "reset", "image", "search")  # inputs that need no label of their own
+EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\u2B50]")  # pictographs and symbols, not arrows
 TRIM = " \t\r\n.:!?…→←>»«<-–—·•* "
 
 
 def load_rules():
     with open(os.path.join(HERE, "plain.json"), encoding="utf-8") as handle:
         data = json.load(handle)
-    for key in ("rules", "vague", "jargon", "leaks", "steps", "long_form", "long_menu"):
+    for key in ("rules", "vague", "jargon", "tone", "leaks", "steps", "long_form", "long_menu"):
         if key not in data:
             raise ValueError("plain.json has no %r" % key)
     data["steps"] = re.compile(data["steps"], re.I)
     data["jargon_re"] = words_pattern(data["jargon"])
+    data["tone_re"] = words_pattern(data["tone"])
     data["leaks_re"] = words_pattern(data["leaks"], 0)  # exact case: "NaN" and "null", not "Nan" or "Null"
     return data
 
@@ -153,9 +156,11 @@ def check(page, rules):
         found.append(dict(rules["rules"][rule], rule=rule, where=text))
 
     vague = {}  # the word: the lines it is on
-    icons = []
+    icons, emoji = [], []
     for control in page.controls:
         label = plain("".join(control["text"]))
+        if EMOJI.search(label):
+            emoji.append(control["line"])
         if label and label in rules["vague"]:
             vague.setdefault(label, []).append(control["line"])
         elif not label and control["content"]:
@@ -173,6 +178,11 @@ def check(page, rules):
     jargon = sorted({hit.lower() for hit in rules["jargon_re"].findall(text)})
     if jargon:
         add("jargon", "words: " + ", ".join('"%s"' % word for word in jargon[:8]))
+    tone = sorted({hit.lower() for hit in rules["tone_re"].findall(text)})
+    tone += ['"!!"'] if re.search(r"!{2,}", text) else []
+    tone += ["emoji on " + where(emoji, "control(s)")] if emoji else []
+    if tone:
+        add("tone", "; ".join(word if word.startswith(('"', "emoji")) else '"%s"' % word for word in tone))
     leaks = sorted(set(rules["leaks_re"].findall(text)))
     if leaks:
         add("leak", "on screen: " + ", ".join('"%s"' % word for word in leaks))
