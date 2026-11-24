@@ -158,7 +158,8 @@ Then answer yes or no per screen, with what you saw for each no:
 - Plain: a newcomer of 75 with reading glasses could say within 5 seconds what this screen is for and
   what to press; the main button says what it does with a verb and the thing; no icon stands alone;
   every field has a visible label; body text and buttons are big enough to read and hit; no effect
-  sits on top of the words or the main button.
+  sits on top of the words or the main button; the words are simple but professional, never childish
+  (no exclamation marks, jokes or emoji in messages).
 Answer per screen: its total out of 22, the eleven scores, the three weakest things, the six answers.
 Then one line: does the whole app look like the brief's concept, and which item of the generic look
 you saw, if any. Be strict. Do not guess what was meant. Do not soften a score.

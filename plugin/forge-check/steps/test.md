@@ -162,10 +162,11 @@ check`.
 
 **The plain walk, level 2 and up.** A fresh tester who never saw the app (a separate subagent when
 the session has one; else you, reading only the screenshots) plays the grandmother of plain.md: 75,
-reading glasses, not good with computers. For each main flow, it gets only the after shots at 390
+reading glasses, not good with computers, but a capable adult who expects to be addressed as one.
+For each main flow, it gets only the after shots at 390
 and 1440 wide, one at a time, and the task in her words ("Maak een afspraak voor dinsdag"). Per
 screen it answers, in one line each: what is this screen for, what would I press now, is anything
-unclear or too small. A screen fails when it cannot say what the screen is for, or what to press, in
+unclear or too small, and does any text talk down to me or sound unprofessional (plain.md rule 16). A screen fails when it cannot say what the screen is for, or what to press, in
 5 seconds, or when it would press the wrong thing. Each fail is a bug in Step 5, `[medium]` (a flow
 it cannot finish: `[high]`), titled with the plain.md rule it breaks.
 

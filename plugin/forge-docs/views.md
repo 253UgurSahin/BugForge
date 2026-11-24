@@ -189,7 +189,7 @@ A reason the code does not show: `TO-FILL: why was <x> chosen?`, for the user.
 
 ## guide: docs/user-guide.md
 
-For the people who use the app, in plain words (`../forge-design/plain.md`): no technical words, the
+For the people who use the app, in plain, professional words (`../forge-design/plain.md`): no technical words, the
 app's own button names in bold, one task per section, numbered steps of one action each.
 
 ```markdown
