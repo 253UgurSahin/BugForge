@@ -1,5 +1,5 @@
 {
-  "_about": "The forge levels, read by level.py: the one place for every level name and requirement. One scale, 1 to 5, in four domains; a level includes every level below it. Per domain: about and about_nl (the line above its table), floor (the lowest level inside a forge project, that is where forge-work/state.json exists; left out: no floor) and its five levels. Per level: name (English), nl (Dutch), aliases (other words that mean it, lower case, either language), summary and summary_nl (one line a non-expert understands), includes (what this level adds to the one below), built_with (look only), evidence (glob patterns from the project root, ** is any folders: level.py check wants a file that holds something for each one, of this level and of every level below it), evidence_how (how that evidence comes about) and evidence_or (words, each with the evidence files it stands in for: a line of the report that holds them and then the reason, in three words or more, counts in place of those files only).",
+  "_about": "The forge levels, read by level.py: the one place for every level name and requirement. One scale, 1 to 5, in five domains; a level includes every level below it. Per domain: about and about_nl (the line above its table), floor (the lowest level inside a forge project, that is where forge-work/state.json exists; left out: no floor) and its five levels. Per level: name (English), nl (Dutch), aliases (other words that mean it, lower case, either language), summary and summary_nl (one line a non-expert understands), includes (what this level adds to the one below), built_with (look only), evidence (glob patterns from the project root, ** is any folders: level.py check wants a file that holds something for each one, of this level and of every level below it), evidence_how (how that evidence comes about) and evidence_or (words, each with the evidence files it stands in for: a line of the report that holds them and then the reason, in three words or more, counts in place of those files only).",
   "domains": {
     "look": {
       "about": "design, motion and 3D. Each level includes the ones below it.",
@@ -84,6 +84,77 @@
             "screens that change in 3D space"
           ],
           "built_with": "+ the whole scene kit, composed",
+          "evidence": []
+        }
+      ]
+    },
+    "header": {
+      "about": "only the header at the top of the first screen: the effect there, the rest calm. Not chosen: it follows the look.",
+      "about_nl": "alleen de kop bovenaan het eerste scherm: daar het effect, de rest rustig. Niet gekozen: hij volgt de look.",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Subtle",
+          "nl": "Subtiel",
+          "aliases": ["calm", "rustig", "minimal", "minimaal", "minimum"],
+          "summary": "A clear header: the app's name, one sentence that says what it does, and one big button for the main task.",
+          "summary_nl": "Een duidelijke kop: de naam van de app, een zin die zegt wat hij doet en een grote knop voor de hoofdtaak.",
+          "includes": [
+            "the name, one plain sentence and one main button",
+            "calm colour and type in the app's own taste"
+          ],
+          "evidence": []
+        },
+        {
+          "level": 2,
+          "name": "Polished",
+          "nl": "Verzorgd",
+          "aliases": ["polish", "gepolijst", "netjes"],
+          "summary": "+ the title, the sentence and the button arrive gently, with a soft shift of colour or light.",
+          "summary_nl": "+ de titel, de zin en de knop komen rustig binnen, met een zachte verschuiving van kleur of licht.",
+          "includes": [
+            "an entrance in steps",
+            "a slow gradient or light shift that never draws the eye from the button"
+          ],
+          "evidence": []
+        },
+        {
+          "level": 3,
+          "name": "Expressive",
+          "nl": "Expressief",
+          "aliases": ["lively", "levendig"],
+          "summary": "+ real depth in the header: layers that move at their own speed as you scroll, or one signature moment.",
+          "summary_nl": "+ echte diepte in de kop: lagen die met hun eigen snelheid bewegen als je scrolt, of een eigen moment.",
+          "includes": [
+            "CSS 3D or scenes/depth.js of the scene kit, in the header only",
+            "one signature moment built for this app"
+          ],
+          "evidence": []
+        },
+        {
+          "level": 4,
+          "name": "Showpiece",
+          "nl": "Showpiece",
+          "aliases": ["show piece", "pronkstuk"],
+          "summary": "+ a living 3D scene behind the header, made for this app, that turns toward your pointer.",
+          "summary_nl": "+ een levende 3D-scene achter de kop, gemaakt voor deze app, die naar je aanwijzer draait.",
+          "includes": [
+            "a WebGL scene of the scene kit in the header only, with Three.js installed locally",
+            "a still poster for weak devices, no WebGL and reduced motion"
+          ],
+          "evidence": []
+        },
+        {
+          "level": 5,
+          "name": "Cinematic",
+          "nl": "Cinematisch",
+          "aliases": ["cinema", "film", "filmisch", "4d", "max", "maximal", "maximaal", "maximum"],
+          "summary": "+ the header's scene reacts to the app's own live data and changes as you start to scroll.",
+          "summary_nl": "+ de scene in de kop reageert op de eigen live data van de app en verandert als je begint te scrollen.",
+          "includes": [
+            "the scene shows the app's live data",
+            "a short move of the camera on the first scroll, inside the header"
+          ],
           "evidence": []
         }
       ]
@@ -173,7 +244,7 @@
           "aliases": ["fast", "vlug", "smoke", "minimal", "minimaal", "minimum"],
           "summary": "The app starts, the main flow works once, no console error. Minutes. Only on its own, never inside a forge project.",
           "summary_nl": "De app start, de hoofdflow werkt een keer, geen consolefout. Duurt minuten. Alleen los, nooit binnen een forge-project.",
-          "includes": ["the app starts", "the main flow works once", "no console error", "minutes"],
+          "includes": ["the app starts", "the main flow works once", "no console error", "the plain check", "minutes"],
           "evidence": []
         },
         {
@@ -181,9 +252,9 @@
           "name": "Basic",
           "nl": "Basis",
           "aliases": [],
-          "summary": "+ every user flow tested the way it should go, plus unit tests for the logic that matters.",
-          "summary_nl": "+ elke gebruikersflow getest zoals het hoort te gaan, plus unittests voor de logica die telt.",
-          "includes": ["a happy-path spec per flow", "unit tests for the logic that matters"],
+          "summary": "+ every user flow tested the way it should go, unit tests for the logic that matters, a newcomer tries the main tasks.",
+          "summary_nl": "+ elke gebruikersflow getest zoals het hoort, unittests voor de logica die telt, een nieuweling probeert de hoofdtaken.",
+          "includes": ["a happy-path spec per flow", "unit tests for the logic that matters", "the plain walk"],
           "evidence": []
         },
         {

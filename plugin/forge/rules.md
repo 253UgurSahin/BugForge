@@ -276,7 +276,8 @@ Skills name scripts by their path from the skill's own folder, always in the
 form `../forge-check/scope.py`. Claude Code tells you each skill's base
 directory; turn the path into an absolute one from there. Run every script
 from the root of the user's project, so `.` and `forge-work/` mean the
-project, not the skill pack.
+project, not the skill pack. The `_*.py` files next to the scripts are code
+the scripts share: they are imported, never run.
 
 Where there is no `python3` (Windows), run the same command with `py -3`
 or `python`. Git Bash on Windows turns an argument that starts with `/`

@@ -442,7 +442,6 @@ class FolderTests(unittest.TestCase):
         self.assertEqual(self.wheres(self.root), ["src/app.js:1", "src/framework/ok.ts:1", "views/a.vue:1"])
         self.assertTrue(codecheck.SKIP_DIRS < flowcheck.SKIP_DIRS)  # codecheck's list, and forge-work
         self.assertEqual(flowcheck.SKIP_DIRS - codecheck.SKIP_DIRS, {"forge-work"})
-        self.assertEqual((flowcheck.LANGUAGES, flowcheck.MAX_BYTES), (codecheck.LANGUAGES, codecheck.MAX_BYTES))
 
     def test_binary_and_big_files_are_listed_as_skipped(self):
         make_tree(self.root, {"image.js": b"\x89PNG\0\0jwt.decode(t)\n", "big.py": "x = 1\n" * 200000, "ok.js": "jwt.decode(t);\n"})
@@ -618,7 +617,8 @@ class ConventionTests(unittest.TestCase):
             self.assertIn(words, flowcheck.__doc__)
         self.assertLessEqual(len(self.source.splitlines()), 300)
         imports = sorted(line for line in self.source.splitlines() if line.startswith(("import ", "from ")))
-        self.assertEqual(imports, ["import argparse", "import errno", "import json", "import os", "import re", "import sys"])
+        self.assertEqual(imports, ["from _walk import SEVERITIES", "import _walk",  # _walk.py: next to it
+                                   "import argparse", "import json", "import os", "import re", "import sys"])
 
     def test_python_3_9_and_docstrings(self):
         tree = ast.parse(self.source, feature_version=(3, 9))

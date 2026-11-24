@@ -12,12 +12,13 @@ every change shows on your own localhost first.
 | `/forge-plan` | The stack profile (Laravel, Django, Next.js or a static site), schema, routes and build order. |
 | `/forge-design` | design, brand, dashboard and motion: three moving concepts, then the look built into the app. |
 | `/forge-build` | build and pack: scaffolds with the official installer, builds screen by screen, fits the containers. |
-| `/forge-check` | test, diff, secure, audit and inspect: tests at your level and the security gate. |
+| `/forge-check` | test, diff, secure, audit and inspect: tests at your level, the security gate, and code craft (SOLID, clean code). |
 | `/forge-improve` | Fixes what the checks found and the look you pick, on a new branch, one commit each. |
 | `/forge-launch` | Landing page, prices in EUR with VAT, privacy policy, terms, basic SEO and a launch checklist. |
+| `/forge-docs` | Documents an app from its own code: README, architecture with diagrams, API, glossary, decisions, user guide. |
 
 The skills call each other's scripts by paths like `../forge-check/scope.py`, so they belong together:
-install the plugin, or copy all eight folders.
+install the plugin, or copy all nine folders.
 
 ## Install
 

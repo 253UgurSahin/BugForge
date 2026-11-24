@@ -26,8 +26,9 @@ import struct
 import sys
 import zlib
 from array import array
-from itertools import accumulate
 from operator import add, sub
+
+from _png import chunks_of, paeth, unfilter  # next to this script, shared with ../forge-design/eyedropper.py
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}  # PNG colour type -> bytes per pixel at 8 bits
@@ -40,7 +41,6 @@ EDGE_STEP = 10  # a brightness jump (0-255) bigger than this is an outline
 SHIFT = 3  # a cell may line up with the clone's this many compared pixels away, each way
 DEVICE_RATIOS = (1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4)  # 2x, 3x ... copies of one viewport
 VERDICTS = [(90, "matches"), (75, "close"), (50, "partly"), (0, "different")]  # lowest score, word
-MOD256 = list(range(256)) * 2  # MOD256[n] is n % 256 for n up to 511
 
 
 class PngError(Exception):
@@ -55,11 +55,7 @@ def read_png(path):
     if data[:8] != PNG_SIGNATURE:
         raise PngError("%s is not a PNG file: save the screenshot as PNG, or convert it "
                        "(on a Mac: sips -s format png IN --out OUT.png)" % path)
-    chunks, pos = {}, 8
-    while pos + 8 <= len(data):
-        length, kind = struct.unpack(">I4s", data[pos:pos + 8])
-        chunks.setdefault(kind, []).append(data[pos + 8:pos + 8 + length])
-        pos += 12 + length  # length, type, body, checksum
+    chunks = chunks_of(data)
     header = chunks.get(b"IHDR", [b""])[0]
     if len(header) != 13:
         raise PngError("%s has no valid PNG header%s" % (path, RETAKE))
@@ -92,28 +88,6 @@ def read_png(path):
             line = unfilter(data[start], bytearray(data[start + 1:start + stride]), line, bpp)
             yield brightness(line, colour, table)
     return width, height, rows()
-
-
-def paeth(left, up, upleft):
-    """The PNG Paeth predictor: whichever neighbour is closest to left + up - upleft."""
-    guess = left + up - upleft
-    distances = [abs(guess - left), abs(guess - up), abs(guess - upleft)]
-    return (left, up, upleft)[distances.index(min(distances))]  # on a tie: left, then up
-
-
-def unfilter(kind, line, prev, bpp):
-    """Undo filter type 0 to 4 on one row of PNG image data (the PNG spec, section 9)."""
-    if kind == 1:  # add the byte one pixel to the left: a running total per channel
-        for channel in range(bpp):
-            line[channel::bpp] = bytearray(map((255).__and__, accumulate(line[channel::bpp])))
-    elif kind == 2:  # add the byte above
-        line = bytearray(map(MOD256.__getitem__, map(add, line, prev)))
-    elif kind in (3, 4):  # add the average of left and above, or the Paeth guess: byte by byte
-        for i in range(len(line)):
-            left, upleft = (line[i - bpp], prev[i - bpp]) if i >= bpp else (0, 0)
-            guess = (left + prev[i]) >> 1 if kind == 3 else paeth(left, prev[i], upleft)
-            line[i] = (line[i] + guess) & 255
-    return line
 
 
 def brightness(line, colour, table=None):

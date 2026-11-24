@@ -596,8 +596,8 @@ class ConventionTests(unittest.TestCase):
         self.assertLessEqual(len(self.source.splitlines()), 300)  # the spec's hard limit
         self.assertTrue(self.source.startswith("#!/usr/bin/env python3\n"))
         imports = sorted(line for line in self.source.splitlines() if line.startswith(("import ", "from ")))
-        self.assertEqual(imports, ["import argparse", "import errno", "import json", "import os", "import re",
-                                   "import sys"])
+        self.assertEqual(imports, ["from _walk import SEVERITIES", "import _walk",  # _walk.py: next to it
+                                   "import argparse", "import re", "import sys"])
 
     def test_runs_on_python_3_9(self):
         ast.parse(self.source, feature_version=(3, 9))

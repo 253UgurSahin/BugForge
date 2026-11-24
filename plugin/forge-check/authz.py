@@ -26,19 +26,18 @@ finding). Never a pass. --json prints the report on stdout, but that of a run wi
 a file that stdout is saved in then stays empty, so only a finished run ever counts as the evidence of level 4.
 """
 
-import argparse
 import difflib
 import http.client
 import json
-import os
 import re
-import subprocess
 import sys
 import time
 import urllib.parse
 import urllib.request
 
-SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
+from _http import (SEVERITIES, KeepEveryAnswer, Stop, active_parser, add_limits, app_address,  # next to this script
+                   finding_lines, in_scope, print_active, refused, show, tally)
+
 USER_AGENT = "forge-authz (self-check of your own app)"
 TIMEOUT, BODY_CAP, PAUSE = 10, 200000, 0.1  # seconds per request, bytes read of an answer, seconds between requests
 WORDS, ALIKE = 2000, 0.9  # words of each body that are compared, and the share that must match to count as the same
@@ -58,14 +57,6 @@ RULES = {  # check: (severity, title, why, fix)
 WHO = {"b": ("user B", "other_user_reads", None), "anonymous": ("a visitor without a session", "anonymous_reads",
                                                                "anonymous_200")}
 
-class Stop(Exception):
-    """The request cap is reached: the run ends here."""
-
-class KeepEveryAnswer(urllib.request.HTTPErrorProcessor):  # no redirect is followed; a 404 or 500 is not an error
-    def http_response(self, request, response):
-        return response
-    https_response = http_response
-
 class Client:
     """Sends the GETs: only to the app itself, counted, paused and capped."""
     def __init__(self, base, limit):
@@ -82,21 +73,6 @@ class Client:
         request = urllib.request.Request(self.base + path, headers=dict(session or {}, **{"User-Agent": USER_AGENT}))
         with self.opener.open(request, timeout=TIMEOUT) as answer:
             return answer.status, answer.read(BODY_CAP).decode("utf-8", errors="replace")
-
-def show(text, limit=80):  # text from a server or a file made safe to print: no control characters, not too long
-    text = "".join(ch if ch.isprintable() else "?" for ch in str(text))
-    return text if len(text) <= limit else text[:limit] + "..."
-
-def in_scope(host, scope_file=None):
-    """(allowed, what scope.py said). scope.py next to this file decides; only its exit 0 means yes."""
-    command = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scope.py"), host]
-    try:
-        done = subprocess.run(command + (["--scope", scope_file] if scope_file else []), timeout=30,
-                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except (OSError, subprocess.SubprocessError) as error:
-        return False, "scope.py could not be run: %s" % show(error)
-    said = (done.stdout + done.stderr).decode("utf-8", errors="replace").splitlines()
-    return done.returncode == 0, show(" / ".join(said[:2]), 300)
 
 def load_session(path, host):
     """The request headers ({"Cookie": ..., "Authorization": ...}) in a session file. A ValueError never holds a value."""
@@ -182,24 +158,14 @@ def check_path(client, path, sessions, findings, notes):
 
 def main(argv=None):
     """Read the command line, ask scope.py, check each path, print the report and return the exit code."""
-    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, description=__doc__)
-    parser.add_argument("url", help="http:// or https:// address of your own running app")
+    parser = active_parser(__doc__)
     parser.add_argument("--urls", required=True, metavar="FILE", help="text file: one private path of user A per line")
     parser.add_argument("--a", required=True, metavar="COOKIES_A", help="session file of user A, who owns the paths")
     parser.add_argument("--b", required=True, metavar="COOKIES_B", help="session file of user B, another user")
-    parser.add_argument("--scope", metavar="FILE", help="scope file for scope.py (default: forge-work/scope.json)")
-    parser.add_argument("--max-requests", type=int, default=150, metavar="N", help="request cap, 1 to 500 (default: 150)")
-    parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
-    parser.add_argument("--fail-on", choices=SEVERITIES, default="high",
-                        help="exit 1 when a finding is this bad or worse (default: high)")
+    add_limits(parser)
     args = parser.parse_args(argv)
     try:
-        parts = urllib.parse.urlsplit(args.url)
-        if parts.scheme not in ("http", "https") or not parts.hostname or "@" in parts.netloc or (parts.port or 1) < 1:
-            raise ValueError("give an http:// or https:// address, without a user name or password in it")
-        if not 1 <= args.max_requests <= 500:
-            raise ValueError("--max-requests must be from 1 to 500: this is a check, not a load test")
+        parts = app_address(args)
         paths = load_paths(args.urls)
         sessions = {"a": load_session(args.a, parts.hostname), "b": load_session(args.b, parts.hostname)}
         if sessions["a"] == sessions["b"]:
@@ -207,10 +173,7 @@ def main(argv=None):
     except (OSError, ValueError) as error:
         print("error: %s" % show(error, 300), file=sys.stderr)
         return 2
-    allowed, said = in_scope(parts.hostname, args.scope)  # asked about the host the requests would go to
-    if not allowed:
-        print("refused: active tests may not run against %s. Nothing was sent.\nscope.py says: %s"
-              % (show(parts.hostname), said), file=sys.stderr)
+    if refused(parts.hostname, args.scope):
         return 2
     client = Client("%s://%s" % (parts.scheme, parts.netloc), args.max_requests)
     findings, notes, rows = [], [], []
@@ -227,23 +190,16 @@ def main(argv=None):
     incomplete = len(rows) < len(paths) or any(row["result"] == "could not check" for row in rows)
     notes.append("user B's session was not verified: with an expired session B is just a visitor and all looks fine; "
                  "log both users in again shortly before the run")
-    findings.sort(key=lambda f: SEVERITIES.index(f["severity"]))
-    failed = any(SEVERITIES.index(f["severity"]) <= SEVERITIES.index(args.fail_on) for f in findings)
-    summary = {sev: sum(f["severity"] == sev for f in findings) for sev in SEVERITIES}
+    failed, summary = tally(findings, args.fail_on)
     summary.update(total=len(findings), url=show(client.base), requests=client.count, paths=len(paths),
                    fail_on=args.fail_on, failed=failed, incomplete=incomplete)
     lines = ["Checked %d of %d private paths on %s." % (len(rows), len(paths), summary["url"])]
     lines += ["  %-15s %s  (A %s, B %s, no session %s)" % (row["result"].upper(), row["path"], row["a"], row["b"],
               row["anonymous"]) for row in rows] + [""]
-    lines += ["%-8s  %s [%s]\n          where: %s\n          why:   %s\n          fix:   %s\n" % (f["severity"].upper(),
-              f["title"], f["check"], f["where"], f["why"], f["fix"]) for f in findings]
-    counts = ", ".join("%d %s" % (summary[sev], sev) for sev in SEVERITIES if summary[sev])
-    lines += ["%d finding(s): %s." % (len(findings), counts) if findings else "No findings.", "", "Not checked:"]
-    lines += ["- " + note for note in notes]
+    lines += finding_lines(findings, summary, notes)
     lines += ["", "Not every path could be checked (see Not checked): not a pass. Run again."] if incomplete else []
     report = {"findings": findings, "paths": rows, "not_checked": notes, "summary": summary}
-    print(json.dumps(report, indent=2) if args.json else "\n".join(lines), flush=True,
-          file=sys.stderr if args.json and incomplete else sys.stdout)  # not finished: never in a saved report
+    print_active(report, lines, args.json, incomplete)  # not finished: never in a saved report
     return 2 if incomplete else 1 if failed else 0
 
 if __name__ == "__main__":

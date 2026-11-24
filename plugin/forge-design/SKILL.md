@@ -34,8 +34,8 @@ Read `../forge/rules.md` once per session. In short:
 - Never print, paste or commit secrets. Never touch a server: forge only builds containers.
 - Stop at every checkpoint and wait for the user's go; in auto mode, stop where `../forge/rules.md` section 7 says.
 
-Also for this skill: the levels are in `../forge/levels.md` and rules.md section 10; showing the
-result is rules.md section 9. Both hold for every part.
+Also for this skill: levels in `../forge/levels.md` and rules.md section 10, showing the result in
+section 9, every screen clear for everyone (`../forge-design/plain.md`). All hold for every part.
 
 ## The parts
 
@@ -86,10 +86,10 @@ How far the look goes, from 1 to 5. Each level includes the ones below it:
 5. Cinematic (Cinematisch): + a 3D journey as you scroll, forms that react to the app's live data.
 
 - A level in the request is recorded at once, right after the plan and before you read the app or
-  take a shot: `python3 ../forge/level.py set look 4 --said '<their words>'`. Dashboards have a
-  scale of their own (`set dashboard`). For the whole look, a level with no part named counts for
-  look and dashboard: run `set look N` and `set dashboard N` with the same words, and tell the user
-  in one line that the dashboard follows the same level.
+  take a shot: `python3 ../forge/level.py set look 4 --said '<their words>'`. Dashboards (`set
+  dashboard`) and the header alone (`set header`, "look 2, header 4") have scales of their own. For
+  the whole look, a level with no part named counts for look and dashboard: `set look N` and `set
+  dashboard N` with the same words; tell the user in one line that the dashboard follows it.
 - No level on record: ask the one question of `../forge/levels.md` ("The one question"), also in
   auto mode: for the look when `python3 ../forge/level.py get look` exits 1, and, for the whole
   look on an app with data screens, for the dashboard when `get dashboard` exits 1. Both in one

@@ -14,7 +14,6 @@ or with --strict anything not checked; 2 = PATH is not a folder that exists and 
 """
 
 import argparse
-import errno
 import fnmatch
 import json
 import os
@@ -23,6 +22,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
+from _report import print_report  # next to this script: a reader may stop early
 from textwrap import shorten
 
 SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
@@ -283,13 +284,7 @@ def main(argv=None):
                    fail_on=args.fail_on, strict=args.strict, failed=failed)
     report = {"findings": findings, "checked": checked, "not_checked": not_checked,
               "summary": summary}
-    try:
-        print(json.dumps(report, indent=2) if args.json
-              else format_human(findings, not_checked, summary), flush=True)
-    except OSError as error:  # the reader stopped early (| head): end quietly, no traceback
-        if error.errno not in (errno.EPIPE, errno.EINVAL):  # EINVAL: what Windows says there
-            raise
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    print_report(json.dumps(report, indent=2) if args.json else format_human(findings, not_checked, summary))
     return 1 if failed else 0
 
 if __name__ == "__main__":

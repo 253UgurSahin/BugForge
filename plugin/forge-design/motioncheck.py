@@ -30,8 +30,13 @@ import os
 import re
 import sys
 
+FORGE_CHECK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "forge-check")
+if FORGE_CHECK not in sys.path:  # ../forge-check/_walk.py reads a file to check, for trackers.py too
+    sys.path.append(FORGE_CHECK)
+from _walk import MAX_BYTES, read_code  # noqa: E402 (after the path to it)
+
 SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
-MAX_BYTES, MAX_WILL_CHANGE = 1024 * 1024, 5
+MAX_WILL_CHANGE = 5
 SKIP_FOLDERS = set(""".git node_modules vendor bower_components venv .venv .tox site-packages __pycache__ dist build
     out .next .nuxt .output .svelte-kit coverage .cache .idea .vscode staticfiles forge-work .claude""".split())
 STYLES, SCRIPTS = {".css", ".scss", ".less", ".pcss"}, {".js", ".mjs", ".cjs", ".ts", ".mts", ".jsx", ".tsx"}
@@ -234,18 +239,11 @@ def scan_path(path, fail_on="high"):
     state = dict(motion=[], stopped=set(), endless=[], will=[], frames=set(), libraries=[], asks=False,
                  asks_in_script=False)
     for file_path in (f for p in paths for f in (files_under(p, not_checked) if os.path.isdir(p) else [p])):
-        try:
-            with open(file_path, "rb") as handle:
-                data = handle.read(MAX_BYTES + 1)
-        except OSError:
-            not_checked.append(file_path)
-            continue
-        if len(data) > MAX_BYTES or b"\0" in data[:8192]:  # too big, or binary (a NUL byte)
-            print("skipped: %s (binary, or over 1 MB)" % file_path, file=sys.stderr)
-            not_checked += [file_path + " (binary, or over 1 MB)"] if file_path in paths else []  # a named file
+        text = read_code(file_path, not_checked, file_path in paths)  # a file the user named: not checked is an error
+        if text is None:
             continue
         checked += 1
-        rows = data.decode("utf-8", errors="replace").replace("\r\n", "\n").split("\n")
+        rows = text.replace("\r\n", "\n").split("\n")
         text = "\n".join("" if "forge:allow" in row else row for row in rows)  # the user's opt-out
         state["asks"] = state["asks"] or bool(ASKS.search(text))
         css, rest = split(text, os.path.splitext(file_path)[1].lower())

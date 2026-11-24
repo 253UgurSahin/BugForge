@@ -46,6 +46,8 @@ import re
 import subprocess
 import sys
 
+from _cli import checks_parser  # next to this script: the start of the command line
+
 PACK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the forge skill pack
 UNSEEN = re.compile(r"<!--.*?(?:-->|\Z)|^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1|\Z)", re.S | re.M)  # comments, code
 PART = re.compile(r"(?i)(design|motion|dashboard)\b")  # forge-improve Step 2: `### design [look] ...`
@@ -226,10 +228,7 @@ def a_time(text):
 
 def main(argv=None):
     """Run one check. Returns the exit code: 0, 1 or 2 (see the top)."""
-    for stream in (sys.stdout, sys.stderr):  # what the console cannot show comes out as \u escapes, not a crash
-        getattr(stream, "reconfigure", lambda **_: None)(errors="backslashreplace")
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    commands = parser.add_subparsers(dest="command", metavar="CHECK", required=True)
+    parser, commands = checks_parser(__doc__)
     looked = commands.add_parser("looked", help="each look item of improve.md: its report, and a change that shows")
     looked.add_argument("file")
     looked.add_argument("folder")

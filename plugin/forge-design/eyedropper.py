@@ -32,14 +32,16 @@ import re
 import struct
 import sys
 import zlib
-from itertools import accumulate
-from operator import add
+
+FORGE_CHECK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "forge-check")
+if FORGE_CHECK not in sys.path:  # ../forge-check/_png.py reads PNG files, for imgdiff.py too
+    sys.path.append(FORGE_CHECK)
+from _png import chunks_of, paeth, unfilter  # noqa: E402 (after the path to it)
 
 CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}  # PNG colour type -> bytes per pixel at 8 bits
 MAX_PIXELS = 30 * 1000 * 1000  # about 1170 x 25000: bigger images are refused, not read
 RESAVE = ": save it as an 8-bit PNG without interlacing (a fresh screenshot is one)"
 HEX = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
-MOD256 = list(range(256)) * 2  # MOD256[n] is n % 256 for n up to 511
 
 
 def linear(channel):
@@ -66,27 +68,6 @@ def grey(colour):
     return "#%02x%02x%02x" % ((max(best, 0),) * 3)
 
 
-def paeth(left, up, upleft):
-    """The PNG Paeth predictor: whichever neighbour is closest to left + up - upleft."""
-    guess = left + up - upleft
-    distances = [abs(guess - left), abs(guess - up), abs(guess - upleft)]
-    return (left, up, upleft)[distances.index(min(distances))]  # on a tie: left, then up
-
-
-def unfilter(kind, line, prev, bpp):
-    """Undo filter type 0 to 4 on one row of PNG image data (the PNG spec, section 9)."""
-    if kind == 1:  # add the byte one pixel to the left: a running total per channel
-        for channel in range(bpp):
-            line[channel::bpp] = bytearray(map((255).__and__, accumulate(line[channel::bpp])))
-    elif kind == 2:  # add the byte above
-        line = bytearray(map(MOD256.__getitem__, map(add, line, prev)))
-    elif kind in (3, 4):  # add the average of left and above, or the Paeth guess: byte by byte
-        for i in range(len(line)):
-            left, upleft = (line[i - bpp], prev[i - bpp]) if i >= bpp else (0, 0)
-            line[i] = (line[i] + ((left + prev[i]) >> 1 if kind == 3 else paeth(left, prev[i], upleft))) & 255
-    return line
-
-
 def rgb(line, colour, palette):
     """One decoded row as 3 bytes (red, green, blue) per pixel; alpha is left out."""
     if colour == 2:
@@ -106,11 +87,7 @@ def read_png(path):
         data = handle.read()
     if data[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError("%s is not a PNG file: save the screenshot as PNG" % path)
-    chunks, pos = {}, 8
-    while pos + 8 <= len(data):
-        length, kind = struct.unpack(">I4s", data[pos:pos + 8])
-        chunks.setdefault(kind, []).append(data[pos + 8:pos + 8 + length])
-        pos += 12 + length  # length, type, body, checksum
+    chunks = chunks_of(data)
     header = chunks.get(b"IHDR", [b""])[0]
     if len(header) != 13:
         raise ValueError("%s has no valid PNG header: take the screenshot again" % path)

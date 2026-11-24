@@ -27,7 +27,8 @@ finding). A finding is something you saw, with file and line; a hunch goes under
 ## Step 2: the scanners
 
 Run `python3 ../forge-check/secretscan.py .`, then `../forge-check/codecheck.py`,
-`../forge-check/deps.py` and `../forge-check/trackers.py` the same way. Read the line behind each
+`../forge-check/deps.py`, `../forge-check/trackers.py` and `../forge-check/craftcheck.py --json` the
+same way. Read the line behind each
 hit. A codecheck or trackers match in a test or a comment can be a false positive. A secretscan hit is
 not: a real-looking key in a comment or a test fixture is still a leaked key. Where the severity table
 below differs from a scanner, the table wins. Under "Not checked": deps.py's "not checked" notes, any
@@ -90,6 +91,14 @@ then models and migrations, then the front end. In a big codebase, sample. Look 
 - **Accessibility and UX**, when it has a UI: what the code shows (images without alt text, inputs
   without a label). The live check is `/forge-check inspect`, the next phase; its findings go in inspect.md.
 - **Maintainability**: no tests around money or login, TODO clusters, abandoned packages, no README.
+- **Code craft** (`../forge-check/craft.md`): how well the code is made, by the rules of Clean Code,
+  SOLID, GRASP and the design patterns. Read each place craftcheck.py named before it becomes a finding
+  (a flat list of fields or a builder chain is fine). Then read the files that change most and the code
+  around money, login and personal data with the rest of craft.md: names, side effects, error handling,
+  null, third-party APIs spread through the code, business rules in controllers or views, layers and
+  cycles, and where a smell asks for a pattern. One finding per rule, its ID in `where`, the worst
+  places first, what goes wrong for the business in `why`, and the smallest safe fix with "first a
+  test around it".
 - **AVG/GDPR**: which personal data is stored and why, account deletion and data export, personal
   data in logs or URLs, trackers before consent (trackers.py), how passwords are hashed, retention.
 - The five classic mistakes for the profile in `../forge-plan/profiles.md`: check each one.
@@ -131,8 +140,8 @@ user chooses there. Only for an app with screens, and only on the user's own mac
 | --- | --- |
 | critical | another user's data visible, login bypass, SQL injection, a live secret in git, passwords in plain text, prices taken from the browser, data loss |
 | high | passwords hashed with MD5 or SHA1, runtime or framework past end of life, a write action without an authorisation check, forged-request (CSRF) protection turned off on a logged-in write action (book, pay, change settings), failing tests on a core flow, tests pointed at a real database, trackers before consent, personal data in logs or URLs, a main screen people cannot use (text below WCAG AA contrast, `../forge-design/contrast.py` exits 1; the main action cut off at 390px) |
-| medium | N+1 queries on a main page, a missing index on a foreign key or on a column a page or scan looks up by (low while the table stays small), wrong results on a main page or in a booking rule (time-zone shift, wrong count), no tests, no lockfile, end of life within six months, no account deletion or data export, a main screen under 14 of 22 |
-| low | code files over 500 lines, TODO clusters, no README, `.env.example` or CI, a screen from 14 to 17 of 22, an item of the generic look |
+| medium | swallowed errors, duplicated price or permission rules, one class doing all the billing or login (craft.md), N+1 queries on a main page, a missing index on a foreign key or on a column a page or scan looks up by (low while the table stays small), wrong results on a main page or in a booking rule (time-zone shift, wrong count), no tests, no lockfile, end of life within six months, no account deletion or data export, a main screen under 14 of 22 |
+| low | other craft findings: long functions, many arguments, deep nesting, flag arguments, commented-out code, names that hide intent, a missing pattern (craft.md); code files over 500 lines, TODO clusters, no README, `.env.example` or CI, a screen from 14 to 17 of 22, an item of the generic look |
 
 ## Output: forge-work/audit.md
 
@@ -161,6 +170,7 @@ Three to five plain sentences: what it is built with, what is good, the biggest 
 - Laravel 11.31 on PHP 8.3, MariaDB 11.4, containers, GitHub Actions. 182 files, 14,210 lines
 - Tests: 140 passed, 2 failed, 1 warning (A004). Automatic checks: 3 risky code patterns, 2 known holes
 - Read in full: routes, controllers. Sampled: views. End of life: endoflife.date, YYYY-MM-DD
+- Craft: 412 functions, 14.2 lines on average, 23 over 30 lines, 3 duplicated blocks (craftcheck.py)
 - Look: php artisan serve on http://localhost:8000, branch main. 4 screens, 13 to 16 of 22 (judge:
   fresh eyes); the motion in the code reaches level 1 (motioncount.py). Shots: forge-work/audit/shots/
 
@@ -170,6 +180,12 @@ where: app/Http/Controllers/InvoiceController.php:31
 why:   the invoice is found by its number only, so changing the number in the URL shows someone else's
 fix:   add an InvoicePolicy and call Gate::authorize('view', $invoice) before showing it
 effort: S
+
+### A002 [low] Long functions make the booking code hard to change safely
+where: app/Services/BookingService.php:88 store (CR-F1, 142 lines); app/Http/Controllers/AdminController.php:30
+why:   one function checks, prices, saves and mails; a change to the price can break the mail and nobody sees it
+fix:   first a test around store, then split it into check, price, save and notify (craft.md CR-F1, CR-C3)
+effort: M
 
 ### L001 [medium] The bookings screen has no clear first thing to look at
 where: bookings (forge-work/audit/shots/bookings-1440-light.png), 13 of 22

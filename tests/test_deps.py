@@ -818,7 +818,7 @@ class ScriptTests(unittest.TestCase):
         self.assertNotRegex(source, r"\b(eval|exec)\s*\(|\bpickle\b")
         imports = sorted(line.split()[1] for line in source.splitlines()
                          if line.startswith(("import ", "from ")))
-        self.assertEqual(imports, ["argparse", "errno", "fnmatch", "json", "os", "re", "shutil",
+        self.assertEqual(imports, ["_report", "argparse", "fnmatch", "json", "os", "re", "shutil",  # _report: next to it
                                    "subprocess", "sys", "tempfile", "textwrap"])
 
 

@@ -78,6 +78,16 @@ The other three scales:
 | 4 | Showpiece: a control-room screen, linked panels, charts with depth | Thorough (Grondig): every form, speed limits, offline, keyboard only | Thorough (Grondig): your running app probed, two users tried on each other's data |
 | 5 | Cinematic (Cinematisch): your data as a 3D landscape | Exhaustive (Uitputtend): every state, hostile input, slow networks | Exhaustive (Uitputtend): a threat model, every route against every role |
 
+- **Only the header.** A striking header with calm, clear screens below: "look 2, header 4" (Dutch:
+  "look 2, kop 4"). The header at the top of the first screen gets that level's effect (up to a
+  living 3D scene behind it), every other part of the app stays at the look's level. Not chosen, the
+  header follows the look.
+- **Clear for everyone, at every level.** Every screen follows
+  [`forge-design/plain.md`](plugin/forge-design/plain.md): a button says what it does ("Afspraak
+  maken", not "Verzenden"), an icon always has a word, a label above each field, one main button,
+  plain words, text and buttons big enough, forms in steps, empty screens and errors that say what
+  to do. `plaincheck.py` checks the pages at every test level; from test level 2 a fresh tester
+  plays a newcomer of 75 and does the main tasks from screenshots alone.
 - Say it in any words, English or Dutch: "niveau 4", "showpiece", "level 2", "grondig", "snel".
   With no level, the skill asks one question with the table above, also in auto mode. `/forge`
   asks once at the start, only for the parts that have no level yet.
@@ -287,8 +297,8 @@ it out of git and out of every image. The reports you will read most:
 
 ## The skills
 
-The eight skills are the folders in [`plugin/`](plugin), which is all the plugin holds. The
-gallery (`examples/`), the tests and CI stay outside it, so an install holds only what the skills run.
+The nine skills are the folders in [`plugin/`](plugin), which is all the plugin holds. The
+gallery (`examples/`) and the tests stay outside it, so an install holds only what the skills run.
 
 | skill | parts | what it does |
 | --- | --- | --- |
@@ -297,9 +307,10 @@ gallery (`examples/`), the tests and CI stay outside it, so an install holds onl
 | `/forge-plan` | | Picks the stack profile and PWA with you, records the look and dashboard levels; writes the schema, routes, payments and build order. |
 | `/forge-design` | design, brand, dashboard, motion | Three moving concepts from the app's own world, then the brief, tokens, the theme and how you switch it, open fonts and icons, WCAG AA contrast, and the look built into your app (in an app that exists: the theme, the fonts, each component, then screen by screen, one commit each); your own name, palette and voice; dashboards on the app's own data; motion and 3D at your level, with the scene kit. Shows the result on your localhost with proof. |
 | `/forge-build` | build, pack | Scaffolds with the official installer, then builds screen by screen: auth, data access, Stripe with iDEAL, email, jobs; shows the first slice and the finished app on your localhost; fits the container templates and runs the stack until it is healthy. In clone mode it checks that no text is copied from the original. |
-| `/forge-check` | test, diff, secure, audit, inspect | Tests at your level (unit, Playwright, a walk of every page at three widths in light and dark, edge cases, a fix loop); scores a clone against the original; the security gate with a verdict PASS or FAIL; reads your codebase without changing it; looks at a live URL like a visitor. |
+| `/forge-check` | test, diff, secure, audit, inspect | Tests at your level (unit, Playwright, a walk of every page at three widths in light and dark, edge cases, a fix loop); scores a clone against the original; the security gate with a verdict PASS or FAIL; reads your codebase without changing it, including how well it is made (Clean Code, SOLID, GRASP, design patterns: [`forge-check/craft.md`](plugin/forge-check/craft.md)); looks at a live URL like a visitor. |
 | `/forge-improve` | | One list of what to improve, from the audits and from the look (a redesign, motion and 3D, dashboards, each at a level), and the tests at a level; fixed on a new branch, one small commit each, tested where possible, then the security check. |
 | `/forge-launch` | | Landing page in your concept at your look level, prices in EUR with VAT, privacy policy, terms, cookie check, basic SEO, launch checklist. |
+| `/forge-docs` | readme, architecture, api, glossary, decisions, guide, comments | Documents an app that exists from its own code: a README that gets it running, the architecture in views with Mermaid diagrams that render on GitHub (context, layers, domain model, database, main flows as sequence diagrams, containers), the API, a glossary, decision records and a user guide in plain words. `docslint.py` checks diagrams, links, file names and placeholders. |
 
 ## The 3D scene kit
 
@@ -327,9 +338,11 @@ copy and how to mount one in each stack.
 
 ## The scripts
 
-Standard-library Python 3.9+, one job each. Every one has `--help`. Unless noted: exit 0 when
-clean, 1 when something is at or above `--fail-on` (default `high`), 2 when it could not run (bad
-input, or an incomplete scan). Exit 2 is never a pass. `--json` gives machine-readable output.
+Standard-library Python 3.9+, one job each. The scripts of one folder share code in helper modules
+next to them (`_*.py`, such as `forge-check/_walk.py`): imported by the scripts, never run on their
+own. Every script has `--help`. Unless noted: exit 0 when clean, 1 when something is at or above
+`--fail-on` (default `high`), 2 when it could not run (bad input, or an incomplete scan). Exit 2 is
+never a pass. `--json` gives machine-readable output.
 
 **forge/**
 
@@ -400,12 +413,20 @@ rules of the two motion checks.
 | `inventory.py PATH [--json]` | size and health in plain numbers: lines per language, biggest files, TODOs, tests; 0 or 2 |
 | `getpage.py URL OUT [--json]` | loads one page passively and saves its HTML in a new file; 0 or 2 |
 | `pagecheck.py URL [--json] [--fail-on L] [--no-pwa]` or `--file FILE [--url URL]` | SEO, accessibility, speed, PWA and mixed-content basics of one page |
+| `craftcheck.py PATH [--json] [--fail-on L] [--tests]` | code craft (`forge-check/craft.md`): long functions, many or flag arguments, deep nesting, long switches, big classes, swallowed errors, duplicated blocks, commented-out code, getter chains; Python by its parser, brace languages by structure |
+| `plaincheck.py PAGE... [--json] [--fail-on L]` | clear for everyone (`forge-design/plain.md`): vague button words, an icon alone, a field without a label, jargon, programming values on screen, long forms and menus; PAGE a saved page or a URL |
 | `testdb.py PATH [--json]` | which database the app's own tests reach, read from the test settings only (Laravel, Django, Node, each workspace); it runs nothing and never shows a password; 1 = the database the app uses here, or it cannot tell: ask first; 2 = PATH is not a folder |
 | `bugs.py BUGS.md [--json] [--fail-on L]` | open bugs in forge-work/bugs.md; 1 = one at or above `--fail-on` |
 | `walkcheck.py WALK.json [--budget FILE] [--fail-on L] [--json] [--bugs] [--next N] [--known BUGS.md] [--build BUILD]` | judges the browser walk: errors, broken links, accessibility, layout faults, speed against a budget; `--bugs` prints blocks for bugs.md; 2 = the walk is incomplete, also when a page shows one theme with the system set to light and to dark |
 | `shotcheck.py BEFORE_DIR AFTER_DIR [--min SCORE] [--timeout SECONDS] [--json]` | the screenshots of two rounds, compared with imgdiff.py; 1 = a changed, missing or new shot |
 | `imgdiff.py ORIGINAL.png CLONE.png [--out DIFF.png] [--json]` | layout score of two screenshots, colour ignored; 0 or 2 |
 | `parity.py FEATURES.csv [--visual JSON...] [--json \| --markdown] [--fail-under N]` | feature parity score; 1 = a must-have is missing |
+
+**forge-docs/**
+
+| usage | what it does |
+| --- | --- |
+| `docslint.py PATH [--parts readme,architecture,...] [--json] [--fail-on L]` | the docs forge-docs wrote: each part's file, headings and diagrams, known and non-empty Mermaid blocks, links and file names that exist, no placeholder or secret-looking value; TO-FILL lines counted for the user |
 
 **examples/**
 
@@ -456,15 +477,15 @@ Docker image. Playwright and Lighthouse need Node. Screenshots, frames and films
 Playwright too: when your project has none, it goes into `forge-work/design/`, next to the copy of
 the screenshot script, and your app's own package files stay as they are.
 
-Works on Linux, macOS and Windows: CI runs the tests of the skills' scripts on all three.
+Works on Linux, macOS and Windows: the scripts are standard-library Python 3.9 and their tests are written to pass on all three.
 
 - **macOS:** the `python3` from Xcode's command line tools (Python 3.9) is enough; a python.org or
   Homebrew Python works too.
 - **Windows:** Claude Code runs the scripts in Git Bash (part of Git for Windows). A python.org
   install has no `python3` there, so Claude runs `py -3` or `python` instead, as
   [`forge/rules.md`](plugin/forge/rules.md) tells it.
-- **Docker:** CI checks the container templates on Linux. On macOS and Windows, Docker Desktop
-  runs the same Linux containers, but CI does not test it there.
+- **Docker:** the container templates are Linux containers; on macOS and Windows, Docker Desktop
+  runs them the same way.
 
 As a plugin, in Claude Code, one command at a time:
 
@@ -524,10 +545,24 @@ If you copied the 17 skills of an earlier version, remove those folders first
 python3 -m unittest discover -s tests -v
 ```
 
-CI (`.github/workflows/test.yml`) runs on every push and pull request:
+There is no CI service: run the checks yourself before every push to `main`, from the root of this
+repo. They are the whole release check.
 
-- the full test suite on Linux, macOS and Windows, each with Python 3.9 and 3.13, then the repo's
-  own secret scan. With Node, `tests/test_plan.py` runs the sample service worker
+```bash
+python3 -m unittest discover -s tests -q
+```
+
+```bash
+python3 plugin/forge-check/secretscan.py .
+```
+
+```bash
+claude plugin validate --profile directory ./plugin
+```
+
+What the suite covers:
+
+- every script and its conventions, and the repo's own secret scan (`tests/test_repo.py`). With Node, `tests/test_plan.py` runs the sample service worker
   (`forge-plan/sw.example.js`) in a fake browser, `tests/test_scenes.py` runs the scene kit's stage
   and loader, `depth.js`, the outline and phone work of `contour.js` and the phone and streak
   options of `field.js` in a make-believe browser, and `tests/test_shots.py` checks that the
@@ -536,8 +571,14 @@ CI (`.github/workflows/test.yml`) runs on every push and pull request:
   it runs the script on small local pages (`FORGE_NO_BROWSER=1` skips that).
   `tests/test_examples.py` checks the gallery:
   every level is there, nothing loads from another host, and its copy of the kit equals the kit;
-- per stack profile: the container templates installed in a scratch folder, checked with
-  `docker compose config -q` and `packcheck.py --fail-on low`.
+- per stack profile: the container templates, installed in a scratch folder the way forge-build
+  pack does, pass `packcheck.py --fail-on low` (`tests/test_packcheck.py`). With Docker installed,
+  `docker compose -f <template>/docker-compose.yml config -q` checks a template's compose file too.
+
+BugForge holds itself to its own audit: `python3 plugin/forge-check/craftcheck.py plugin` finds no
+duplicated code, swallowed errors or commented-out code in the skills, and no function of the 3D scene
+kit is over 60 lines. What it still lists (functions with four or more arguments, a few long scripts'
+functions) is known and gets smaller as code is touched.
 
 ## Releasing
 

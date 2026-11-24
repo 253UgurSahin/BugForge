@@ -45,8 +45,8 @@ mid-run for more: what only the user can do goes into the checkpoint.
 
 | level | steps (each level includes the ones below it) | the gate asks for |
 | --- | --- | --- |
-| 1 Quick | 0, 1, 2 (no unit tests), 3 (the smoke spec), 5, 6, 7 | nothing more |
-| 2 Basic | + unit tests, a spec per flow, 4 | nothing more |
+| 1 Quick | 0, 1, 2 (no unit tests), 3 (the smoke spec), plaincheck.py (Step 4), 5, 6, 7 | nothing more |
+| 2 Basic | + unit tests, a spec per flow, 4 with the plain walk | nothing more |
 | 3 Standard | + edge and negative cases, the second user, the walk | `forge-work/test/walk.json` |
 | 4 Thorough | + edge.spec.ts, PWA, keyboard, round r2, shotcheck.py | `**/edge.spec.*`, `forge-work/test/shots/r1/*.png` and `r2/*.png` |
 | 5 Exhaustive | + "Level 5" in walk.md | nothing more |
@@ -153,7 +153,23 @@ lockfile, the ignore lines and the unit tests, and one commit `test: add end-to-
 
 ## Step 4: the manual pass
 
-Level 2 and up (level 1: these go under "Not tested"). What no spec reaches, do yourself with
+**Plain, at every level.** Every screen must be clear for everyone (`../forge-design/plain.md`).
+Save each main screen as the browser shows it (Playwright's `page.content()` into
+`forge-work/test/plain/<route>.html`; a server-rendered app can take its URLs) and run
+`python3 ../forge-check/plaincheck.py forge-work/test/plain/*.html --json`. Each finding at medium
+or above is a bug in Step 5, with the rule's fix as its expected result; low ones go under `## To
+check`.
+
+**The plain walk, level 2 and up.** A fresh tester who never saw the app (a separate subagent when
+the session has one; else you, reading only the screenshots) plays the grandmother of plain.md: 75,
+reading glasses, not good with computers. For each main flow, it gets only the after shots at 390
+and 1440 wide, one at a time, and the task in her words ("Maak een afspraak voor dinsdag"). Per
+screen it answers, in one line each: what is this screen for, what would I press now, is anything
+unclear or too small. A screen fails when it cannot say what the screen is for, or what to press, in
+5 seconds, or when it would press the wrong thing. Each fail is a bug in Step 5, `[medium]` (a flow
+it cannot finish: `[high]`), titled with the plain.md rule it breaks.
+
+**By hand.** Level 2 and up (level 1: these go under "Not tested"). What no spec reaches, do yourself with
 Playwright or a browser tool, a screenshot of each step in `forge-work/test/manual/`. What needs the
 user (a real OAuth account, a real inbox) goes into the checkpoint as a short checklist. Never wait
 mid-run. Only what the app has:

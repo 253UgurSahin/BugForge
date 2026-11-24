@@ -101,8 +101,8 @@ before"; `.env` high: stop, tell the user; a Stripe live key: no Stripe call.
    if Step 4 allowed it, else one that does not); else the tool that found it (`../forge-check/pagecheck.py <local
    URL>`); else by hand. Cannot: skip it, say what you tried. A secret: the test sets `example-key`, checks
    `assertTrue(key == "example-key", "not from env")` (never assertEqual: it prints the real key).
-3. **Fix the smallest thing** that makes it pass, in the style around it: no reformatting, renaming or
-   tidying; other problems go under "Found on the way". A secret: read it from the environment, `NAME=`
+3. **Fix the smallest thing** that makes it pass, in the style around it, no tidying; other problems under
+   "Found on the way". A craft finding (CR-, `../forge-check/craft.md`): a test pins today's behaviour first. A secret: read it from the environment, `NAME=`
    with a fake value in `.env.example`, and "set NAME, then change the old value" under "For you".
 4. **Stop and ask** when it grows past its effort, needs a new package, a migration that changes or deletes
    data, or a change users notice beyond the finding: a new estimate, a split, or a skip.

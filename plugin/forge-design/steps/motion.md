@@ -56,6 +56,7 @@ The level first: Step 2.1 for one in the request ("niveau 5"), else Step 2.2. Th
    the examples are); this is asked in auto mode too. Record the answer with `set`, their words.
 3. Then do exactly what that level asks, never less and never more: level 2 gets no 3D "as a
    bonus"; level 5 gets no fades passed off as a journey.
+4. **Header on its own** ("look 2, header 4"): `set look`, `set header`, then motion.md section 13.
 
 What each level adds (each level builds everything of the levels below it):
 

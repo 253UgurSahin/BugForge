@@ -680,7 +680,7 @@ class ConventionTests(unittest.TestCase):
                 imported.add(node.module.split(".")[0])
         stdlib = getattr(sys, "stdlib_module_names", {"argparse", "collections", "html", "json", "os", "re",
                                                       "subprocess", "sys", "tempfile", "urllib"})
-        self.assertLessEqual(imported, set(stdlib))
+        self.assertLessEqual(imported - {"_report"}, set(stdlib))  # and the helper next to it
 
     def test_every_rule_in_rules_json_is_used_and_in_plain_words(self):
         bad = ('<html><head><meta name="robots" content="noindex"><script src="http://cdn.other.net/a.js"></script>'

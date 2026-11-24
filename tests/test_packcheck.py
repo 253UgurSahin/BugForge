@@ -1,11 +1,10 @@
 """Tests for forge-build/packcheck.py (the compose rules are in test_composecheck.py).
 
 Fake secrets are glued together at runtime, so this file never contains a
-secret-looking literal: the repo itself is scanned with secretscan.py in CI.
+secret-looking literal: the repo itself is scanned with secretscan.py by tests/test_repo.py.
 """
 
 import contextlib
-import inspect
 import io
 import json
 import os
@@ -91,7 +90,7 @@ class TemplateTests(unittest.TestCase):
     """Every profile's templates, and the promises SKILL.md makes about them."""
 
     def test_each_profile_is_clean_once_installed(self):
-        """Without the app, as the CI templates job checks them: each file the Dockerfile copies is
+        """Without the app, as a template is installed in a scratch folder: each file the Dockerfile copies is
         there, but for the app's package files (forge-build pack Step 3 checks those are committed)."""
         for profile in PROFILES:
             with self.subTest(profile=profile), tempfile.TemporaryDirectory() as folder:
@@ -562,13 +561,11 @@ class DockerfileTests(unittest.TestCase):
         self.assertFalse(mod.check_dockerfile("FROM a:1\nHEALTHCHECK NONE\n", "D")[1])
 
     def test_secret_rule_is_the_same_as_composecheck(self):
-        for name in ("SECRET_NAME", "SWITCH_NAME", "SWITCH_VALUES", "FALLBACK", "FILE_PATH"):
-            with self.subTest(name=name):
-                self.assertEqual(getattr(mod, name), getattr(compose, name))
-        for function in ("is_written_secret", "unquote"):
+        """Both checks take the rule from _pack.py next to them, so it cannot drift apart."""
+        for function in ("is_written_secret", "unquote", "read"):
             with self.subTest(function=function):
-                self.assertEqual(inspect.getsource(getattr(mod, function)),
-                                 inspect.getsource(getattr(compose, function)))
+                self.assertIs(getattr(mod, function), getattr(compose, function))
+                self.assertEqual(getattr(mod, function).__module__, "_pack")
 
 
 class DockerignoreTests(unittest.TestCase):

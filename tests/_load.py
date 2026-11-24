@@ -1,5 +1,5 @@
-"""Helpers for the tests: load a script from a skill folder (the folder names have hyphens), run one
-the way Windows does, and make a symlink where the system lets the tests make one."""
+"""Helpers for the tests: load a script from a skill folder (the folder names have hyphens) with the helpers next
+to it, run one the way Windows does, and make a symlink where the system lets the tests make one."""
 
 import importlib.util
 import os
@@ -11,7 +11,12 @@ ROOT = os.path.join(REPO, "plugin")  # the plugin: the skill folders
 
 
 def load(folder, name, base=None):
+    """The script FOLDER/NAME.py as a module. Its folder goes first on sys.path (once), as when Python runs the
+    script, so that the helpers next to it (the _*.py modules it imports by name) are found."""
     path = os.path.join(base or ROOT, folder, name + ".py")
+    here = os.path.dirname(os.path.abspath(path))
+    if here not in sys.path:
+        sys.path.insert(0, here)
     spec = importlib.util.spec_from_file_location("forge_" + name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

@@ -347,19 +347,63 @@ function fieldOf(data, dense) {
   return { rows, columns, values, source, k };
 }
 
+const smooth = (t) => t * t * (3 - 2 * t);
+const SEE = { transparent: true, depthWrite: false };   // the see-through materials: floor, mirror, ridges
+
 export function mount(container, options = {}) {
+  const o = readOptions(options);
+  // A weak device (low quality) draws at three quarters of the resolution: the field fills much of
+  // the screen, and its glow hides the softer edges.
+  const stage = createStage(container, { stillTime: 6, fade: 200, renderScale: [0.75, 1, 1], camera: { fov: 30, near: 0.5, far: 80 }, ...options });
+  if (stage.failed) return stage.handle();
+  const ds = startScape(stage, o);
+
+  stage.onTokens((tokens) => retone(ds, tokens));
+  stage.onResize((size) => fitView(ds, size));
+  stage.onQuality((quality) => {
+    if (ds.mirror) ds.mirror.visible = quality.name !== "low";
+    ds.sub = quality.pick(4, 6, 10);
+    if (ds.ribbon) build(ds);
+  });
+  stage.onFrame((time, delta) => frame(ds, time, delta));
+  stage.onDestroy(() => { if (ds.reported >= 0 && typeof o.onHover === "function") o.onHover(null); });
+  setValues(ds, o.data);
+  return stage.handle({ setData: (input) => setValues(ds, input) });
+}
+
+function readOptions(options) {
   const o = { mode: "bars", rows: 12, columns: 24, gap: 0.18, height: 1, side: "right", intensity: 1, onHover: null, ...options };
   o.rows = Math.max(1, Math.min(MAX_ROWS, Math.round(o.rows) || 12));
   o.columns = Math.max(2, Math.min(MAX_COLUMNS, Math.round(o.columns) || 24));
   const number = (v, low, high, fallback) => Math.min(high, Math.max(low, Number.isFinite(Number(v)) ? Number(v) : fallback));
   [o.gap, o.height, o.intensity] = [number(o.gap, 0, 0.9, 0.18), number(o.height, 0.2, 3, 1), number(o.intensity, 0, 3, 1)];
-  const ridges = o.mode === "ridges";
-  // A weak device (low quality) draws at three quarters of the resolution: the field fills much of
-  // the screen, and its glow hides the softer edges.
-  const stage = createStage(container, { stillTime: 6, fade: 200, renderScale: [0.75, 1, 1], camera: { fov: 30, near: 0.5, far: 80 }, ...options });
-  if (stage.failed) return stage.handle();
-  const { scene, camera } = stage;
+  return o;
+}
 
+// What one mounted datascape keeps: the functions below take it as `ds`. The floor is made here;
+// the bars or the ridges in build(), once the data gives the grid its shape.
+function startScape(stage, o) {
+  const ridges = o.mode === "ridges";
+  const ds = {
+    o, stage, ridges, scene: stage.scene, camera: stage.camera, uniforms: scapeUniforms(stage),
+    bars: null, mirror: null, ribbon: null,
+    // The data as given, and per column of the field the height on screen, a spring to the goal.
+    data: { rows: 0, columns: 0, values: [] }, grid: { rows: 0, columns: 0, values: [], source: new Int32Array(0), k: 1 },
+    shown: undefined, speed: undefined, goal: undefined, wait: undefined, hover: undefined, peak: undefined,
+    peakGoal: undefined, present: undefined,
+    span: { pitchX: 0.25, pitchZ: 0.25, depth: 3, tall: 2 }, focus: new THREE.Vector3(),
+    moving: true, hovered: -1, reported: -1, sub: 6, every: 6, samples: 0, slot: new Int32Array(0),
+    // The raycast's tools, and the camera's.
+    raycaster: new THREE.Raycaster(), box: new THREE.Box3(), hit: new THREE.Vector3(), at: new THREE.Vector2(),
+    target: new THREE.Vector3(), close: new THREE.Vector3(), plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+    fit: 1, spot: 0,
+  };
+  ds.floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material(ds, plainVertex, floorFragment, SEE));
+  ds.scene.add(ds.floor);
+  return ds;
+}
+
+function scapeUniforms(stage) {
   const uniforms = {
     ...stage.uniforms,
     uSize: { value: new THREE.Vector4() },     // bar width x, bar width z, tallest height, intensity
@@ -373,293 +417,322 @@ export function mount(container, options = {}) {
     uFog: { value: new THREE.Vector2() },      // fog from, fog full (distance from the camera)
   };
   for (const name of ["Bg", "Surface", "Border", "Text", "Tone", "Peak"]) uniforms["uShown" + name] = { value: new THREE.Color() };
-  const material = (vertexShader, fragmentShader, extra) => new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader, ...extra });
-  const see = { transparent: true, depthWrite: false };
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material(plainVertex, floorFragment, see));
-  let bars = null, mirror = null, ribbon = null;
-  scene.add(floor);
+  return uniforms;
+}
 
-  // The two tones. When both accents are grey (a mono palette) the hue cannot pick out the peaks,
-  // so luminance does: the accent furthest from the page for the peaks, the other one for the rest.
-  stage.onTokens((tokens) => {
-    const chroma = (c) => { const s = c.clone().convertLinearToSRGB(); return Math.max(s.r, s.g, s.b) - Math.min(s.r, s.g, s.b); };
-    const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-    const far = (c) => Math.abs(lum(c) - lum(tokens.bg));
-    if (chroma(tokens.accent) < 0.1 && chroma(tokens.accent2) < 0.1) {
-      const [peakTone, rest] = far(tokens.accent) >= far(tokens.accent2) ? [tokens.accent, tokens.accent2] : [tokens.accent2, tokens.accent];
-      uniforms.uPeak.value.copy(peakTone);
-      uniforms.uTone.value.copy(Math.abs(far(peakTone) - far(rest)) > 0.1 ? rest : tokens.muted);
-    } else {
-      uniforms.uTone.value.copy(tokens.accent);
-      uniforms.uPeak.value.copy(tokens.accent2);
+function material(ds, vertexShader, fragmentShader, extra) {
+  return new THREE.ShaderMaterial({ uniforms: ds.uniforms, vertexShader, fragmentShader, ...extra });
+}
+
+const rowZ = (ds, r) => (r + 0.5 - ds.grid.rows / 2) * ds.span.pitchZ;
+const barX = (ds, c) => (c + 0.5 - ds.grid.columns / 2) * ds.span.pitchX;
+const ridgeX = (ds, s) => -WIDTH / 2 + (s + TAIL) * ds.span.pitchX;
+const cellX = (ds, c) => (ds.ridges ? ridgeX(ds, c) : barX(ds, c));
+
+// The two tones. When both accents are grey (a mono palette) the hue cannot pick out the peaks,
+// so luminance does: the accent furthest from the page for the peaks, the other one for the rest.
+function retone(ds, tokens) {
+  const uniforms = ds.uniforms;
+  const chroma = (c) => { const s = c.clone().convertLinearToSRGB(); return Math.max(s.r, s.g, s.b) - Math.min(s.r, s.g, s.b); };
+  const lum = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const far = (c) => Math.abs(lum(c) - lum(tokens.bg));
+  if (chroma(tokens.accent) < 0.1 && chroma(tokens.accent2) < 0.1) {
+    const [peakTone, rest] = far(tokens.accent) >= far(tokens.accent2) ? [tokens.accent, tokens.accent2] : [tokens.accent2, tokens.accent];
+    uniforms.uPeak.value.copy(peakTone);
+    uniforms.uTone.value.copy(Math.abs(far(peakTone) - far(rest)) > 0.1 ? rest : tokens.muted);
+  } else {
+    uniforms.uTone.value.copy(tokens.accent);
+    uniforms.uPeak.value.copy(tokens.accent2);
+  }
+  // The bars mix their colours in display space: turn them once here, not in every pixel.
+  const display = { Bg: tokens.bg, Surface: tokens.surface, Border: tokens.border, Text: tokens.text, Tone: uniforms.uTone.value, Peak: uniforms.uPeak.value };
+  for (const [name, c] of Object.entries(display)) uniforms["uShown" + name].value.setRGB(c.r ** (1 / 2.2), c.g ** (1 / 2.2), c.b ** (1 / 2.2));
+}
+
+function reshape(ds, next) {
+  const old = { grid: ds.grid, shown: ds.shown, speed: ds.speed, hover: ds.hover, peak: ds.peak };
+  const grid = (ds.grid = next);
+  const n = grid.rows * grid.columns;
+  const arrays = Array.from({ length: 8 }, () => new Float32Array(n));
+  [ds.shown, ds.speed, ds.goal, ds.wait, ds.hover, ds.peak, ds.peakGoal, ds.present] = arrays;
+  for (let r = 0; old.shown && r < Math.min(grid.rows, old.grid.rows); r++) {   // keep what was on screen
+    for (let c = 0; c < Math.min(grid.columns, old.grid.columns); c++) {
+      const i = r * grid.columns + c, j = r * old.grid.columns + c;
+      [ds.shown[i], ds.speed[i], ds.hover[i], ds.peak[i]] = [old.shown[j], old.speed[j], old.hover[j], old.peak[j]];
     }
-    // The bars mix their colours in display space: turn them once here, not in every pixel.
-    const display = { Bg: tokens.bg, Surface: tokens.surface, Border: tokens.border, Text: tokens.text, Tone: uniforms.uTone.value, Peak: uniforms.uPeak.value };
-    for (const [name, c] of Object.entries(display)) uniforms["uShown" + name].value.setRGB(c.r ** (1 / 2.2), c.g ** (1 / 2.2), c.b ** (1 / 2.2));
+  }
+  measureSpan(ds);
+  build(ds);
+}
+
+// Columns share the width. Bar rows are as deep as the columns are wide, ridges lie further
+// apart, and neither gets much deeper than two thirds of the width. The gap is the part of a
+// cell left open, so 0 closes it.
+function measureSpan(ds) {
+  const { grid, span, ridges, o, uniforms } = ds;
+  span.pitchX = WIDTH / (ridges ? grid.columns - 1 + 2 * TAIL : grid.columns);
+  span.pitchZ = ridges ? Math.min(0.42, 4.4 / grid.rows) : Math.min(span.pitchX, 4 / grid.rows);
+  span.depth = span.pitchZ * grid.rows;
+  span.tall = (ridges ? 1.15 : 2.1) * o.height;
+  const bar = span.pitchX * (1 - o.gap);
+  uniforms.uSize.value.set(bar, span.pitchZ * (1 - o.gap), span.tall, o.intensity);
+  uniforms.uFloor.value.set(WIDTH / 2, span.depth / 2, ridges ? 0 : 2 * span.pitchX, 2 * span.pitchZ);
+  ds.floor.scale.set(WIDTH + 2.6, 1, span.depth + 2.6);
+}
+
+function setValues(ds, input) {
+  const first = !ds.grid.values.length;   // the first numbers rise from a low relief, so the first frame is a picture
+  ds.data = shapeOf(input, ds.o);
+  const next = fieldOf(ds.data, !ds.ridges);
+  if (next.rows !== ds.grid.rows || next.columns !== ds.grid.columns) reshape(ds, next);
+  else ds.grid = next;
+  const { grid, span, focus, present, goal, peakGoal, wait, shown, peak } = ds;
+  const order = grid.values.map((v, i) => [v, i]).filter(([v]) => Number.isFinite(v)).sort((a, b) => b[0] - a[0]);
+  const high = order[0][0], low = Math.min(0, order[order.length - 1][0]);
+  const peaks = new Set(order.slice(0, Math.max(1, Math.round(order.length * 0.035))).map(([, i]) => i));
+  const corner = Math.hypot(WIDTH, span.depth);
+  focus.set(0, 0, 0);
+  grid.values.forEach((v, i) => {
+    const r = Math.floor(i / grid.columns), c = i % grid.columns;
+    present[i] = Number.isFinite(v) ? 1 : 0;
+    goal[i] = present[i] ? (v - low) / (high - low || 1) : 0;
+    peakGoal[i] = peaks.has(i) && high > low ? 1 : 0;
+    // The rise runs as a wave from the front-left corner (the first column of the nearest row).
+    wait[i] = (RISE * Math.hypot(c * span.pitchX, (grid.rows - 1 - r) * span.pitchZ)) / corner;
+    if (first) [shown[i], peak[i]] = [0.3 * goal[i], peakGoal[i]];
+    if (peaks.has(i)) focus.add({ x: cellX(ds, c), y: goal[i], z: rowZ(ds, r) });
   });
+  focus.divideScalar(peaks.size);   // where the camera goes at the end: the middle of the peaks
+  ds.moving = true;
+  ds.stage.invalidate();
+}
 
-  // The data as given, and per column of the field the height on screen, a spring to the goal.
-  let data = { rows: 0, columns: 0, values: [] }, grid = { rows: 0, columns: 0, values: [], source: new Int32Array(0), k: 1 };
-  let shown, speed, goal, wait, hover, peak, peakGoal, present;
-  const span = { pitchX: 0.25, pitchZ: 0.25, depth: 3, tall: 2 }, focus = new THREE.Vector3();
-  let moving = true, hovered = -1, reported = -1, sub = 6, every = 6, samples = 0, slot = new Int32Array(0);
-  const rowZ = (r) => (r + 0.5 - grid.rows / 2) * span.pitchZ;
-  const barX = (c) => (c + 0.5 - grid.columns / 2) * span.pitchX;
-  const ridgeX = (s) => -WIDTH / 2 + (s + TAIL) * span.pitchX;
-  const cellX = (c) => (ridges ? ridgeX(c) : barX(c));
+function build(ds) {
+  for (const old of [ds.bars, ds.mirror, ds.ribbon]) if (old) ds.stage.dispose(old);
+  const mesh = ds.ridges ? buildRidges(ds) : buildBars(ds);
+  for (const each of [mesh, ds.ridges ? null : ds.mirror]) if (each) { each.frustumCulled = false; each.renderOrder = 1; ds.scene.add(each); }
+  ds.moving = true;
+}
 
-  function reshape(next) {
-    const old = { grid, shown, speed, hover, peak };
-    grid = next;
-    const n = grid.rows * grid.columns;
-    [shown, speed, goal, wait, hover, peak, peakGoal, present] = Array.from({ length: 8 }, () => new Float32Array(n));
-    for (let r = 0; old.shown && r < Math.min(grid.rows, old.grid.rows); r++) {   // keep what was on screen
-      for (let c = 0; c < Math.min(grid.columns, old.grid.columns); c++) {
-        const i = r * grid.columns + c, j = r * old.grid.columns + c;
-        [shown[i], speed[i], hover[i], peak[i]] = [old.shown[j], old.speed[j], old.hover[j], old.peak[j]];
+function buildBars(ds) {
+  const { grid } = ds, n = grid.rows * grid.columns;
+  const geometry = new THREE.InstancedBufferGeometry().copy(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0));
+  geometry.setIndex(Array.from(geometry.index.array).filter((_, k) => k < 18 || k >= 24));   // no bottom face: it stands on the floor
+  // The columns are stored nearest first (as the camera usually sees them), so the depth test
+  // skips what nearer columns hide instead of shading it again; slot[i] is where cell i went.
+  const cells = new Float32Array(n * 2), near = (i) => barX(ds, i % grid.columns) * 0.84 + rowZ(ds, Math.floor(i / grid.columns)) * 0.54;
+  const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => near(b) - near(a));
+  const slot = (ds.slot = new Int32Array(n));
+  order.forEach((i, j) => { slot[i] = j; cells.set([barX(ds, i % grid.columns), rowZ(ds, Math.floor(i / grid.columns))], j * 2); });
+  geometry.setAttribute("aCell", new THREE.InstancedBufferAttribute(cells, 2));
+  geometry.setAttribute("aState", new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4).setUsage(THREE.DynamicDrawUsage));
+  geometry.instanceCount = n;
+  const bars = (ds.bars = new THREE.Mesh(geometry, material(ds, barVertex, barFragment)));
+  ds.mirror = new THREE.Mesh(geometry, material(ds, barVertex, barFragment, { ...SEE, defines: { MIRROR: 1 }, side: THREE.BackSide }));
+  ds.mirror.visible = ds.stage.quality.name !== "low";
+  return bars;
+}
+
+// Per row, points along x, each a pair (on the floor, on the line). Rows are stored back to
+// front, so drawing in order lets each fill cover the ridges behind it.
+function buildRidges(ds) {
+  const { grid } = ds;
+  const across = grid.columns - 1 + 2 * TAIL;   // at least about 100, 160 or 240 points along a ridge
+  ds.every = Math.max(ds.sub, Math.ceil(ds.stage.quality.pick(100, 160, 240) / across));
+  const samples = (ds.samples = Math.round(across * ds.every) + 1);
+  const geometry = new THREE.BufferGeometry(), index = [];
+  for (let v = 2; v < grid.rows * samples * 2; v += 2) if ((v / 2) % samples) index.push(v - 2, v, v - 1, v - 1, v, v + 1);
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(grid.rows * samples * 6), 3).setUsage(THREE.DynamicDrawUsage));
+  geometry.setAttribute("aRidge", new THREE.BufferAttribute(new Float32Array(grid.rows * samples * 8), 4).setUsage(THREE.DynamicDrawUsage));
+  geometry.setIndex(index);
+  return (ds.ribbon = new THREE.Mesh(geometry, material(ds, plainVertex, ridgeFragment, { ...SEE, side: THREE.DoubleSide, defines: { RIDGE: 1 } })));
+}
+
+// A ridge's height at s (in columns, may run past either end): a Catmull-Rom curve through the
+// values on screen, which passes exactly through each of them, and a smooth fall in the tails.
+function ridgeAt(ds, r, s) {
+  const { grid, shown } = ds;
+  const last = grid.columns - 1, at = (c) => shown[r * grid.columns + Math.max(0, Math.min(last, c))];
+  const fall = s < 0 ? smooth(Math.max(0, 1 + s / TAIL)) : s > last ? smooth(Math.max(0, 1 - (s - last) / TAIL)) : 1;
+  const x = Math.max(0, Math.min(last, s)), i = Math.min(Math.floor(x), last - 1), f = x - i;
+  const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+  const v = 0.5 * (2 * p1 + (p2 - p0) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (3 * p1 - p0 - 3 * p2 + p3) * f * f * f);
+  return Math.max(0, v) * fall;
+}
+
+// Copy the springs into the buffers the shaders read.
+function write(ds) {
+  if (ds.ridges) { writeRidges(ds); return; }
+  const { shown, hover, peak, present, slot } = ds;
+  const state = ds.bars.geometry.attributes.aState;
+  for (let i = 0; i < shown.length; i++) state.array.set([Math.max(0, shown[i]), hover[i], peak[i], present[i]], slot[i] * 4);
+  state.needsUpdate = true;
+}
+
+function writeRidges(ds) {
+  const { grid, hover, peak, span, samples, every } = ds;
+  const { position, aRidge: ridge } = ds.ribbon.geometry.attributes;
+  for (let r = 0; r < grid.rows; r++) {
+    const lift = Math.max(...hover.subarray(r * grid.columns, (r + 1) * grid.columns));
+    for (let k = 0; k < samples; k++) {
+      const s = k / every - TAIL, value = ridgeAt(ds, r, s), y = value * (1 + lift * 0.12) * span.tall, v = (r * samples + k) * 2;
+      let glow = 0;   // the second accent near a peak: the strongest peak within two columns, fading
+      for (let c = Math.max(0, Math.ceil(s - 2)); c <= Math.min(grid.columns - 1, s + 2); c++) {
+        glow = Math.max(glow, peak[r * grid.columns + c] * Math.exp(-(((s - c) / 0.9) ** 2)));
       }
+      // The top point stands a little above the line, so the whole width of the line is drawn.
+      position.array.set([ridgeX(ds, s), 0, rowZ(ds, r), ridgeX(ds, s), y + 0.04 * span.tall, rowZ(ds, r)], v * 3);
+      ridge.array.set([y, value, glow, lift, y, value, glow, lift], v * 4);
     }
-    // Columns share the width. Bar rows are as deep as the columns are wide, ridges lie further
-    // apart, and neither gets much deeper than two thirds of the width. The gap is the part of a
-    // cell left open, so 0 closes it.
-    span.pitchX = WIDTH / (ridges ? grid.columns - 1 + 2 * TAIL : grid.columns);
-    span.pitchZ = ridges ? Math.min(0.42, 4.4 / grid.rows) : Math.min(span.pitchX, 4 / grid.rows);
-    span.depth = span.pitchZ * grid.rows;
-    span.tall = (ridges ? 1.15 : 2.1) * o.height;
-    const bar = span.pitchX * (1 - o.gap);
-    uniforms.uSize.value.set(bar, span.pitchZ * (1 - o.gap), span.tall, o.intensity);
-    uniforms.uFloor.value.set(WIDTH / 2, span.depth / 2, ridges ? 0 : 2 * span.pitchX, 2 * span.pitchZ);
-    floor.scale.set(WIDTH + 2.6, 1, span.depth + 2.6);
-    build();
   }
+  position.needsUpdate = ridge.needsUpdate = true;
+}
 
-  function setValues(input) {
-    const first = !grid.values.length;   // the first numbers rise from a low relief, so the first frame is a picture
-    data = shapeOf(input, o);
-    const next = fieldOf(data, !ridges);
-    if (next.rows !== grid.rows || next.columns !== grid.columns) reshape(next);
-    else grid = next;
-    const order = grid.values.map((v, i) => [v, i]).filter(([v]) => Number.isFinite(v)).sort((a, b) => b[0] - a[0]);
-    const high = order[0][0], low = Math.min(0, order[order.length - 1][0]);
-    const peaks = new Set(order.slice(0, Math.max(1, Math.round(order.length * 0.035))).map(([, i]) => i));
-    const corner = Math.hypot(WIDTH, span.depth);
-    focus.set(0, 0, 0);
-    grid.values.forEach((v, i) => {
-      const r = Math.floor(i / grid.columns), c = i % grid.columns;
-      present[i] = Number.isFinite(v) ? 1 : 0;
-      goal[i] = present[i] ? (v - low) / (high - low || 1) : 0;
-      peakGoal[i] = peaks.has(i) && high > low ? 1 : 0;
-      // The rise runs as a wave from the front-left corner (the first column of the nearest row).
-      wait[i] = (RISE * Math.hypot(c * span.pitchX, (grid.rows - 1 - r) * span.pitchZ)) / corner;
-      if (first) [shown[i], peak[i]] = [0.3 * goal[i], peakGoal[i]];
-      if (peaks.has(i)) focus.add({ x: cellX(c), y: goal[i], z: rowZ(r) });
-    });
-    focus.divideScalar(peaks.size);   // where the camera goes at the end: the middle of the peaks
-    moving = true;
-    stage.invalidate();
+// The raycast: the column under the eased pointer, or -1. Bars are tested as boxes as wide as
+// their cell (so the gaps do not flicker); ridges front to back, as the area under each curve.
+function pick(ds) {
+  if (!ds.stage.pointer.inside || ds.stage.still) return -1;
+  return ds.ridges ? pickRidge(ds) : pickBar(ds);
+}
+
+function pickBar(ds) {
+  const { grid, span, shown, peak, present, box, hit, focus } = ds, ray = ds.raycaster.ray;
+  let best = -1, nearest = Infinity;
+  for (let i = 0; i < shown.length; i++) {
+    const x = barX(ds, i % grid.columns), z = rowZ(ds, Math.floor(i / grid.columns));
+    box.min.set(x - span.pitchX / 2, 0, z - span.pitchZ / 2);
+    const fall = ds.uniforms.uFocus.value.z * smooth(Math.min(1, Math.max(0, (Math.hypot(x - focus.x, z - focus.z) - 0.35) / 0.95))) * (1 - peak[i]);
+    box.max.set(x + span.pitchX / 2, Math.max(shown[i] * (1 - 0.6 * fall), 0.015) * span.tall, z + span.pitchZ / 2);   // as drawn, sunk or not
+    const d = present[i] && ray.intersectBox(box, hit) ? hit.distanceTo(ray.origin) : Infinity;
+    if (d < nearest) { nearest = d; best = i; }
   }
+  return best;
+}
 
-  function build() {
-    const n = grid.rows * grid.columns;
-    for (const old of [bars, mirror, ribbon]) if (old) stage.dispose(old);
-    let mesh;
-    if (!ridges) {
-      const geometry = new THREE.InstancedBufferGeometry().copy(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0));
-      geometry.setIndex(Array.from(geometry.index.array).filter((_, k) => k < 18 || k >= 24));   // no bottom face: it stands on the floor
-      // The columns are stored nearest first (as the camera usually sees them), so the depth test
-      // skips what nearer columns hide instead of shading it again; slot[i] is where cell i went.
-      const cells = new Float32Array(n * 2), near = (i) => barX(i % grid.columns) * 0.84 + rowZ(Math.floor(i / grid.columns)) * 0.54;
-      const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => near(b) - near(a));
-      slot = new Int32Array(n);
-      order.forEach((i, j) => { slot[i] = j; cells.set([barX(i % grid.columns), rowZ(Math.floor(i / grid.columns))], j * 2); });
-      geometry.setAttribute("aCell", new THREE.InstancedBufferAttribute(cells, 2));
-      geometry.setAttribute("aState", new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4).setUsage(THREE.DynamicDrawUsage));
-      geometry.instanceCount = n;
-      mesh = bars = new THREE.Mesh(geometry, material(barVertex, barFragment));
-      mirror = new THREE.Mesh(geometry, material(barVertex, barFragment, { ...see, defines: { MIRROR: 1 }, side: THREE.BackSide }));
-      mirror.visible = stage.quality.name !== "low";
-    } else {
-      // Per row, points along x, each a pair (on the floor, on the line). Rows are stored back to
-      // front, so drawing in order lets each fill cover the ridges behind it.
-      const across = grid.columns - 1 + 2 * TAIL;   // at least about 100, 160 or 240 points along a ridge
-      every = Math.max(sub, Math.ceil(stage.quality.pick(100, 160, 240) / across));
-      samples = Math.round(across * every) + 1;
-      const geometry = new THREE.BufferGeometry(), index = [];
-      for (let v = 2; v < grid.rows * samples * 2; v += 2) if ((v / 2) % samples) index.push(v - 2, v, v - 1, v - 1, v, v + 1);
-      geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(grid.rows * samples * 6), 3).setUsage(THREE.DynamicDrawUsage));
-      geometry.setAttribute("aRidge", new THREE.BufferAttribute(new Float32Array(grid.rows * samples * 8), 4).setUsage(THREE.DynamicDrawUsage));
-      geometry.setIndex(index);
-      mesh = ribbon = new THREE.Mesh(geometry, material(plainVertex, ridgeFragment, { ...see, side: THREE.DoubleSide, defines: { RIDGE: 1 } }));
+function pickRidge(ds) {
+  const { grid, span, hit } = ds, ray = ds.raycaster.ray;
+  for (let r = grid.rows - 1; r >= 0 && Math.abs(ray.direction.z) > 1e-6; r--) {
+    const t = (rowZ(ds, r) - ray.origin.z) / ray.direction.z;
+    hit.copy(ray.direction).multiplyScalar(t).add(ray.origin);
+    const s = (hit.x + WIDTH / 2) / span.pitchX - TAIL;
+    if (t > 0 && s > -0.5 && s < grid.columns - 0.5 && hit.y >= 0 && hit.y <= ridgeAt(ds, r, s) * span.tall + 0.05) {
+      return r * grid.columns + Math.round(Math.max(0, Math.min(grid.columns - 1, s)));
     }
-    for (const each of [mesh, ridges ? null : mirror]) if (each) { each.frustumCulled = false; each.renderOrder = 1; scene.add(each); }
-    moving = true;
   }
+  return -1;
+}
 
-  const smooth = (t) => t * t * (3 - 2 * t);
-  // A ridge's height at s (in columns, may run past either end): a Catmull-Rom curve through the
-  // values on screen, which passes exactly through each of them, and a smooth fall in the tails.
-  function ridgeAt(r, s) {
-    const last = grid.columns - 1, at = (c) => shown[r * grid.columns + Math.max(0, Math.min(last, c))];
-    const fall = s < 0 ? smooth(Math.max(0, 1 + s / TAIL)) : s > last ? smooth(Math.max(0, 1 - (s - last) / TAIL)) : 1;
-    const x = Math.max(0, Math.min(last, s)), i = Math.min(Math.floor(x), last - 1), f = x - i;
-    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
-    const v = 0.5 * (2 * p1 + (p2 - p0) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (3 * p1 - p0 - 3 * p2 + p3) * f * f * f);
-    return Math.max(0, v) * fall;
+// 1 for the hovered column, falling off with the distance in columns (about one data cell wide).
+function hoverGoalOf(ds, i) {
+  const { hovered, grid } = ds;
+  if (hovered < 0) return 0;
+  const dr = Math.floor(i / grid.columns) - Math.floor(hovered / grid.columns), dc = (i % grid.columns) - (hovered % grid.columns);
+  const d2 = dr * dr + dc * dc, k2 = grid.k * grid.k;
+  return d2 === 0 ? 1 : d2 > 9 * k2 ? 0 : Math.exp(-d2 / (0.9 * k2));
+}
+
+// The camera has three states (setProgress 0, 0.5 and 1), each [turn round the field, height
+// above the floor (both in radians), distance (a share of the one that fits the free part of the
+// screen), slide right, slide down (shares of the screen)]. Bars: at rest low and close, the far
+// end of the field clear of the headline, the near rows running off the bottom and the right edge;
+// at 0.5 turned and raised to watch the front cross; at 1 up and in on the peaks. Ridges keep a
+// calmer path. setViewOffset slides the picture over without turning the camera.
+const VIEWS = {
+  ridges: [[0.525, 0.27, 0.86, 0.19, 0.02], [0.8, 0.3, 0.86, 0.19, 0.02], [1.075, 0.47, 0.757, 0.19, 0.02]],
+  bars: [[1.15, 0.26, 0.46, 0.275, 0.1], [0.95, 0.58, 0.6, 0.275, 0.1], [1.075, 0.63, 0.67, 0.19, 0.02]],
+};
+const AIM = { ridges: [0, 0], bars: [0.5, 0.3] };   // x and z the camera looks at in the middle state
+
+function fitView(ds, size) {
+  const room = size.aspect < 0.9 ? [1, 0.36] : [ds.o.side === "center" ? 0.8 : 0.52, 0.72];   // share of width, height
+  const tan = Math.tan(THREE.MathUtils.degToRad(ds.camera.fov / 2));
+  ds.fit = 1 / Math.min(tan * room[1], tan * size.aspect * room[0]);
+}
+
+function place(ds, time, delta) {
+  const { stage, uniforms, focus, span, hit } = ds;
+  const still = stage.still, p = stage.progressEased, pointer = still ? { x: 0, y: 0 } : stage.pointer;
+  const turn = moveCamera(ds, { time, p, pointer, still });
+  // The band goes there and back over the rows, slowest at the ends; a still frame rests it at one
+  // place. The progress front walks over the width from just before the left end to past the right one.
+  const band = still ? 0.62 : 0.5 - 0.48 * Math.cos((time * 2 * Math.PI) / BAND_PERIOD);
+  uniforms.uMotion.value.set(band, 0.13, 0.95 * (1 - 0.5 * smooth(Math.min(1, p / 0.4))), -0.15 + 1.3 * p);
+  uniforms.uFocus.value.set(focus.x, focus.z, 0.92 * smooth(Math.min(1, Math.max(0, (p - 0.55) / 0.45))), still ? 0 : 0.045);
+  // The key light comes from over the camera's right shoulder, so the faces turned most to the
+  // camera are lit and the others clearly shaded; it leans with the pointer. The pool of light
+  // sits where the pointer meets the field.
+  const key = turn + 0.7 + pointer.x * 0.6;
+  uniforms.uLight.value.set(Math.sin(key), 0, Math.cos(key));
+  ds.raycaster.setFromCamera(ds.at.set(pointer.x, pointer.y), ds.camera);
+  ds.plane.constant = -span.tall * 0.2;
+  const ground = ds.raycaster.ray.intersectPlane(ds.plane, hit);
+  ds.spot += ((stage.pointer.active && !still ? 1 : 0) - ds.spot) * (1 - Math.exp(-delta * 4));
+  if (ground) uniforms.uSpot.value.set(THREE.MathUtils.clamp(hit.x, -WIDTH / 2, WIDTH / 2), THREE.MathUtils.clamp(hit.z, -span.depth / 2, span.depth / 2), 0, 0);
+  uniforms.uSpot.value.z = ds.spot;
+}
+
+// The camera along its three states, turned a few degrees by the pointer, and the fog to match.
+// Returns the turn, which the key light follows.
+function moveCamera(ds, { time, p, pointer, still }) {
+  const { stage, camera, span, focus, target, o } = ds;
+  const views = VIEWS[ds.ridges ? "ridges" : "bars"], aim = AIM[ds.ridges ? "ridges" : "bars"];
+  const half = smooth(Math.min(1, p / 0.5));                                // the first half: to the middle state
+  const rise = smooth(Math.min(1, Math.max(0, (p - 0.45) / 0.55)));          // the last part: up and in, onto the peaks
+  const blend = (k) => { const m = views[0][k] + (views[1][k] - views[0][k]) * half; return m + (views[2][k] - m) * rise; };
+  const turn = blend(0) + (still ? 0 : Math.sin(time * 0.09) * 0.04);
+  const az = turn + pointer.x * 0.25, el = blend(1) + pointer.y * 0.14;     // the pointer turns it a few degrees
+  const { width, height, aspect } = stage.size, narrow = aspect < 0.9;   // a tall, narrow screen: further off, in the lower third
+  const radius = 0.5 * Math.hypot(WIDTH, Math.max(span.depth, 3.6), span.tall * 0.7), distance = radius * ds.fit * blend(2) * (narrow ? 1.43 : 1);
+  const across = narrow ? 0 : ({ right: 1, left: -1 }[o.side] || 0) * blend(3), down = narrow ? 0.33 : blend(4);
+  camera.setViewOffset(width, height, -across * width, -down * height, width, height);
+  target.set(aim[0] * half, span.tall * 0.2, aim[1] * half).lerp(ds.close.set(focus.x, span.tall * (0.25 + 0.3 * focus.y), focus.z), rise);
+  camera.position.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).multiplyScalar(distance).add(target);
+  camera.lookAt(target);
+  camera.updateMatrixWorld();
+  ds.uniforms.uFog.value.set(distance - radius * 0.35, distance + radius * (0.85 - 0.3 * rise));
+  return turn;
+}
+
+function frame(ds, time, delta) {
+  place(ds, time, delta);
+  hoverOver(ds, pick(ds));
+  if (!ds.moving) return;
+  const busy = spring(ds, delta);
+  write(ds);
+  ds.moving = busy;
+}
+
+// A new column under the pointer: it rises and glows, and the page hears of a new data cell.
+function hoverOver(ds, now) {
+  if (now === ds.hovered) return;
+  ds.hovered = now;
+  ds.moving = true;
+  const { grid, data, o } = ds;
+  const cell = now < 0 ? -1 : grid.source[now];
+  if (cell === ds.reported) return;
+  ds.reported = cell;
+  const report = cell < 0 ? null : { index: cell, row: Math.floor(cell / data.columns), column: cell % data.columns, value: data.values[cell] };
+  if (typeof o.onHover === "function") o.onHover(report);
+}
+
+// Springs in small fixed steps, so they move the same at any frame rate; a still frame shows
+// every value at its goal at once. Returns whether anything still moves.
+function spring(ds, delta) {
+  const { shown, speed, goal, wait, hover, peak, peakGoal } = ds;
+  let busy = false;
+  const steps = Math.ceil(delta * 120), dt = steps ? delta / steps : 0, k = 1 - Math.exp(-delta * 9);
+  for (let i = 0; i < shown.length; i++) {
+    const hoverGoal = hoverGoalOf(ds, i);
+    if (ds.stage.still) { shown[i] = goal[i]; speed[i] = hover[i] = 0; peak[i] = peakGoal[i]; continue; }
+    hover[i] += (hoverGoal - hover[i]) * k;
+    peak[i] += (peakGoal[i] - peak[i]) * k * 0.4;
+    if (wait[i] > 0) { wait[i] -= delta; busy = true; continue; }
+    for (let s = 0; s < steps; s++) {
+      speed[i] += (SPRING * (goal[i] - shown[i]) - DAMPING * speed[i]) * dt;
+      shown[i] += speed[i] * dt;
+    }
+    busy = busy || Math.abs(goal[i] - shown[i]) + Math.abs(speed[i]) > 1e-4
+      || Math.abs(hover[i] - hoverGoal) + Math.abs(peak[i] - peakGoal[i]) > 1e-3;
   }
-
-  // Copy the springs into the buffers the shaders read.
-  function write() {
-    if (!ridges) {
-      const state = bars.geometry.attributes.aState;
-      for (let i = 0; i < shown.length; i++) state.array.set([Math.max(0, shown[i]), hover[i], peak[i], present[i]], slot[i] * 4);
-      state.needsUpdate = true;
-      return;
-    }
-    const { position, aRidge: ridge } = ribbon.geometry.attributes;
-    for (let r = 0; r < grid.rows; r++) {
-      const lift = Math.max(...hover.subarray(r * grid.columns, (r + 1) * grid.columns));
-      for (let k = 0; k < samples; k++) {
-        const s = k / every - TAIL, value = ridgeAt(r, s), y = value * (1 + lift * 0.12) * span.tall, v = (r * samples + k) * 2;
-        let glow = 0;   // the second accent near a peak: the strongest peak within two columns, fading
-        for (let c = Math.max(0, Math.ceil(s - 2)); c <= Math.min(grid.columns - 1, s + 2); c++) {
-          glow = Math.max(glow, peak[r * grid.columns + c] * Math.exp(-(((s - c) / 0.9) ** 2)));
-        }
-        // The top point stands a little above the line, so the whole width of the line is drawn.
-        position.array.set([ridgeX(s), 0, rowZ(r), ridgeX(s), y + 0.04 * span.tall, rowZ(r)], v * 3);
-        ridge.array.set([y, value, glow, lift, y, value, glow, lift], v * 4);
-      }
-    }
-    position.needsUpdate = ridge.needsUpdate = true;
-  }
-
-  // The raycast: the column under the eased pointer, or -1. Bars are tested as boxes as wide as
-  // their cell (so the gaps do not flicker); ridges front to back, as the area under each curve.
-  const raycaster = new THREE.Raycaster(), box = new THREE.Box3(), hit = new THREE.Vector3(), at = new THREE.Vector2();
-  function pick() {
-    if (!stage.pointer.inside || stage.still) return -1;
-    const ray = raycaster.ray;
-    let best = -1, nearest = Infinity;
-    for (let i = 0; !ridges && i < shown.length; i++) {
-      const x = barX(i % grid.columns), z = rowZ(Math.floor(i / grid.columns));
-      box.min.set(x - span.pitchX / 2, 0, z - span.pitchZ / 2);
-      const fall = uniforms.uFocus.value.z * smooth(Math.min(1, Math.max(0, (Math.hypot(x - focus.x, z - focus.z) - 0.35) / 0.95))) * (1 - peak[i]);
-      box.max.set(x + span.pitchX / 2, Math.max(shown[i] * (1 - 0.6 * fall), 0.015) * span.tall, z + span.pitchZ / 2);   // as drawn, sunk or not
-      const d = present[i] && ray.intersectBox(box, hit) ? hit.distanceTo(ray.origin) : Infinity;
-      if (d < nearest) { nearest = d; best = i; }
-    }
-    for (let r = grid.rows - 1; ridges && r >= 0 && Math.abs(ray.direction.z) > 1e-6; r--) {
-      const t = (rowZ(r) - ray.origin.z) / ray.direction.z;
-      hit.copy(ray.direction).multiplyScalar(t).add(ray.origin);
-      const s = (hit.x + WIDTH / 2) / span.pitchX - TAIL;
-      if (t > 0 && s > -0.5 && s < grid.columns - 0.5 && hit.y >= 0 && hit.y <= ridgeAt(r, s) * span.tall + 0.05) {
-        return r * grid.columns + Math.round(Math.max(0, Math.min(grid.columns - 1, s)));
-      }
-    }
-    return best;
-  }
-  // 1 for the hovered column, falling off with the distance in columns (about one data cell wide).
-  function hoverGoalOf(i) {
-    if (hovered < 0) return 0;
-    const dr = Math.floor(i / grid.columns) - Math.floor(hovered / grid.columns), dc = (i % grid.columns) - (hovered % grid.columns);
-    const d2 = dr * dr + dc * dc, k2 = grid.k * grid.k;
-    return d2 === 0 ? 1 : d2 > 9 * k2 ? 0 : Math.exp(-d2 / (0.9 * k2));
-  }
-
-  // The camera has three states (setProgress 0, 0.5 and 1), each [turn round the field, height
-  // above the floor (both in radians), distance (a share of the one that fits the free part of the
-  // screen), slide right, slide down (shares of the screen)]. Bars: at rest low and close, the far
-  // end of the field clear of the headline, the near rows running off the bottom and the right edge;
-  // at 0.5 turned and raised to watch the front cross; at 1 up and in on the peaks. Ridges keep a
-  // calmer path. setViewOffset slides the picture over without turning the camera.
-  const VIEWS = ridges
-    ? [[0.525, 0.27, 0.86, 0.19, 0.02], [0.8, 0.3, 0.86, 0.19, 0.02], [1.075, 0.47, 0.757, 0.19, 0.02]]
-    : [[1.15, 0.26, 0.46, 0.275, 0.1], [0.95, 0.58, 0.6, 0.275, 0.1], [1.075, 0.63, 0.67, 0.19, 0.02]];
-  const AIM = ridges ? [0, 0] : [0.5, 0.3];   // x and z the camera looks at in the middle state
-  let fit = 1;
-  stage.onResize((size) => {
-    const room = size.aspect < 0.9 ? [1, 0.36] : [o.side === "center" ? 0.8 : 0.52, 0.72];   // share of width, height
-    const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    fit = 1 / Math.min(tan * room[1], tan * size.aspect * room[0]);
-  });
-
-  stage.onQuality((quality) => {
-    if (mirror) mirror.visible = quality.name !== "low";
-    sub = quality.pick(4, 6, 10);
-    if (ribbon) build();
-  });
-
-  const target = new THREE.Vector3(), close = new THREE.Vector3(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  let spot = 0;
-  function place(time, delta) {
-    const still = stage.still, p = stage.progressEased, pointer = still ? { x: 0, y: 0 } : stage.pointer;
-    const half = smooth(Math.min(1, p / 0.5));                                // the first half: to the middle state
-    const rise = smooth(Math.min(1, Math.max(0, (p - 0.45) / 0.55)));          // the last part: up and in, onto the peaks
-    const blend = (k) => { const m = VIEWS[0][k] + (VIEWS[1][k] - VIEWS[0][k]) * half; return m + (VIEWS[2][k] - m) * rise; };
-    const turn = blend(0) + (still ? 0 : Math.sin(time * 0.09) * 0.04);
-    const az = turn + pointer.x * 0.25, el = blend(1) + pointer.y * 0.14;     // the pointer turns it a few degrees
-    const { width, height, aspect } = stage.size, narrow = aspect < 0.9;   // a tall, narrow screen: further off, in the lower third
-    const radius = 0.5 * Math.hypot(WIDTH, Math.max(span.depth, 3.6), span.tall * 0.7), distance = radius * fit * blend(2) * (narrow ? 1.43 : 1);
-    const across = narrow ? 0 : ({ right: 1, left: -1 }[o.side] || 0) * blend(3), down = narrow ? 0.33 : blend(4);
-    camera.setViewOffset(width, height, -across * width, -down * height, width, height);
-    target.set(AIM[0] * half, span.tall * 0.2, AIM[1] * half).lerp(close.set(focus.x, span.tall * (0.25 + 0.3 * focus.y), focus.z), rise);
-    camera.position.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).multiplyScalar(distance).add(target);
-    camera.lookAt(target);
-    camera.updateMatrixWorld();
-    uniforms.uFog.value.set(distance - radius * 0.35, distance + radius * (0.85 - 0.3 * rise));
-    // The band goes there and back over the rows, slowest at the ends; a still frame rests it at one
-    // place. The progress front walks over the width from just before the left end to past the right one.
-    const band = still ? 0.62 : 0.5 - 0.48 * Math.cos((time * 2 * Math.PI) / BAND_PERIOD);
-    uniforms.uMotion.value.set(band, 0.13, 0.95 * (1 - 0.5 * smooth(Math.min(1, p / 0.4))), -0.15 + 1.3 * p);
-    uniforms.uFocus.value.set(focus.x, focus.z, 0.92 * smooth(Math.min(1, Math.max(0, (p - 0.55) / 0.45))), still ? 0 : 0.045);
-    // The key light comes from over the camera's right shoulder, so the faces turned most to the
-    // camera are lit and the others clearly shaded; it leans with the pointer. The pool of light
-    // sits where the pointer meets the field.
-    const key = turn + 0.7 + pointer.x * 0.6;
-    uniforms.uLight.value.set(Math.sin(key), 0, Math.cos(key));
-    raycaster.setFromCamera(at.set(pointer.x, pointer.y), camera);
-    plane.constant = -span.tall * 0.2;
-    const ground = raycaster.ray.intersectPlane(plane, hit);
-    spot += ((stage.pointer.active && !still ? 1 : 0) - spot) * (1 - Math.exp(-delta * 4));
-    if (ground) uniforms.uSpot.value.set(THREE.MathUtils.clamp(hit.x, -WIDTH / 2, WIDTH / 2), THREE.MathUtils.clamp(hit.z, -span.depth / 2, span.depth / 2), 0, 0);
-    uniforms.uSpot.value.z = spot;
-  }
-
-  stage.onFrame((time, delta) => {
-    place(time, delta);
-    const now = pick();
-    if (now !== hovered) {
-      hovered = now;
-      moving = true;
-      const cell = now < 0 ? -1 : grid.source[now];
-      if (cell !== reported) {
-        reported = cell;
-        const report = cell < 0 ? null : { index: cell, row: Math.floor(cell / data.columns), column: cell % data.columns, value: data.values[cell] };
-        if (typeof o.onHover === "function") o.onHover(report);
-      }
-    }
-    if (!moving) return;
-    // Springs in small fixed steps, so they move the same at any frame rate; a still frame shows
-    // every value at its goal at once.
-    let busy = false;
-    const steps = Math.ceil(delta * 120), dt = steps ? delta / steps : 0, k = 1 - Math.exp(-delta * 9);
-    for (let i = 0; i < shown.length; i++) {
-      const hoverGoal = hoverGoalOf(i);
-      if (stage.still) { shown[i] = goal[i]; speed[i] = hover[i] = 0; peak[i] = peakGoal[i]; continue; }
-      hover[i] += (hoverGoal - hover[i]) * k;
-      peak[i] += (peakGoal[i] - peak[i]) * k * 0.4;
-      if (wait[i] > 0) { wait[i] -= delta; busy = true; continue; }
-      for (let s = 0; s < steps; s++) {
-        speed[i] += (SPRING * (goal[i] - shown[i]) - DAMPING * speed[i]) * dt;
-        shown[i] += speed[i] * dt;
-      }
-      busy = busy || Math.abs(goal[i] - shown[i]) + Math.abs(speed[i]) > 1e-4
-        || Math.abs(hover[i] - hoverGoal) + Math.abs(peak[i] - peakGoal[i]) > 1e-3;
-    }
-    write();
-    moving = busy;
-  });
-
-  stage.onDestroy(() => { if (reported >= 0 && typeof o.onHover === "function") o.onHover(null); });
-  setValues(o.data);
-  return stage.handle({ setData: setValues });
+  return busy;
 }

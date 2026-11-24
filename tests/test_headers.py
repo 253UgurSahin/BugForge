@@ -707,11 +707,11 @@ class ConventionTests(unittest.TestCase):
         stdlib = getattr(sys, "stdlib_module_names",
                          {"argparse", "errno", "http", "json", "os", "re", "socket", "ssl", "sys", "threading",
                           "urllib"})
-        self.assertLessEqual(imported, set(stdlib))
+        self.assertLessEqual(imported - {"_http", "_report"}, set(stdlib))  # and the helpers next to it
 
     def test_the_get_uses_the_timeout(self):
         self.assertIn("timeout=TIMEOUT", self.source)
-        self.assertIn("join(TIMEOUT)", self.source)
+        self.assertIn("within(TIMEOUT, ", self.source)  # one deadline for the whole answer (_http.py)
 
 
 class ConsoleTests(TempFolder):

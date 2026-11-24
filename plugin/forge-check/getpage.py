@@ -20,10 +20,11 @@ import re
 import socket
 import ssl
 import sys
-import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from _http import KeepEveryAnswer, within  # next to this script: one GET under one deadline
 
 USER_AGENT = "forge-pagecheck (passive check)"
 TIMEOUT = 15  # seconds for the whole answer
@@ -104,41 +105,17 @@ def refusal(url, status, headers):
     return None
 
 
-class KeepEveryAnswer(urllib.request.HTTPErrorProcessor):
-    """Hand back every answer as it is: no redirect is followed, and a 404 or 500 is not an error."""
-
-    def http_response(self, request, response):
-        return response
-
-    https_response = http_response
-
-
 def fetch(url):
     """The one passive GET, under one deadline: (status, body). Only the body of an HTML page is
     read, at most MAX_BYTES + 1 bytes of it. Any other answer raises NotSaved."""
-    outcome = []  # (status, body), or the error
-
     def get_once():
-        try:
-            request = urllib.request.Request(as_sent(url), headers={"User-Agent": USER_AGENT,
-                                                                    "Accept": "text/html"})
-            opener = urllib.request.build_opener(KeepEveryAnswer)
-            with opener.open(request, timeout=TIMEOUT) as answer:
-                problem = refusal(url, answer.status, answer.headers)
-                if problem:
-                    raise problem
-                outcome.append((answer.status, answer.read(MAX_BYTES + 1)))
-        except Exception as error:  # raised again below, in the caller's thread
-            outcome.append(error)
-
-    worker = threading.Thread(target=get_once, daemon=True)
-    worker.start()
-    worker.join(TIMEOUT)
-    if not outcome:
-        raise TimeoutError("no complete answer within %d seconds" % TIMEOUT)
-    if isinstance(outcome[0], Exception):
-        raise outcome[0]
-    return outcome[0]
+        request = urllib.request.Request(as_sent(url), headers={"User-Agent": USER_AGENT, "Accept": "text/html"})
+        with urllib.request.build_opener(KeepEveryAnswer).open(request, timeout=TIMEOUT) as answer:
+            problem = refusal(url, answer.status, answer.headers)
+            if problem:
+                raise problem
+            return answer.status, answer.read(MAX_BYTES + 1)
+    return within(TIMEOUT, get_once)
 
 
 def explain(error):

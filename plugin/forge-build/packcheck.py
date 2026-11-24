@@ -25,7 +25,6 @@ Exit codes:
     2  bad usage, PATH is not a folder, nothing to check, or a file could not be read or checked
 """
 
-import argparse
 import fnmatch
 import json
 import os
@@ -34,23 +33,14 @@ import re
 import subprocess
 import sys
 
-SEVERITIES = ["critical", "high", "medium", "low"]  # most severe first
-MAX_BYTES = 1024 * 1024
+from _pack import COMPOSE_FILE, SEVERITIES, arguments, is_written_secret, read, report, unquote  # next to this
+
 COMPOSECHECK = os.path.dirname(os.path.abspath(__file__)) + "/../forge-build/composecheck.py"
 with open(os.path.join(os.path.dirname(COMPOSECHECK), "rules.json"), encoding="utf-8") as rules_file:
     RULES = json.load(rules_file)  # rule: {"severity", "title", "why", "fix"}; {0} {1} {2}: filled in per finding
 TIMEOUT = 60  # seconds for composecheck.py
 DOCKERFILE = re.compile(r"^(?:Dockerfile|Containerfile)(?:\.(?!dockerignore$)[\w-]+)?$"  # Dockerfile.prod
                         r"|^[\w.-]+\.[Dd]ockerfile$")  # app.Dockerfile
-COMPOSE_FILE = re.compile(r"^(?:docker-)?compose(?:\.[\w.-]+)?\.ya?ml$")
-# As in secretscan.py, a name that ENDS in a secret word holds a secret: DB_PASSWORD, SMTP_PASS, NPM_TOKEN,
-# APP_KEY; TOKEN_URL and DB_PASSWORD_FILE do not. composecheck.py has the same rule (a test keeps them equal).
-SECRET_NAME = re.compile(r"(?i)(?:passw(?:or)?d|^pass|[_.-]pass|[_.-]pwd|secret|token"
-                         r"|(?:api|app|auth|access|private|secret|encryption|signing|master)[_-]?key)\d*$")
-SWITCH_NAME = re.compile(r"(?i)RANDOM|ALLOW_EMPTY")  # MARIADB_RANDOM_ROOT_PASSWORD: a yes/no switch
-SWITCH_VALUES = ("", "yes", "no", "true", "false", "on", "off", "null", "~", "0", "1")
-FALLBACK = re.compile(r"\$\{\w+:?-([^$}][^}]*)\}")  # ${DB_PASSWORD:-hunter2}: hunter2 is written here
-FILE_PATH = re.compile(r"^\.?/[\w.-]+(?:/[\w.-]+)+$")  # /run/secrets/db says where a secret is
 HEREDOC = re.compile(r"""(?:^|\s)\d*<<-?(["']?)([A-Za-z_][\w-]*)\1""")  # RUN <<EOF, COPY <<'EOF' /x
 KEEP_OUT = ((".env", ".env"), (".git", ".git"), ("forge-work", "forge-work/"))  # (name, as shown)
 # Files of secrets: never let in, and kept out when they are in PATH. BY_PROFILE is the profile's call: next and
@@ -67,20 +57,6 @@ def finding(rule, path, line, *words):
     """One finding: RULE's words with WORDS filled in. LINE 0: about a whole file or the project."""
     found = {key: text.format(*words) for key, text in RULES[rule].items()}  # severity, title, why, fix
     return dict(found, where="%s:%d" % (path, line) if line else path, rule=rule, file=path, line=line)
-
-
-def unquote(text):
-    return text.strip().strip("'\"").strip()
-
-
-def is_written_secret(name, value):
-    """True for a secret-looking NAME with its value written out. References (${DB_PASSWORD}),
-    switches (yes, 1) and file paths are fine; the fallback in ${DB_PASSWORD:-hunter2} is not."""
-    value = unquote(value)
-    if not SECRET_NAME.search(name) or SWITCH_NAME.search(name):
-        return False
-    reference = (value.startswith("$") or "${" in value) and not FALLBACK.search(value)
-    return not (reference or value.lower() in SWITCH_VALUES or FILE_PATH.match(value))
 
 
 def is_pinned(image):
@@ -187,19 +163,6 @@ def is_ignored(patterns, name):
     return ignored
 
 
-def read(root, name):
-    """The text of ROOT/NAME: a regular file of at most 1 MB inside ROOT. A BOM is dropped."""
-    path, real_root = os.path.join(root, name), os.path.realpath(root)
-    real = os.path.realpath(path)
-    elsewhere = os.path.splitdrive(real)[0] != os.path.splitdrive(real_root)[0]  # on another drive (Windows)
-    if elsewhere or os.path.commonpath([real, real_root]) != real_root:  # commonpath() fails across drives
-        raise ValueError("%s is a link to a file outside %s" % (name, root))
-    if not os.path.isfile(path) or os.path.getsize(path) > MAX_BYTES:
-        raise ValueError("%s is not a regular file of at most 1 MB" % name)
-    with open(path, encoding="utf-8-sig", errors="replace") as handle:
-        return handle.read()
-
-
 def check_compose(root):
     """composecheck.py's JSON report on ROOT. Raises ValueError when it could not check the files."""
     done = subprocess.run([sys.executable, COMPOSECHECK, root, "--json", "--fail-on", "critical"], timeout=TIMEOUT,
@@ -258,28 +221,8 @@ def check_project(root):
     return findings, checked
 
 
-def format_human(findings, summary):
-    lines = []
-    for f in findings:
-        lines += ["%-8s  %s" % (f["severity"].upper(), f["title"]), "          where: " + f["where"],
-                  "          why:   " + f["why"], "          fix:   " + f["fix"], ""]
-    counts = ", ".join("%d %s" % (summary[sev], sev) for sev in SEVERITIES if summary[sev])
-    noun = "finding" if len(findings) == 1 else "findings"
-    lines.append("Checked: %s." % ", ".join(summary["checked"]))
-    lines.append("%d %s: %s." % (len(findings), noun, counts) if findings else "No findings.")
-    lines.append(("FAIL: at least one finding is %s or worse." if summary["failed"]
-                  else "PASS: nothing is %s or worse.") % summary["fail_on"])
-    return "\n".join(lines)
-
-
 def main(argv=None):
-    getattr(sys.stdout, "reconfigure", lambda **_: None)(errors="backslashreplace")  # cp1252 pipes: escapes, no crash
-    parser = argparse.ArgumentParser(description="Check a project's container setup for unsafe settings.")
-    parser.add_argument("path", help="the project folder")
-    parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
-    parser.add_argument("--fail-on", choices=SEVERITIES, default="high",
-                        help="exit 1 when a finding is this bad or worse (default: high)")
-    args = parser.parse_args(argv)
+    args = arguments("Check a project's container setup for unsafe settings.", argv)
     if not os.path.isdir(args.path):
         print("error: %s is not a folder that exists" % args.path, file=sys.stderr)
         return 2
@@ -288,13 +231,7 @@ def main(argv=None):
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print("error: %s" % error, file=sys.stderr)
         return 2
-    too_bad = any(SEVERITIES.index(f["severity"]) <= SEVERITIES.index(args.fail_on) for f in findings)
-    summary = {sev: len([f for f in findings if f["severity"] == sev]) for sev in SEVERITIES}
-    summary.update(total=len(findings), checked=checked, fail_on=args.fail_on, failed=too_bad)
-    print(json.dumps({"findings": findings, "summary": summary}, indent=2) if args.json
-          else format_human(findings, summary))
-    return 1 if too_bad else 0
-
+    return report(findings, checked, args)
 
 if __name__ == "__main__":
     sys.exit(main())

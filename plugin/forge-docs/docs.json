@@ -1,0 +1,23 @@
+{
+  "about": "What docslint.py checks per part of forge-docs: the file it writes and the headings (## lines, in this order or any order) and Mermaid diagram kinds that file must hold. A part whose file is a folder (decisions) needs at least one .md in it. Placeholders and secret-looking lines fail any file.",
+  "parts": {
+    "readme": {"file": "README.md", "headings": [], "diagrams": []},
+    "architecture": {
+      "file": "docs/architecture.md",
+      "headings": ["Context", "Logical view", "Domain model", "Main flows", "Deployment view", "Decisions"],
+      "diagrams": ["flowchart", "classDiagram", "sequenceDiagram"]
+    },
+    "api": {"file": "docs/api.md", "headings": [], "diagrams": []},
+    "glossary": {"file": "docs/glossary.md", "headings": [], "diagrams": []},
+    "decisions": {"file": "docs/decisions", "headings": ["Context", "Decision", "Consequences"], "diagrams": []},
+    "guide": {"file": ["docs/user-guide.md", "docs/handleiding.md"], "headings": [], "diagrams": []}
+  },
+  "default_parts": ["readme", "architecture", "api", "glossary", "decisions", "guide"],
+  "mermaid_kinds": ["flowchart", "graph", "sequenceDiagram", "classDiagram", "erDiagram", "stateDiagram",
+                    "stateDiagram-v2", "journey", "gantt", "pie", "mindmap", "timeline", "C4Context",
+                    "C4Container", "C4Component", "C4Dynamic", "C4Deployment", "requirementDiagram",
+                    "gitGraph", "quadrantChart", "sankey-beta", "block-beta", "architecture-beta"],
+  "placeholders": ["\\{\\{[^}]*\\}\\}", "<(?:your|app name|one sentence|what|the exact|decision in)[^>]*>",
+                   "\\blorem ipsum\\b", "\\bTBD\\b", "\\bTODO\\b", "\\bFIXME\\b", "\\bXXX\\b"],
+  "secret": "(?i)\\b[\\w-]*(?:secret|password|passwd|token|api[_-]?key|private[_-]?key)[\\w-]*\\s*[=:]\\s*['\"]?(?!<|\\$\\{|change-?me|example|xxx|\\*\\*\\*|your|fake|dummy|test|secret\\b)[A-Za-z0-9_\\-+/=.]{12,}"
+}
