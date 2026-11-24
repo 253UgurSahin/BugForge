@@ -1,7 +1,7 @@
 """Tests for forge-check/trackers.py.
 
 The one fake key below is glued together at runtime, so this file never contains
-a secret-looking literal: the repo itself is scanned with secretscan.py in CI.
+a secret-looking literal: the repo itself is scanned with secretscan.py by tests/test_repo.py.
 """
 
 import contextlib

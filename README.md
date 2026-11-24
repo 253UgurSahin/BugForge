@@ -298,7 +298,7 @@ it out of git and out of every image. The reports you will read most:
 ## The skills
 
 The nine skills are the folders in [`plugin/`](plugin), which is all the plugin holds. The
-gallery (`examples/`), the tests and CI stay outside it, so an install holds only what the skills run.
+gallery (`examples/`) and the tests stay outside it, so an install holds only what the skills run.
 
 | skill | parts | what it does |
 | --- | --- | --- |
@@ -477,15 +477,15 @@ Docker image. Playwright and Lighthouse need Node. Screenshots, frames and films
 Playwright too: when your project has none, it goes into `forge-work/design/`, next to the copy of
 the screenshot script, and your app's own package files stay as they are.
 
-Works on Linux, macOS and Windows: CI runs the tests of the skills' scripts on all three.
+Works on Linux, macOS and Windows: the scripts are standard-library Python 3.9 and their tests are written to pass on all three.
 
 - **macOS:** the `python3` from Xcode's command line tools (Python 3.9) is enough; a python.org or
   Homebrew Python works too.
 - **Windows:** Claude Code runs the scripts in Git Bash (part of Git for Windows). A python.org
   install has no `python3` there, so Claude runs `py -3` or `python` instead, as
   [`forge/rules.md`](plugin/forge/rules.md) tells it.
-- **Docker:** CI checks the container templates on Linux. On macOS and Windows, Docker Desktop
-  runs the same Linux containers, but CI does not test it there.
+- **Docker:** the container templates are Linux containers; on macOS and Windows, Docker Desktop
+  runs them the same way.
 
 As a plugin, in Claude Code, one command at a time:
 
@@ -545,10 +545,24 @@ If you copied the 17 skills of an earlier version, remove those folders first
 python3 -m unittest discover -s tests -v
 ```
 
-CI (`.github/workflows/test.yml`) runs on every push and pull request:
+There is no CI service: run the checks yourself before every push to `main`, from the root of this
+repo. They are the whole release check.
 
-- the full test suite on Linux, macOS and Windows, each with Python 3.9 and 3.13, then the repo's
-  own secret scan. With Node, `tests/test_plan.py` runs the sample service worker
+```bash
+python3 -m unittest discover -s tests -q
+```
+
+```bash
+python3 plugin/forge-check/secretscan.py .
+```
+
+```bash
+claude plugin validate --profile directory ./plugin
+```
+
+What the suite covers:
+
+- every script and its conventions, and the repo's own secret scan (`tests/test_repo.py`). With Node, `tests/test_plan.py` runs the sample service worker
   (`forge-plan/sw.example.js`) in a fake browser, `tests/test_scenes.py` runs the scene kit's stage
   and loader, `depth.js`, the outline and phone work of `contour.js` and the phone and streak
   options of `field.js` in a make-believe browser, and `tests/test_shots.py` checks that the
@@ -557,8 +571,9 @@ CI (`.github/workflows/test.yml`) runs on every push and pull request:
   it runs the script on small local pages (`FORGE_NO_BROWSER=1` skips that).
   `tests/test_examples.py` checks the gallery:
   every level is there, nothing loads from another host, and its copy of the kit equals the kit;
-- per stack profile: the container templates installed in a scratch folder, checked with
-  `docker compose config -q` and `packcheck.py --fail-on low`.
+- per stack profile: the container templates, installed in a scratch folder the way forge-build
+  pack does, pass `packcheck.py --fail-on low` (`tests/test_packcheck.py`). With Docker installed,
+  `docker compose -f <template>/docker-compose.yml config -q` checks a template's compose file too.
 
 BugForge holds itself to its own audit: `python3 plugin/forge-check/craftcheck.py plugin` finds no
 duplicated code, swallowed errors or commented-out code in the skills, and no function of the 3D scene

@@ -4,7 +4,7 @@ These tests check every skill and every script, so a new one cannot quietly
 break the rules in the spec:
 
 - The plugin is plugin/: the skill folders, its manifest, README and LICENSE,
-  nothing else. The gallery, the tests and CI stay outside it, so an install
+  nothing else. The gallery and the tests stay outside it, so an install
   (and the plugin directory's review) holds only what the skills run.
 - A skill folder is a folder in plugin/ with a SKILL.md: frontmatter with the
   folder's name and a description, a short body, and the shared Ground rules.
